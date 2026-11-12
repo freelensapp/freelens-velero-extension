@@ -1,12 +1,16 @@
 import { isObservable } from "mobx";
 import { describe, expect, it, vi } from "vitest";
 import { HOUR, scheduleObject, submissionOf } from "../../../test/adherence-builders";
-import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
+import { emptyPreferences, FAMILIES, heldPreferences, RESOURCES, versionOf } from "../../common/discovery";
+import { PATHS } from "../../common/paths";
 import { Installation } from "./installation";
 
 import type { Answer, Family, Preferences } from "../../common/discovery";
 
 const DISCOVERY = "/apis/velero.io/v1";
+// The discovery of the second version of the group, which serves the data movement.
+const SECOND = "/apis/velero.io/v2alpha1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
 
 function object(name: string, namespace: string, uid = `${namespace}-${name}`) {
@@ -19,8 +23,12 @@ function list(...items: unknown[]): Answer {
 
 const served: Answer = {
   status: 200,
-  body: { resources: Object.values(RESOURCES).map((name) => ({ name })) },
+  body: {
+    resources: FAMILIES.filter((family) => versionOf(family) === "v1").map((family) => ({ name: RESOURCES[family] })),
+  },
 };
+
+const servedSecond: Answer = { status: 200, body: { resources: [{ name: "datauploads" }, { name: "datadownloads" }] } };
 
 // A cluster that answers from a table, and keeps the list of what it was asked.
 function cluster(answers: Record<string, Answer | (() => Promise<Answer>)>) {
@@ -43,7 +51,7 @@ function storage(initial: Preferences = emptyPreferences()) {
 }
 
 function path(family: Family, namespace: string): string {
-  return `/apis/velero.io/v1/namespaces/${namespace}/${RESOURCES[family]}`;
+  return PATHS.family(family, namespace);
 }
 
 function installation(
@@ -65,6 +73,7 @@ function installation(
 
 const two = {
   [DISCOVERY]: served,
+  [SECOND]: servedSecond,
   [LOCATIONS]: list(object("default", "velero-a"), object("default", "velero-b")),
   [path("backups", "velero-a")]: list(object("nightly-1", "velero-a"), object("nightly-2", "velero-a")),
   [path("backups", "velero-b")]: list(object("nightly-1", "velero-b")),
@@ -82,6 +91,10 @@ const two = {
   [path("podVolumeBackups", "velero-b")]: list(object("nightly-1-q9w3e", "velero-b")),
   [path("podVolumeRestores", "velero-a")]: list(),
   [path("podVolumeRestores", "velero-b")]: list(),
+  [path("dataUploads", "velero-a")]: list(object("nightly-1-d4m8s", "velero-a")),
+  [path("dataUploads", "velero-b")]: list(),
+  [path("dataDownloads", "velero-a")]: list(),
+  [path("dataDownloads", "velero-b")]: list(),
 };
 
 describe("discovery", () => {
@@ -91,7 +104,7 @@ describe("discovery", () => {
     expect(state.entry).toEqual({ state: "loading" });
     expect(api.asked).toEqual([]);
     await state.open();
-    expect(api.asked.slice(0, 2).sort()).toEqual([DISCOVERY, LOCATIONS]);
+    expect(api.asked.slice(0, 3).sort()).toEqual([DISCOVERY, LOCATIONS, SECOND]);
   });
 
   it("asks once for any number of views that open", async () => {
@@ -150,7 +163,7 @@ describe("discovery", () => {
     await vi.waitFor(() => expect(state.asked).toBeDefined());
     for (const asked of api.asked) {
       expect(asked).toMatch(
-        /^\/apis\/velero\.io\/v1(\/backupstoragelocations|\/namespaces\/velero-[abc]\/(backups|restores|schedules|backupstoragelocations|volumesnapshotlocations|backuprepositories))?$/,
+        /^\/apis\/velero\.io\/(v2alpha1|v1(\/backupstoragelocations|\/namespaces\/velero-[abc]\/(backups|restores|schedules|backupstoragelocations|volumesnapshotlocations|backuprepositories))?)$/,
       );
     }
     expect(api.asked.some((asked) => /downloadrequests|serverstatusrequests|accessreview/.test(asked))).toBe(false);
@@ -709,6 +722,8 @@ describe("the families read on demand", () => {
       expect(asked(api.asked, "backupRepositories")).toBe(4);
       expect(asked(api.asked, "podVolumeBackups")).toBe(0);
       expect(asked(api.asked, "podVolumeRestores")).toBe(0);
+      expect(asked(api.asked, "dataUploads")).toBe(0);
+      expect(asked(api.asked, "dataDownloads")).toBe(0);
       expect(state.read("podVolumeBackups")).toEqual({ status: "idle", items: [] });
       stop();
     } finally {
@@ -746,6 +761,42 @@ describe("the families read on demand", () => {
       expect(asked(api.asked, "podVolumeRestores")).toBe(0);
       release();
       stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("asks the data movement under the second version of the group, and not at all where the version is not served", async () => {
+    vi.useFakeTimers();
+    try {
+      const served = installation(one);
+
+      await served.state.open();
+      const before = served.api.asked.length;
+      const release = served.state.need({}, ["dataUploads", "dataDownloads"]);
+
+      expect(served.api.asked.slice(before).sort()).toEqual([
+        "/apis/velero.io/v2alpha1/namespaces/velero-a/datadownloads",
+        "/apis/velero.io/v2alpha1/namespaces/velero-a/datauploads",
+      ]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(served.state.read("dataUploads")).toMatchObject({ status: "ready", items: [{}] });
+      expect(served.state.read("dataDownloads")).toMatchObject({ status: "ready", items: [] });
+      release();
+      // The version not served: its two families are said not served, are never asked, and nothing else changes.
+      const unserved = installation({ ...one, [SECOND]: { status: 404 } });
+
+      await unserved.state.open();
+      const first = unserved.api.asked.length;
+      const released = unserved.state.need({}, ["dataUploads", "podVolumeBackups"]);
+
+      expect(unserved.api.asked.slice(first)).toEqual([PVB("velero-a")]);
+      expect(unserved.state.read("dataUploads").status).toBe("not-served");
+      expect(unserved.state.read("dataDownloads").status).toBe("not-served");
+      expect(unserved.state.entry).toMatchObject({ state: "ready", missing: ["dataUploads", "dataDownloads"] });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(unserved.state.read("podVolumeBackups").status).toBe("ready");
+      released();
     } finally {
       vi.useRealTimers();
     }
@@ -899,9 +950,7 @@ describe("the families read on demand", () => {
       [DISCOVERY]: {
         status: 200,
         body: {
-          resources: Object.values(RESOURCES)
-            .filter((name) => name !== "podvolumebackups")
-            .map((name) => ({ name })),
+          resources: FIRST_VERSION_RESOURCES.filter((name) => name !== "podvolumebackups").map((name) => ({ name })),
         },
       },
     });

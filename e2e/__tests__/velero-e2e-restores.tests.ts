@@ -20,6 +20,20 @@ const TIMEOUT = 10 * 60 * 1000;
 const RESTORES = cluster.RESTORES;
 const SCHEDULED = "views-daily-20260901030000";
 const MAPPED = "restore-mapped";
+// The list of the pod volume restores of a namespace, which a restore asks for the band of its volumes.
+const PVR = "LIST podvolumerestores namespace";
+const DD = "LIST datadownloads namespace";
+// What the band of a restore of the installation of the views says: it holds no pod volume restore of any.
+const NO_POD_VOLUME_RESTORE = "This restore has no pod volume restore among the ones the installation holds.";
+// The volumes of the seven pod volume restores the views place for the mapped restore. The band orders them by the
+// groups of their phases and by their times, and the ones of one time as they were read, by their names, which the
+// run makes: what is compared here is which they are, the order is the one of the tests of the band.
+const VOLUMES_OF_MAPPED = ["data-16", "data-17", "data-18", "data-19", "data-20", "data-21", "data-22"];
+// The links of the host the band draws for them, `LinkToPod` and `LinkToNode`, each a link whenever it is given a
+// name, and a namespace for a pod (AGENTS.md, the host facts): the pod of each of the seven, and the node of the five
+// a node agent accepted, Accepted, InProgress, Completed, Canceled and the one its preparing timeout failed. The New
+// one and the one of the legacy controller of restic name no node.
+const LINKS_OF_MAPPED = VOLUMES_OF_MAPPED.length + 5;
 const text = (value: string) => value.replace(/\s+/g, " ").trim();
 // How long what must not happen is waited for: longer than the frame the host opens a menu in.
 const NOTHING = 1500;
@@ -244,16 +258,20 @@ describe("views of the restores", () => {
         "Waiting for plugin operations",
         "1 error",
       );
-      // Opening a restore asks nothing of the cluster: what it shows was read with the installation. It is
-      // opened in the time between two reads of the installation, with the counters of the API server
-      // read before and after.
+      // Opening a restore asks the cluster for the two families of the band of its volumes, once each and at once,
+      // which the views read only while a view that shows them is open: the pod volume restores and the data
+      // downloads of the installation. What else it shows was read with the installation. It is opened in the time
+      // between two reads of the installation, with the counters of the API server read before and after; a view that
+      // closes lets the family go at the read after, so the restore asks it again each time it is opened.
       expect(
         await cluster.readsDuring(
           frame,
           () => cluster.openWorkspace(frame, MAPPED, RESTORES),
           () => cluster.closeWorkspace(frame),
+          3,
+          { [PVR]: 1, [DD]: 1 },
         ),
-      ).toEqual({});
+      ).toEqual({ [PVR]: 1, [DD]: 1 });
       const workspace = frame.locator("[data-testid=velero-restore-workspace]");
       const status = text(await workspace.locator("[data-testid=velero-restore-status]").innerText());
 
@@ -325,16 +343,45 @@ describe("views of the restores", () => {
 
       expect(tabs.tabs.map(({ title }) => title)).toEqual(artifacts.TABS.map(({ title }) => title));
       expect([tabs.open, tabs.selected]).toEqual(["summary", [artifacts.PARTS.tab("restore", "summary")]]);
-      expect(
-        (await workspace.locator(`[data-testid=${artifacts.PARTS.shown("restore")}] button`).allInnerTexts()).map(text),
-      ).toEqual([SCHEDULED, "views-daily", "views-available"]);
-      expect((await workspace.locator("button").allInnerTexts()).map(text)).toEqual([
-        "arrow_back Restores",
-        SCHEDULED,
-        "views-daily",
-        "views-available",
-      ]);
-      expect(await workspace.locator("a, input, select, textarea").count()).toBe(0);
+      // The band of the volumes shows the seven pod volume restores the views place for the restore, then the data
+      // downloads, before the references, each row a way named by its volume or by its claim; the downloads read by
+      // the suite on the cluster by the label of the restore.
+      const downloads = cluster.labelledObjects<{
+        spec?: { targetVolume?: { pvc?: string; namespace?: string } };
+        status?: { node?: string };
+      }>("datadownloads", `velero.io/restore-name=${MAPPED}`, cluster.E2E_VIEWS_NAMESPACE);
+      const claims = downloads.map(({ spec }) => `${spec?.targetVolume?.namespace}/${spec?.targetVolume?.pvc}`).sort();
+      const ways = (
+        await workspace.locator(`[data-testid=${artifacts.PARTS.shown("restore")}] button`).allInnerTexts()
+      ).map(text);
+      const operations = VOLUMES_OF_MAPPED.length + claims.length;
+
+      expect(claims.length).toBeGreaterThan(0);
+      expect([...ways.slice(0, VOLUMES_OF_MAPPED.length)].sort()).toEqual(VOLUMES_OF_MAPPED);
+      expect([...ways.slice(VOLUMES_OF_MAPPED.length, operations)].sort()).toEqual(claims);
+      expect(ways.slice(operations)).toEqual([SCHEDULED, "views-daily", "views-available"]);
+      const band = await cluster.volumeBand(frame, "rows");
+
+      expect(band).toMatchObject({
+        kind: "PodVolumeRestore",
+        state: "rows",
+        sentence:
+          "The data downloads of the restore were made while it was InProgress. It waits for its plugin operations, among them its data downloads.",
+        more: false,
+      });
+      expect(band.rows).toHaveLength(VOLUMES_OF_MAPPED.length);
+      expect((await workspace.locator("button").allInnerTexts()).map(text)).toEqual(["arrow_back Restores", ...ways]);
+      // The links of the host are the ones of the rows of the band, to their pods and to the nodes they name: the
+      // ones of the pod volume restores, and the node of each data download its node agent prepared; nothing is a
+      // field.
+      const nodes = downloads.filter(({ status }) => status?.node).length;
+
+      expect(await workspace.locator("[data-testid=velero-volume-half][data-kind=PodVolumeRestore] a").count()).toBe(
+        LINKS_OF_MAPPED,
+      );
+      expect(await workspace.locator("[data-testid=velero-volume-band] a").count()).toBe(LINKS_OF_MAPPED + nodes);
+      expect(await workspace.locator("a").count()).toBe(LINKS_OF_MAPPED + nodes);
+      expect(await workspace.locator("input, select, textarea").count()).toBe(0);
       expect(await cluster.notices(frame, [])).toEqual({});
       expect(await cluster.layoutProblems(frame, RESTORES)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-restore-workspace");
@@ -399,6 +446,19 @@ describe("views of the restores", () => {
       expect(tabs.tabs.map(({ title }) => title)).toEqual(artifacts.TABS.map(({ title }) => title));
       expect([tabs.open, tabs.selected]).toEqual(["summary", [artifacts.PARTS.tab("restore", "summary")]]);
       expect(await workspace.locator(`[data-testid=${artifacts.PARTS.shown("restore")}] button`).count()).toBe(0);
+      // A restore that failed its validation did not run, and the band of its volumes says so, with no row.
+      expect(await cluster.volumeBand(frame)).toEqual({
+        kind: "PodVolumeRestore",
+        state: "none",
+        sentence:
+          "The pod volume restores and the data downloads of a restore are made once it runs: this one failed its validation, and did not run.",
+        words: NO_POD_VOLUME_RESTORE,
+        count: "",
+        groups: [],
+        rows: [],
+        more: false,
+        stale: "",
+      });
       expect((await workspace.locator("button").allInnerTexts()).map(text)).toEqual(["arrow_back Restores"]);
       expect(await workspace.locator("a, input, select, textarea").count()).toBe(0);
       await cluster.captureScreenshot(frame, "dark-restore-failed-validation");
@@ -750,11 +810,12 @@ describe("views of the restores", () => {
   );
 
   it(
-    "counts what the views ask when they are asked to read again, and nothing when a view is opened",
+    "counts what the views ask when they are asked to read again, and only the pod volume restores and the data downloads when a restore is opened",
     async () => {
-      // What counts nothing when a restore is opened counts the reads of a read that is asked: the six families
-      // read at every read of the namespace that is selected, and the discovery. The list of the restores shows no
-      // pod volume operation: neither of their families is asked.
+      // What counts one list of the pod volume restores and one of the data downloads when a restore is opened counts
+      // the reads of a read that is asked: the six families read at every read of the namespace that is selected, and
+      // the discovery. The list of the restores shows no operation of the volumes, and the restores that were opened
+      // were closed: none of the four families is asked.
       const seen = (await cluster.readState(frame)).read;
 
       await cluster.afterRead(frame, seen);
@@ -775,7 +836,7 @@ describe("views of the restores", () => {
       ]) {
         expect([kind, (asked[`LIST ${kind} namespace`] ?? 0) >= 1]).toEqual([kind, true]);
       }
-      for (const kind of ["podvolumebackups", "podvolumerestores"]) {
+      for (const kind of ["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"]) {
         expect([kind, asked[`LIST ${kind} namespace`] ?? 0]).toEqual([kind, 0]);
       }
       expect(asked["LIST backupstoragelocations cluster"]).toBe(1);

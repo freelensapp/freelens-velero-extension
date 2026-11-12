@@ -389,6 +389,7 @@ export const Overview = observer(({ installation, now, ways }: OverviewProps) =>
     schedules: installation.read("schedules"),
     storageLocations: installation.read("storageLocations"),
     snapshotLocations: installation.read("snapshotLocations"),
+    backupRepositories: installation.read("backupRepositories"),
   };
   const window = installation.window;
   const [shown, setShown] = React.useState<string[]>();

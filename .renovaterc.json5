@@ -116,9 +116,21 @@
       "enabled": false
     },
     {
-      "description": "Group @freelensapp/* with everything that follows Freelens into one PR, so that a nightly of @freelensapp/extensions and the stack it was built with arrive together.",
+      "description": "Group @freelensapp/* with everything that follows Freelens into one PR, so that a release of @freelensapp/extensions and the stack of Freelens arrive together.",
       "matchPackageNames": ["@freelensapp/**"],
       "groupName": "Freelens dependencies"
+    },
+    {
+      "description": "The SDK keeps its range, ^2.0.0 (D10 of SPEC-0015): a release moves pnpm-lock.yaml, and the build test holds the version it resolves to to the validation target, which moves with it in the same pull request.",
+      "matchPackageNames": ["@freelensapp/extensions"],
+      "rangeStrategy": "update-lockfile"
+    },
+    {
+      "description": "engines.freelens stays ^2.0.0, the oldest release the extension runs on (REQ-196 of SPEC-0015), as engines.node stays the oldest Node: only a major version of Freelens, which needs its own spec, is proposed.",
+      "matchManagers": ["custom.regex"],
+      "matchDepNames": ["freelensapp/freelens"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "enabled": false
     },
     {
       "description": "peerDependencies are widened.",

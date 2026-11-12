@@ -1,5 +1,5 @@
 import { Renderer } from "@freelensapp/extensions";
-import { VELERO_API_VERSION } from "../../common/paths";
+import { VELERO_API_VERSION, VELERO_DATA_MOVEMENT_VERSION } from "../../common/paths";
 
 import type {
   BackupRepositorySpec,
@@ -8,6 +8,10 @@ import type {
   BackupStatus,
   BackupStorageLocationSpec,
   BackupStorageLocationStatus,
+  DataDownloadSpec,
+  DataDownloadStatus,
+  DataUploadSpec,
+  DataUploadStatus,
   PodVolumeBackupSpec,
   PodVolumeBackupStatus,
   PodVolumeRestoreSpec,
@@ -185,5 +189,44 @@ export class PodVolumeRestore extends Renderer.K8sApi.LensExtensionKubeObject<
     singular: "podvolumerestore",
     shortNames: [],
     title: "Pod Volume Restores",
+  };
+}
+
+// The kinds of the data movement, served under the second version of the group: the host reads them under it, and
+// the reader asks them under it and under no other.
+
+export class DataUpload extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, DataUploadStatus, DataUploadSpec> {
+  declare kind: "DataUpload";
+  declare apiVersion: "velero.io/v2alpha1";
+
+  static readonly kind = "DataUpload";
+  static readonly namespaced = true;
+  static readonly apiBase = `/apis/${VELERO_DATA_MOVEMENT_VERSION}/datauploads`;
+  static readonly crd: VeleroCrd = {
+    apiVersions: [VELERO_DATA_MOVEMENT_VERSION],
+    plural: "datauploads",
+    singular: "dataupload",
+    shortNames: [],
+    title: "Data Uploads",
+  };
+}
+
+export class DataDownload extends Renderer.K8sApi.LensExtensionKubeObject<
+  Metadata,
+  DataDownloadStatus,
+  DataDownloadSpec
+> {
+  declare kind: "DataDownload";
+  declare apiVersion: "velero.io/v2alpha1";
+
+  static readonly kind = "DataDownload";
+  static readonly namespaced = true;
+  static readonly apiBase = `/apis/${VELERO_DATA_MOVEMENT_VERSION}/datadownloads`;
+  static readonly crd: VeleroCrd = {
+    apiVersions: [VELERO_DATA_MOVEMENT_VERSION],
+    plural: "datadownloads",
+    singular: "datadownload",
+    shortNames: [],
+    title: "Data Downloads",
   };
 }

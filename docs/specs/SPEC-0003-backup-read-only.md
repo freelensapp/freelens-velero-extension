@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M1 / T1.2 and T1.3
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [foundation](SPEC-0001-local-foundation.md), [target discovery](SPEC-0002-installation-discovery.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-27, as drafted
 
@@ -314,3 +314,80 @@ against the budget of 250 ms, 31 ms at the median and 89 ms the slowest, and 328
 at the 95th percentile from the key or the click, which counts the 250 ms the search
 of the host waits. The deviations recorded above hold on v2 as they are; v2 brings
 no other.
+
+### 2026-11-08: The Command Of The List (T4.3 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says,
+approved with it, the second pull request of T4.3 restates the evidence of one check,
+and the rest of this spec is read with it:
+
+| Check | Restated |
+| --- | --- |
+| The evidence of BACK-09 | The list of the Backups has Create backup in its header, which opens the workspace of SPEC-0017 and writes nothing by itself, and no other command: no selection, no menu of a row and nothing that removes |
+
+With T4.3 the header of the list has Create backup, after the count of the host:
+the command opens the workspace of the backup of the form over the list, named in the
+address, and writes nothing by itself. It is proven at the component layer, with
+writes off and on, in
+[`backup-create-workspace.test.tsx`](../../src/renderer/pages/backup-create-workspace.test.tsx)
+and [`list-derivations.test.tsx`](../../src/renderer/components/list-derivations.test.tsx);
+the packaged suites of the action came with the third pull request of T4.3: the
+suite of the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.
+
+### 2026-11-08: Restore In The Workspace Of A Backup (T4.4 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says,
+approved with it, the second pull request of T4.4 restates one requirement and its
+check, and the rest of this spec is read with it:
+
+| Requirement and check | Restated |
+| --- | --- |
+| REQ-030, BACK-07 | The workspace of a backup, which reads and offers two commands, Restore (T4.4) and Delete backup (T4.6), each opening the workspace of its action of SPEC-0017 and writing nothing by itself; no placeholder control |
+
+With T4.4 the workspace of a backup has Restore, on the line of its name, where it
+takes no room from its tabs and their lists, and no other command yet: the command
+opens the workspace of the restore of the backup over the view, named in the address,
+and writes nothing by itself. It is enabled for a backup Completed, and for one
+PartiallyFailed with the words that some of its items may be missing; for a backup in
+any other phase it is disabled, with the words of why. It is proven at the component
+layer, with writes off and on, in
+[`restore-create-workspace.test.tsx`](../../src/renderer/pages/restore-create-workspace.test.tsx);
+the packaged suites of the action came with the third pull request of T4.4: the suite of
+the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.
+
+### 2026-11-08: Delete Backup In The Workspace Of A Backup (T4.6 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says, approved
+with it, the second pull request of T4.6 restates one more requirement and its check,
+and the rest of this spec is read with it and with the restatement of REQ-030 and
+BACK-07 above:
+
+| Requirement and check | Restated |
+| --- | --- |
+| REQ-032, BACK-09 | No generic edit or delete and no bulk deletion on a surface of a Backup; the one deletion is Delete backup, of one backup, through a DeleteBackupRequest, in the workspace of that backup |
+
+With T4.6 the workspace of a backup has Delete backup beside Restore, on the line of its
+name: the command opens the workspace of the deletion of that backup over the view,
+named in the address as `backup-delete/<backup>`, and writes nothing by itself. It is
+disabled for a backup in progress, waiting for its plugins or finalizing, which Velero
+refuses to delete, with the words of why; it is enabled for a backup Deleting, with the
+words that Velero is deleting it or that a deletion of it failed, which a new request
+tries again, and for one with no phase, New, Queued or ReadyToStart, with the words that
+Velero deletes it before it starts it, or, for one that names no storage location, that
+Velero refuses to delete it until it starts it, when it writes its location. No row of
+the list, no menu and no selection offers a deletion. It is proven at the component
+layer, with writes off and on, in
+[`backup-delete-workspace.test.tsx`](../../src/renderer/pages/backup-delete-workspace.test.tsx),
+and for every phase of the release, with a location named and without one, in
+[`backup-delete-words.test.ts`](../../src/common/backup-delete-words.test.ts); the
+packaged suites of the action came with the third pull request of T4.6: the suite of
+the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace and of its review in the pre-review.

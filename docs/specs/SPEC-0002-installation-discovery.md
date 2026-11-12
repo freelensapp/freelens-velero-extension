@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M1 / T1.1
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [foundation](SPEC-0001-local-foundation.md), required checks verified before implementation
 - **Approval:** Approved by the lead maintainer on 2026-09-27, as drafted
 
@@ -208,3 +208,24 @@ eight kinds left out of the Custom Resources tree until the extension was disabl
 among them, with the order of the entries proven by the entry points test. The families the
 discovery says a cluster does not serve are the eight of an installation, the
 three of the volumes among them, with the words of before.
+
+**T5.2 of [SPEC-0014](SPEC-0014-repositories-and-data-movement.md), 2026-11-08: DISC-01
+and DISC-02 with the second version of the group, and DISC-08 with two more
+entries.** The discovery asks `/apis/velero.io/v2alpha1` beside `/apis/velero.io/v1`,
+at each of its asks, and only when a view of Velero opens or reads again (DISC-01):
+the first version alone says whether Velero is there, and the second says only
+whether the data uploads and the data downloads are served. A version the API does
+not serve makes its two families not served, which are then never asked, and
+changes nothing else; an answer of the second version that refused, failed or is not
+a list says nothing of them, and their reads say what they are (DISC-02). The unit
+test of the discovery holds each answer with the families it affects, and the tests
+of the state of an installation hold the three asks of the discovery and the data
+movement never asked where its version is not served. The sidebar has eleven
+entries under Velero, the lists of the data uploads and of the data downloads after
+the pod volume restores, each a page that is implemented, before the entry of the
+group (DISC-08); the entry points test and the build test pin the eleven pages and
+their entries, the journey suite reads them in the packaged application with the
+ten kinds left out of the Custom Resources tree until the extension is disabled, and
+every request of the frame of the cluster is of a kind of Velero or of a version of
+its group: under the second version, its discovery and the lists of its two kinds
+alone.

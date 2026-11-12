@@ -12,11 +12,13 @@ every PR that starts, completes, or re-scopes a feature. The process is in
 the end of each milestone.
 
 The compatibility reference is Freelens v2, at the validation target of
-[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
-v2.0.0-0-nightly-2026-10-25, built from freelensapp/freelens
-`7801fb10a5f20af308093b39e5f79cd6e8c3461d`, with `@freelensapp/extensions`
-2.0.0-0-nightly-2026-10-25 pinned exactly. The target moves with the
-[host drift watch](PROCESS.md#host-drift-watch) until Freelens 2.0.0 is released.
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the release Freelens 2.0.0,
+built from freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, its
+tag v2.0.0, with `@freelensapp/extensions` taken by the range `^2.0.0` and
+resolved to 2.0.0. The target moved with the
+[host drift watch](PROCESS.md#host-drift-watch) until Freelens 2.0.0 was released;
+the watch ended on 2026-11-07, with the row of M6 below, and the target moves with
+the releases of Freelens.
 Velero is v1.18.4 with the AWS plugin v1.14.4 (see [RECON-T0.1.md](RECON-T0.1.md)).
 v1.0.0 ships for Freelens v2 and not for Freelens 1, which lists the package as
 Incompatible and runs none of it. The checks of M1 to M3 and of T3.1 and T3.2
@@ -25,19 +27,23 @@ were made green on Freelens 1 first; T0.8 makes them green on v2.
 ## Releases
 
 The version line is 1.0.0, decided by the lead maintainer on 2026-10-16 (D10 of
-[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release)):
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release)),
+and 1.0.0 is its first publication, with no prerelease before it, decided by the
+lead maintainer on 2026-11-09
+([the amendment of SPEC-0018](../specs/SPEC-0018-release-readiness.md#2026-11-09-no-prerelease-before-100)):
 
-- **1.0.0-N**: prereleases of the line, from main, each through the pull request
-  of the version workflow, tagged, published on the npm tag `next` and released
-  on GitHub as a prerelease. The first is made when the lead maintainer asks for
-  it, after T0.8 at the earliest; until then main keeps its version. A prerelease
-  is installed by its tag, `@freelensapp/velero-extension@next`, or by its version.
-- **1.0.0**: M1 to M6, the complete agreed scope, published on `latest` only
-  after Freelens 2.0.0 is released and M6 is done: installing by name takes the
-  newest version that is not a prerelease, whatever Freelens it is for. With
-  Freelens 2.0.0 the pin of the SDK becomes a range of versions and the
-  integration runs at the tag v2.0.0, as work of M6.
-- An earlier read-only release after M2 is the lead maintainer's call.
+- **1.0.0-N**: the prereleases of the line, on the npm tag `next`, are not made.
+  No 1.0.0-0 comes before 1.0.0; until 1.0.0 is published main keeps its version,
+  and the extension is installed from the source.
+- **1.0.0**, released on 2026-11-10: M1 to M6, the complete agreed scope, the first publication, through
+  the pull request of the version workflow, tagged, published on `latest` and
+  released on GitHub, only after Freelens 2.0.0 is released and M6 is done:
+  installing by name takes the newest version that is not a prerelease, whatever
+  Freelens it is for. The proof of its assets and its check by version in
+  Freelens 2.0.0 are made on it. With Freelens 2.0.0 the pin of the SDK becomes a
+  range of versions and the integration runs at the tag v2.0.0, as work of M6.
+- No earlier release: the read-only release after M2 that was the lead
+  maintainer's call is not made, since 1.0.0 is the first publication.
 
 Every milestone keeps the whole agreed scope: nothing moves out of v1.0.0
 without an explicit decision recorded here.
@@ -76,7 +82,7 @@ ConfigMaps and the transport run in Node. It is not a claim about the full
 product, about the recovery of persistent volumes or about all the eight
 artifact formats.
 
-The integration test, FND-10 and a session for each of the five kinds,
+The integration test, FND-10 and a session for each of the ten kinds,
 installs the packed build in a Freelens built from source at the commit of the
 validation target, on every pull request and on main; the suites of the views
 run in the same build.
@@ -171,8 +177,8 @@ tests had run green in CI on main with the reviewed release moved to v1.18.4.
 | Expected runs from the cron expression, `status.lastBackup` and the newest matching Backup | T3.1 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
 | Grace periods, paused, new and invalid schedules, timezone and daylight saving, skipped runs, clock skew, incomplete history, limited RBAC | T3.2 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
 | Next expected run, last observed run and overdue state in list, detail and overview, with the reason | T3.3 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
-| BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | In PR |
-| DataUpload and DataDownload views with progress and relationships | T5.2 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Approved |
+| BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Done |
+| DataUpload and DataDownload views with progress and relationships | T5.2 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Done |
 
 The two specs of the milestone were approved on 2026-10-14, as drafted. The order
 of the slices: T3.1, the grammar of the cron library and the computation with a
@@ -210,17 +216,29 @@ Done with the last, and so is the row of T5.2 with its two.
 Exit of M4: tests with a controlled clock and packaged UI scenarios establish
 the accuracy of the adherence signal, including its uncertainty states.
 
+Every row of the milestone is Done with the second pull request of T5.2. The
+review gate of the milestone, in
+[PROCESS.md](PROCESS.md#milestone-manual-review-gate), was held on 2026-11-08: the
+points it was to decide had been decided by the lead maintainer on 2026-10-26, as
+recommended, the amendment of REQ-166 and the precisions of REQ-170 and REQ-171
+confirmed, the last submission and the newest backup of the list of the Schedules
+giving their room under 1,200 pixels, and the reasons of D1 and D2 of SPEC-0015
+reworded. The fourth milestone is on main and its two specs are Verified: the lead
+maintainer approved the review of the milestone on 2026-11-08, on the screenshots of
+its views in both themes and at the sizes of the pre-review, and their tests run
+green in CI on main.
+
 ### M5 - Actions
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Ground rules of the write actions | | | Planned |
-| Backup now from a schedule | T4.2 | | Planned |
-| Create backup form, followed by a review of the exact request | T4.3 | | Planned |
-| Create schedule form, followed by a review of the exact request | T4.7 | [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) | Approved |
-| Restore from backup or schedule, with namespace mappings and existing-resource policy | T4.4 | | Planned |
-| Pause and resume of a schedule, with explicit `skipImmediately` behavior | T4.5 | | Planned |
-| Delete one backup through `DeleteBackupRequest`, with double confirmation | T4.6 | | Planned |
+| Ground rules of the write actions | | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
+| Backup now from a schedule | T4.2 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
+| Create backup form, followed by a review of the exact request | T4.3 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
+| Create schedule form, followed by a review of the exact request | T4.7 | [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) | Done |
+| Restore from backup or schedule, with namespace mappings and existing-resource policy | T4.4 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
+| Pause and resume of a schedule, with explicit `skipImmediately` behavior | T4.5 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
+| Delete one backup through `DeleteBackupRequest`, with double confirmation | T4.6 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
 
 Creating a Schedule is in v1.0.0, decided by the lead maintainer on 2026-10-23:
 T4.7, whose spec is [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md), approved
@@ -239,21 +257,76 @@ Exit of M5: each action tested separately on the disposable kind cluster, with
 the resulting objects and state checked. No write on a real cluster, no bulk
 deletion of backups, no way around the confirmation.
 
+Every row of the milestone is Done with the third pull request of T4.6. Each action
+has its review of the exact request, its cases in the suite of the actions on the
+CRDs of the release alone, its views and its walk with the keyboard in the
+pre-review, and its proof in `pnpm e2e` against the server of the release on the
+disposable kind cluster. The review gate of the milestone, in
+[PROCESS.md](PROCESS.md#milestone-manual-review-gate), was held on 2026-11-09: the
+lead maintainer approved the review of the milestone on the screenshots of the
+views of its actions in both themes and at the sizes of the pre-review, with Delete
+backup kept offered for a backup Velero has not started that names no storage
+location. The fifth milestone is on main and SPEC-0016 and SPEC-0017 are Verified,
+their tests green in CI on main.
+
 ### M6 - Release readiness
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Regression, packaged integration, end to end with the real controller, isolation between clusters, permissions, transport security, performance | T6.1 | | Planned |
-| Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | | Planned |
-| Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | | Planned |
-| Tarball, checksums and software bill of materials from the release workflow | T6.4 | | Planned |
-| With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Planned |
-| Release through the organization's flow, on the lead maintainer's go | T6.5 | | Planned |
+| Regression; the roles of the README proven; HTTPS and the direct route in the host; a ceiling on the bundles. The rest is deferred, D16 | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
+| Visual pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
+| The README in the sections of the other extensions: installation, permissions, write actions, compatibility, features and limits; screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
+| Tarball, checksums and software bill of materials from the release workflow of the template: on each GitHub release, the tarball and the bill of materials of the repository at the tag, each with its `.sha256`, and the provenance through the trusted publisher alone. The proof of the assets made on 1.0.0, and the trusted publisher in place of the token of the first publication since 2026-11-10 | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
+| With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Done |
+| Release through the organization's flow, on the lead maintainer's go: the version, tag and release workflows of the template, the tag on main once the pull request of the version is merged. 1.0.0 published and checked on 2026-11-10. Left: its listing in the marketplace | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
+
+[SPEC-0018](../specs/SPEC-0018-release-readiness.md), approved by the lead
+maintainer on 2026-11-09 with D1 to D19 as proposed, is the one spec of the
+milestone; its first slice comes after M5, closed with its review the same day.
+The order of the slices, its D15, as amended on 2026-11-09: there is no
+prerelease, and 1.0.0 is the first publication, as the lead maintainer decided
+that day
+([the amendment](../specs/SPEC-0018-release-readiness.md#2026-11-09-no-prerelease-before-100)),
+with the proof of its assets and its check by version in Freelens 2.0.0. First
+T6.4 and the tag, which are the version, tag and release workflows of the
+template of the organization, as the lead maintainer decided on 2026-11-09 with
+the first amendment of the spec; then the sections of the README 1.0.0 is
+installed with; then the identities of the actions, then
+[#145](https://github.com/freelensapp/freelens-velero-extension/issues/145), the
+case of FND-10 by the direct route and the ceilings of the bundles, with T6.2, the
+visual pass of the pre-review, beside them; then the screenshots, the video
+and the notes of 1.0.0, the review of the milestone, and 1.0.0 on `latest` on the
+lead maintainer's go. Its D16 says what T6.1 takes and what it defers: the row of
+T6.1 is narrowed to it, and what it defers is under Deferred after v1.0.0.
+Each slice is its own pull request; the row of a task is In PR from its first and
+Done with its last. The review gate of the milestone, in
+[PROCESS.md](PROCESS.md#milestone-manual-review-gate), was held on 2026-11-10: the
+lead maintainer approved it on the gallery of the pre-review of the release
+candidate, the video, the screenshots, the notes of 1.0.0 and the README, with the
+walk of TRY-IT by hand not made, as SPEC-0018 records. 1.0.0 was published on
+2026-11-10, with the proof of its assets and its check by version and by name in
+Freelens 2.0.0; the trusted publisher took the place of the token the same day,
+which makes T6.4 Done, and T6.5 waits for the listing in the marketplace.
 
 ## Deferred after v1.0.0
 
 Work that is decided out of v1.0.0, each item with its decision:
 
+- **What T6.1 defers**, by D16 of [SPEC-0018](../specs/SPEC-0018-release-readiness.md#what-t61-defers),
+  approved by the lead maintainer on 2026-11-09: the performance but the ceiling on
+  the bytes of the bundles, that is guards relative to a baseline, ceilings of
+  memory and of the start, and larger datasets; FND-10 on hosted macOS and Windows
+  runners at each tag; and the other gaps of the inventory the spec lists, each
+  with its reason and the check or the statement of the README that keeps its
+  release signal.
+- **What the amendments of SPEC-0018 do not take of T6.1**, decided by the lead
+  maintainer on 2026-11-09 ([the amendments](../specs/SPEC-0018-release-readiness.md#amendments)):
+  the checks that go beyond the other extensions of the organization and were not
+  made, the isolation between two clusters in one packaged Freelens, and Back up
+  now and Delete backup with the real controller in the packaged application;
+  and, with the release workflow of the template, FND-10 on the tarball the
+  release publishes. The spec lists each in what T6.1 defers, with the check that
+  stays.
 - **Editing a Schedule**, to the next minor: the adapter is create-only, and a
   patch of the spec needs the review of a diff, a different review model from the
   one of a creation. Decided by the lead maintainer on 2026-10-23.

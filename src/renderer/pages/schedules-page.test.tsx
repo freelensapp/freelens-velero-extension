@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { scheduleObject, submissionOf } from "../../../test/adherence-builders";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { hostObject } from "../../../test/freelens-extensions";
 import { drawerValue, listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
@@ -124,7 +125,7 @@ const backups = [
   object("Backup", "weekly-20260830", A, template, ran("2026-08-30"), of("weekly")),
   object("Backup", "by-hand", A, template, ran("2026-09-09")),
 ];
-const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } };
+const served: Answer = { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } };
 
 function answers(more: Answers = {}): Answers {
   return {
@@ -592,9 +593,7 @@ describe("list of the schedules", () => {
     const partly: Answer = {
       status: 200,
       body: {
-        resources: Object.values(RESOURCES)
-          .filter((name) => name !== "schedules")
-          .map((name) => ({ name })),
+        resources: FIRST_VERSION_RESOURCES.filter((name) => name !== "schedules").map((name) => ({ name })),
       },
     };
     const { asked } = mount(answers({ [DISCOVERY]: partly }), chosen(A));
@@ -1088,17 +1087,29 @@ describe("workspace of a schedule", () => {
     expect(installation.read("schedules").items).toHaveLength(1);
   });
 
-  it("has no control that writes: the way back, the ways to other views and the marks of the line", async () => {
+  it("writes nothing by itself: the way back, Back up now, Pause or Resume and Restore, which open their workspaces, the ways to other views and the marks of the line", async () => {
     mount(answers(), chosen(A));
     const workspace = await open("nightly");
-    const controls = [...workspace.querySelectorAll("button, a, input, select, textarea")].map(
-      (control) => control.getAttribute("data-testid") ?? `mark ${control.getAttribute("data-strip-mark")}`,
-    );
+    const controls = (view: HTMLElement) =>
+      [...view.querySelectorAll("button, a, input, select, textarea")]
+        .map((control) => control.getAttribute("data-testid") ?? `mark ${control.getAttribute("data-strip-mark")}`)
+        .filter((control) => !control.startsWith("mark ") && !control.startsWith("velero-open-"));
 
-    expect(controls.filter((control) => !control.startsWith("mark ") && !control.startsWith("velero-open-"))).toEqual([
+    expect(controls(workspace)).toEqual([
       "velero-back",
+      "velero-schedule-back-up-now",
+      "velero-schedule-pause",
+      "velero-schedule-restore",
     ]);
     expect(workspace.textContent).not.toMatch(/\b(delete|edit|remove|pause now|resume|run now|trigger)\b/i);
+    // A schedule that is paused is offered Resume, and not Pause.
+    fireEvent.click(within(workspace).getByTestId("velero-back"));
+    expect(controls(await open("weekly"))).toEqual([
+      "velero-back",
+      "velero-schedule-back-up-now",
+      "velero-schedule-resume",
+      "velero-schedule-restore",
+    ]);
   });
 });
 

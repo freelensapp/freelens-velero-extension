@@ -37,12 +37,18 @@ const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
-// The views that are checked, each in both themes at every size: eight of the tabs, then the thirty-one
-// of the pages, four of them of the adherence of the schedules.
-const VIEWS = 39;
+// The views that are checked, each in both themes at every size: eight of the tabs, then the fifty-seven of the pages,
+// four of them of the adherence of the schedules, ten of the backup repositories, of the pod volume operations and of
+// the data movement, two of Back up now, two of Create backup, two of Create schedule, two of Restore, four of Pause
+// and Resume, and three of Delete backup.
+const VIEWS = 65;
 const OVERVIEW = cluster.OVERVIEW;
 const SCHEDULES = cluster.SCHEDULES;
 const SCHEDULED = "views-history";
+// A schedule of the views that is paused, with skip immediately true, which a resume proposes.
+const SKIPPING = "schedule-skipping";
+// The parts of the workspace of a pause and of a resume.
+const schedulePatch = (id: string) => `[data-testid=velero-schedule-patch-${id}]`;
 const STORAGE = cluster.STORAGE_LOCATIONS;
 const SNAPSHOT = cluster.SNAPSHOT_LOCATIONS;
 // The installation of the demo, where the tabs load what the fixtures of the tabs wrote into its store,
@@ -63,6 +69,28 @@ const NARROWEST = 720;
 // a name as long as the value of a label may be, as the fixtures name them.
 const HELD = "adherence-held";
 const LONG_SCHEDULE = "schedule-with-a-name-as-long-as-the-value-of-a-label-is-allowed";
+// The parts of the workspace of Back up now, and its field of the name: the host gives its own element the
+// identifier, or the input in it.
+const backUpNow = (id: string) => `[data-testid=velero-backup-now-${id}]`;
+const NAME_FIELD = `${backUpNow("field")} input, input${backUpNow("field")}`;
+// The parts of the workspace of the backup of the form, and its field of the name.
+const createBackup = (id: string) => `[data-testid=velero-backup-create-${id}]`;
+const CREATE_FIELD = `${createBackup("field")} input, input${createBackup("field")}`;
+const createSchedule = (id: string) => `[data-testid=velero-schedule-create-${id}]`;
+const SCHEDULE_FIELD = `${createSchedule("field")} input, input${createSchedule("field")}`;
+// An expression of 200 characters the parser takes: a zone, each of the first forty-eight minutes, and a few hours.
+const LONG_EXPRESSION = `CRON_TZ=America/Argentina/ComodRivadavia ${Array.from({ length: 48 }, (_, at) => at).join(",")} 13-15 1-7,15-21 * MON-FRI`;
+const SCHEDULE_EXPRESSION = `${createSchedule("expression")} input, input${createSchedule("expression")}`;
+// The parts of the workspace of a restore, its field of the name, and the backup it is asked of, which ended well.
+const restoreOf = (id: string) => `[data-testid=velero-restore-create-${id}]`;
+const RESTORE_FIELD = `${restoreOf("field")} input, input${restoreOf("field")}`;
+const RESTORABLE = "views-history-1";
+const RESTORE_SOURCES = 'input[type=checkbox][data-testid^="velero-restore-create-includedNamespaces-"]';
+// The parts of the workspace of a deletion, and its field of the name of the backup.
+const deleteOf = (id: string) => `[data-testid=velero-backup-delete-${id}]`;
+const DELETE_TYPED = `${deleteOf("typed")} input, input${deleteOf("typed")}`;
+// The backup of the views with a name of 63 characters, InProgress: Delete backup is held back for it.
+const LONG_BACKUP = cluster.LONG_BACKUP_NAME;
 // A tab of the view that is shown: the operation the view is of, and the tab.
 interface Tab {
   kind: artifacts.Operation;
@@ -332,8 +360,10 @@ describe("pre-review of the views", () => {
       await stay("backup", REFUSED, "log");
       await frame.locator("[data-testid=velero-back]").focus();
       expect(await cluster.focused(frame)).toBe("velero-back");
-      // One press from the way back reaches the strip, at its first tab. The log is the tab that is open:
-      // each tab the keyboard reaches says whether it is the selected one.
+      // One press from the way back reaches Delete backup, on the line of the name, Restore being disabled for a
+      // backup that failed its validation; the next reaches the strip, at its first tab. The log is the tab that is
+      // open: each tab the keyboard reaches says whether it is the selected one.
+      expect(await moved("Tab")).toEqual({ id: "velero-backup-delete", selected: "" });
       expect(await moved("Tab")).toEqual({ id: tab("summary"), selected: "false" });
       expect(await moved("ArrowRight")).toEqual({ id: tab("log"), selected: "true" });
       expect(await moved("End")).toEqual({ id: tab("volumes"), selected: "false" });
@@ -895,6 +925,11 @@ describe("pre-review of the views", () => {
     async () => {
       await cluster.showList(frame);
       await cluster.openWorkspace(frame, OPENED);
+      // The summary holds the band of the volumes, which says here that the installation holds no pod volume backup
+      // of the backup, with no row: the pictures are taken once it says so, and not while it is being read.
+      // The room of its rows at 900 by 650 and at twice the zoom is seen once the fixtures place operations of a
+      // backup.
+      expect((await cluster.volumeBand(frame, "none")).state).toBe("none");
       await everyLayout("workspace");
       await everyLayout("workspace-references", async () => {
         await frame.locator("[data-testid=velero-backup-references]").scrollIntoViewIfNeeded();
@@ -981,8 +1016,26 @@ describe("pre-review of the views", () => {
       await frame.waitForSelector(`[data-testid=velero-restore-name] >> text="${RESTORED}"`, { timeout: 60_000 });
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
       // From the way back the keyboard goes through the five tabs of the workspace, each one a stop as the
-      // tabs of the host are, and then reaches the way to the backup: six presses.
-      expect(await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 10)).toBe(6);
+      // tabs of the host are, then the band of its volumes, whose rows, the seven pod volume restores of the
+      // restore, each hold a way to the operation and a link to its pod, five of them a link to the node a node
+      // agent accepted them on, and the data downloads of the restore, each a way, with a link to the node of the
+      // ones a node agent prepared; then it reaches the way to the backup.
+      const downloads = cluster.labelledObjects<{ status?: { node?: string } }>(
+        "datadownloads",
+        `velero.io/restore-name=${RESTORED}`,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+
+      expect((await cluster.volumeBand(frame, "rows")).rows).toHaveLength(7);
+      expect((await cluster.volumeBand(frame, "rows", "DataDownload")).rows).toHaveLength(downloads.length);
+      const stops = await frame
+        .locator("[data-testid=velero-volume-band] a, [data-testid=velero-volume-band] button")
+        .count();
+
+      expect(stops).toBe(7 + 7 + 5 + downloads.length + downloads.filter(({ status }) => status?.node).length);
+      expect(await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 6 + stops + 2)).toBe(
+        6 + stops,
+      );
       await started.window.keyboard.press("Enter");
       await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 60_000 });
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
@@ -1009,7 +1062,19 @@ describe("pre-review of the views", () => {
     async () => {
       await cluster.showList(frame);
       await cluster.openWorkspace(frame, RESTORED, RESTORES);
+      // The summary holds the band of the volumes, with the seven pod volume restores and the eight data downloads the
+      // views place for the restore in the rows of its two halves, and the pictures are taken once it shows them: the
+      // room of its rows at 900 by 650 and at twice the zoom is seen in the pictures of the band.
+      expect((await cluster.volumeBand(frame, "rows")).state).toBe("rows");
+      expect((await cluster.volumeBand(frame, "rows", "DataDownload")).state).toBe("rows");
       await everyLayout("restore-workspace", undefined, RESTORES);
+      await everyLayout(
+        "restore-workspace-volumes",
+        async () => {
+          await frame.locator("[data-testid=velero-volume-band]").scrollIntoViewIfNeeded();
+        },
+        RESTORES,
+      );
       await everyLayout(
         "restore-workspace-into",
         async () => {
@@ -1026,6 +1091,7 @@ describe("pre-review of the views", () => {
       );
       await cluster.closeWorkspace(frame);
       expect(found("restore-workspace")).toEqual({});
+      expect(found("restore-workspace-volumes")).toEqual({});
       expect(found("restore-workspace-into")).toEqual({});
       expect(found("restore-workspace-scope")).toEqual({});
     },
@@ -1053,13 +1119,14 @@ describe("pre-review of the views", () => {
       await started.window.keyboard.press("Enter");
       await frame.waitForSelector(`[data-testid=velero-schedule-name] >> text="${SCHEDULED}"`, { timeout: 60_000 });
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
-      // After the way back and the newest backup, the marks of the line, from the oldest, one press each.
+      // After the way back, the commands of the schedule and the newest backup, the marks of the line, from the
+      // oldest, one press each.
       const reached: string[] = [];
       const line = await cluster.history(frame);
 
       // Each day of the history has its mark: what is expected below is of an environment that is not old.
       expect(cluster.dayOnTheLine(line.width)).toBeGreaterThan(2 * cluster.MARK_WIDTH);
-      for (let presses = 0; presses < 12 && reached.length < 7; presses += 1) {
+      for (let presses = 0; presses < 16 && reached.length < 7; presses += 1) {
         await started.window.keyboard.press("Tab");
         const mark = await frame.evaluate(() => document.activeElement?.getAttribute("data-strip-mark") ?? "");
 
@@ -1266,6 +1333,199 @@ describe("pre-review of the views", () => {
   );
 
   it(
+    "shows the lists of the backup repositories, the pod volume backups, the pod volume restores, the data uploads and the data downloads in both themes, at every size",
+    async () => {
+      for (const [view, list] of [
+        ["backup-repositories", cluster.REPOSITORIES],
+        ["pod-volume-backups", cluster.POD_VOLUME_BACKUPS],
+        ["pod-volume-restores", cluster.POD_VOLUME_RESTORES],
+        ["data-uploads", cluster.DATA_UPLOADS],
+        ["data-downloads", cluster.DATA_DOWNLOADS],
+      ] as const) {
+        await cluster.showList(frame);
+        await cluster.openPage(frame, list);
+        await cluster.waitForList(frame, list);
+        expect([view, (await cluster.target(frame)).namespace]).toEqual([view, cluster.E2E_VIEWS_NAMESPACE]);
+        await everyLayout(view, undefined, list);
+        expect([view, found(view)]).toEqual([view, {}]);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows a repository with its maintenances and what used it, the band of the backup in progress whole, and a pod volume backup that failed with a message of several lines, in both themes, at every size",
+    async () => {
+      // The repository of the views whose newest maintenance failed: its three maintenances and what used it.
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.REPOSITORIES);
+      await cluster.waitForList(frame, cluster.REPOSITORIES);
+      await cluster.openWorkspace(frame, "views-workloads-views-available-kopia", cluster.REPOSITORIES);
+      await frame.waitForSelector("[data-testid=velero-backup-repository-maintenances]", { timeout: 60_000 });
+      // What used it, once each kind of the operations is read: none of its parts is being read when it is looked at.
+      await frame.waitForFunction(
+        () => {
+          const used = document.querySelector("[data-testid=velero-used-by]");
+
+          return used !== null && used.querySelector("[data-state=loading], [data-state=not-read]") === null;
+        },
+        undefined,
+        { timeout: 60_000 },
+      );
+      await everyLayout("backup-repository-workspace", undefined, cluster.REPOSITORIES);
+      expect(found("backup-repository-workspace")).toEqual({});
+      await cluster.closeWorkspace(frame);
+      // The band of the backup in progress with all of its rows shown, read where it is in the view.
+      const band = frame.locator("[data-testid=velero-volume-band]");
+
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      await cluster.volumeBand(frame, "rows");
+      await cluster.volumeBand(frame, "rows", "DataUpload");
+      // Each half shows ten rows and the command that shows ten more, which shows the rest: the twelve data uploads of
+      // the backup, beside its pod volume backups.
+      for (const kind of ["PodVolumeBackup", "DataUpload"]) {
+        await frame
+          .locator(`[data-testid=velero-volume-half][data-kind=${kind}] [data-testid=velero-volume-more]`)
+          .click();
+        await frame.waitForSelector(
+          `[data-testid=velero-volume-half][data-kind=${kind}] [data-testid=velero-volume-more]`,
+          {
+            state: "detached",
+            timeout: 60_000,
+          },
+        );
+      }
+      await everyLayout("backup-inprogress-band", () => band.scrollIntoViewIfNeeded());
+      expect(found("backup-inprogress-band")).toEqual({});
+      // Its pod volume backup that failed with a message of several lines, read on the cluster by the label of the
+      // backup, opened from its row.
+      const [failed] = cluster
+        .labelledObjects<{ metadata: { name: string }; status?: { phase?: string; message?: string } }>(
+          "podvolumebackups",
+          "velero.io/backup-name=backup-inprogress",
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ status }) => status?.phase === "Failed" && (status.message ?? "").includes("\n"));
+
+      expect(failed).toBeDefined();
+      await frame.locator(`[data-testid="velero-open-pod-volume-backup-${failed.metadata.name}"]`).click();
+      await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", { timeout: 60_000 });
+      await everyLayout("pod-volume-backup-workspace");
+      expect(found("pod-volume-backup-workspace")).toEqual({});
+      await cluster.closeWorkspace(frame);
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows a data upload that failed with a message of several lines and a data download with the way to the data upload of its snapshot, in both themes, at every size",
+    async () => {
+      // The data upload of the backup in progress that failed with a message of several lines, read on the cluster by
+      // the label of the backup, opened from its row in the second half of the band.
+      const [failed] = cluster
+        .labelledObjects<{ metadata: { name: string }; status?: { phase?: string; message?: string } }>(
+          "datauploads",
+          "velero.io/backup-name=backup-inprogress",
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ status }) => status?.phase === "Failed" && (status.message ?? "").includes("\n"));
+
+      expect(failed).toBeDefined();
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      await cluster.volumeBand(frame, "rows", "DataUpload");
+      const way = frame.locator(`[data-testid="velero-open-data-upload-${failed.metadata.name}"]`);
+
+      if (!(await way.count())) {
+        await frame
+          .locator("[data-testid=velero-volume-half][data-kind=DataUpload] [data-testid=velero-volume-more]")
+          .click();
+      }
+      await way.click();
+      await frame.waitForSelector("[data-testid=velero-data-upload-workspace]", { timeout: 60_000 });
+      await everyLayout("data-upload-workspace");
+      expect(found("data-upload-workspace")).toEqual({});
+      await cluster.closeWorkspace(frame);
+      await cluster.closeWorkspace(frame);
+      // The data download of the mapped restore that completed, whose snapshot a data upload of the installation
+      // names, opened from its row in the second half of the band of the restore.
+      const [completed] = cluster
+        .labelledObjects<{ metadata: { name: string }; status?: { phase?: string } }>(
+          "datadownloads",
+          `velero.io/restore-name=${RESTORED}`,
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ status }) => status?.phase === "Completed");
+
+      expect(completed).toBeDefined();
+      await cluster.openPage(frame, RESTORES);
+      await cluster.waitForList(frame, RESTORES);
+      await cluster.openWorkspace(frame, RESTORED, RESTORES);
+      await cluster.volumeBand(frame, "rows", "DataDownload");
+      await frame.locator(`[data-testid="velero-open-data-download-${completed.metadata.name}"]`).click();
+      await frame.waitForSelector(
+        "[data-testid=velero-data-download-workspace] [data-testid^=velero-open-data-upload-]",
+        { timeout: 60_000 },
+      );
+      await everyLayout("data-download-workspace", undefined, RESTORES);
+      expect(found("data-download-workspace")).toEqual({});
+      await cluster.closeWorkspace(frame);
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads the band of the backup in progress with the keyboard alone: ten more, a row, its view, and Escape back to the backup and to its row",
+    async () => {
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      expect((await cluster.volumeBand(frame, "rows")).rows).toHaveLength(10);
+      // From the way back the keyboard reaches the command that shows ten more, and Enter shows them.
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await cluster.tabTo(frame, (focus) => focus === "velero-volume-more", 80);
+      await started.window.keyboard.press("Enter");
+      await frame.waitForFunction(
+        () =>
+          document.querySelectorAll(
+            "[data-testid=velero-volume-half][data-kind=PodVolumeBackup] [data-testid=velero-volume-rows] tbody tr",
+          ).length > 10,
+        undefined,
+        { timeout: 60_000 },
+      );
+      // A way of a row, which Enter follows to the view of its operation; Escape comes back to the view of the backup
+      // with the focus on its way back, as from any view opened over another (the restore and its backup above).
+      // That the band shows its first ten rows again there, so that the row that was opened may not be among them,
+      // is for the review of the milestone: the focus is on the way back, as from any view.
+      await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-pod-volume-backup-"), 40);
+      const way = (await cluster.focused(frame)).replace(/^velero-open-pod-volume-backup-/, "");
+
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", { timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(way);
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", {
+        state: "detached",
+        timeout: 60_000,
+      });
+      expect((await cluster.shownView(frame))?.name).toBe("backup-inprogress");
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { state: "detached", timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "backup-inprogress")).toBe("backup-inprogress");
+    },
+    TIMEOUT,
+  );
+
+  it(
     "shows the Overview in both themes, at every size, with its bands side by side where there is room",
     async () => {
       await cluster.showList(frame);
@@ -1286,6 +1546,8 @@ describe("pre-review of the views", () => {
           [one, other],
         );
 
+      // The six cells of what was read, the backup repositories the sixth: two rows of three at 900 by 650, and
+      // rows of two at twice the zoom, where the picture shows the first row and the page scrolls to the others.
       await everyLayout(
         "overview",
         async () => {
@@ -1543,6 +1805,759 @@ describe("pre-review of the views", () => {
       await started.window.keyboard.press("Escape");
       await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { state: "detached", timeout: 60_000 });
       expect(await cluster.focusOn(frame, HELD)).toBe(HELD);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "asks a backup of the schedule with the longest name with the keyboard alone: its command, the name and Escape in it, the review and Escape back to the form, and the way back to the schedule and to its row",
+    async () => {
+      const keyboard = started.window.keyboard;
+      const named = () => frame.locator(NAME_FIELD).first().inputValue();
+      const inField = () =>
+        frame.evaluate(() => document.activeElement?.closest("[data-testid=velero-backup-now-field]") != null);
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      await frame.waitForSelector(`[data-testid=velero-schedules] [data-schedule-row="${LONG_SCHEDULE}"]`, {
+        timeout: 60_000,
+      });
+      // Writes on for the installation of the adherence, through the dialog of the host: the review is asked of
+      // a gate that is on, and nothing is created.
+      await cluster.turnWritesOn(frame);
+      await frame.locator("[data-testid=velero-refresh]").focus();
+      await cluster.tabTo(frame, (focus) => focus === LONG_SCHEDULE, 120);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(`[data-testid=velero-schedule-name] >> text="${LONG_SCHEDULE}"`, { timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await cluster.tabTo(frame, (focus) => focus === "velero-schedule-back-up-now", 40);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(backUpNow("workspace"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      const proposed = await named();
+
+      expect(proposed).toMatch(new RegExp(`^${LONG_SCHEDULE}-\\d{14}$`));
+      // The field after the way back. Escape in it gives back the name the form proposed, and the view stays.
+      for (let presses = 0; presses < 6 && !(await inField()); presses += 1) await keyboard.press("Tab");
+      expect(await inField()).toBe(true);
+      await keyboard.press("End");
+      await keyboard.type("-by-hand", { delay: 20 });
+      expect(await named()).toBe(`${proposed}-by-hand`);
+      await keyboard.press("Escape");
+      expect([await named(), await frame.locator(backUpNow("workspace")).count()]).toEqual([proposed, 1]);
+      // Enter asks for the review, which has the focus, and not the command that creates; Escape leaves it, and the
+      // focus is on the command that asks again, the name as it was.
+      await keyboard.press("Enter");
+      await frame.waitForSelector(backUpNow("review"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-now-review")).toBe("velero-backup-now-review");
+      await keyboard.press("Escape");
+      await frame.waitForSelector(backUpNow("review"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-now-ask")).toBe("velero-backup-now-ask");
+      expect(await named()).toBe(proposed);
+      // Escape outside the field leaves the view for the schedule, whose way back has the focus, and then the
+      // schedule for its row.
+      await keyboard.press("Escape");
+      await frame.waitForSelector(backUpNow("workspace"), { state: "detached", timeout: 30_000 });
+      await frame.waitForSelector(`[data-testid=velero-schedule-name] >> text="${LONG_SCHEDULE}"`, { timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { state: "detached", timeout: 60_000 });
+      expect(await cluster.focusOn(frame, LONG_SCHEDULE)).toBe(LONG_SCHEDULE);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows Back up now with the longest name of a schedule, its form and its review, in both themes, at every size",
+    async () => {
+      // A small window at twice the zoom is shorter than the target bar and the view, and the page is scrolled:
+      // it is looked at from its top, where its target bar is, and then the field of the name, or the beginning of
+      // the review, which is longer than the window, is brought into sight, and left there for the picture. Its
+      // room is the part of the window that every part around it that scrolls shows.
+      const top = () =>
+        frame.evaluate(() => {
+          const page = document.querySelector<HTMLElement>("[data-testid=velero-schedules-page]");
+
+          if (page) page.scrollTop = 0;
+        });
+      const inSight = (selector: string, whole: boolean) => async () =>
+        frame
+          .locator(selector)
+          .first()
+          .evaluate((part, whole) => {
+            part.scrollIntoView({ block: "start" });
+            let room = { top: 0, bottom: window.innerHeight };
+
+            for (let holder = part.parentElement; holder; holder = holder.parentElement) {
+              if (!["auto", "scroll"].includes(getComputedStyle(holder).overflowY)) continue;
+              const box = holder.getBoundingClientRect();
+
+              room = { top: Math.max(room.top, box.top), bottom: Math.min(room.bottom, box.bottom) };
+            }
+            const box = part.getBoundingClientRect();
+            const seen =
+              box.top >= room.top - 1 && (whole ? box.bottom <= room.bottom + 1 : box.top + 40 <= room.bottom);
+
+            return seen
+              ? []
+              : [
+                  `${part.getAttribute("data-testid") ?? part.tagName.toLowerCase()} is not ${whole ? "whole" : "begun"} in sight: ` +
+                    `${Math.round(box.top)} to ${Math.round(box.bottom)} in a room of ${Math.round(room.top)} to ${Math.round(room.bottom)}`,
+                ];
+          }, whole);
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await cluster.openWorkspace(frame, LONG_SCHEDULE, SCHEDULES);
+      await frame.click("[data-testid=velero-schedule-back-up-now]");
+      await frame.waitForSelector(backUpNow("workspace"), { timeout: 30_000 });
+      await everyLayout("backup-now-form", top, SCHEDULES, undefined, inSight(NAME_FIELD, true));
+      await frame.click(backUpNow("ask"));
+      await frame.waitForSelector(backUpNow("review"), { timeout: 30_000 });
+      await everyLayout("backup-now-review", top, SCHEDULES, undefined, inSight(backUpNow("review"), false));
+      await frame.click(backUpNow("back"));
+      await frame.waitForSelector(backUpNow("review"), { state: "detached", timeout: 30_000 });
+      await cluster.showList(frame);
+      expect(found("backup-now-form")).toEqual({});
+      expect(found("backup-now-review")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "asks a backup of the form with the keyboard alone: the command of the list, the name and Escape in it, a namespace the host lists, the review and Escape back to the form, and the way back to the list",
+    async () => {
+      const keyboard = started.window.keyboard;
+      const named = () => frame.locator(CREATE_FIELD).first().inputValue();
+      const inField = () =>
+        frame.evaluate(() => document.activeElement?.closest("[data-testid=velero-backup-create-field]") != null);
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      // Writes on for the installation of the views, through the dialog of the host: the review is asked of a gate
+      // that is on, and nothing is created.
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await frame.locator("[data-testid=velero-refresh]").focus();
+      await cluster.tabTo(frame, (focus) => focus === "velero-backups-create", 40);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(createBackup("workspace"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      // The field after the way back. Escape in it takes back what was typed, and the view stays.
+      for (let presses = 0; presses < 6 && !(await inField()); presses += 1) await keyboard.press("Tab");
+      expect(await inField()).toBe(true);
+      await keyboard.type("views-by-hand", { delay: 20 });
+      await keyboard.press("Escape");
+      expect([await named(), await frame.locator(createBackup("workspace")).count()]).toEqual(["", 1]);
+      await keyboard.type("views-by-hand", { delay: 20 });
+      // A namespace the host lists, by its checkbox, and back to the field.
+      await cluster.tabTo(frame, (focus) => focus === "velero-backup-create-includedNamespaces-default", 40);
+      await keyboard.press("Space");
+      expect(await frame.locator(createBackup("includedNamespaces-default")).isChecked()).toBe(true);
+      for (let presses = 0; presses < 60 && !(await inField()); presses += 1) await keyboard.press("Shift+Tab");
+      expect(await inField()).toBe(true);
+      // Enter asks for the review, which has the focus; Escape leaves it, and the focus is on the command that asks
+      // again, the form as it was.
+      await keyboard.press("Enter");
+      await frame.waitForSelector(createBackup("review"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-create-review")).toBe("velero-backup-create-review");
+      await keyboard.press("Escape");
+      await frame.waitForSelector(createBackup("review"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-create-ask")).toBe("velero-backup-create-ask");
+      expect(await named()).toBe("views-by-hand");
+      // Escape outside a field leaves the view for the list.
+      await keyboard.press("Escape");
+      await frame.waitForSelector(createBackup("workspace"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backups-create")).toBe("velero-backups-create");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows Create backup, its form and its review, in both themes, at every size",
+    async () => {
+      // A small window at twice the zoom is shorter than the target bar and the view, and the page is scrolled: it is
+      // looked at from its top, where its target bar is, and then the field of the name, or the beginning of the
+      // review, is brought into sight, and left there for the picture.
+      const top = () =>
+        frame.evaluate(() => {
+          const page = document.querySelector<HTMLElement>("[data-testid=velero-backups-page]");
+
+          if (page) page.scrollTop = 0;
+        });
+      const inSight = (selector: string) => async () =>
+        frame
+          .locator(selector)
+          .first()
+          .evaluate((part) => {
+            part.scrollIntoView({ block: "start" });
+            let room = { top: 0, bottom: window.innerHeight };
+
+            for (let holder = part.parentElement; holder; holder = holder.parentElement) {
+              if (!["auto", "scroll"].includes(getComputedStyle(holder).overflowY)) continue;
+              const box = holder.getBoundingClientRect();
+
+              room = { top: Math.max(room.top, box.top), bottom: Math.min(room.bottom, box.bottom) };
+            }
+            const box = part.getBoundingClientRect();
+
+            return box.top >= room.top - 1 && box.top + 40 <= room.bottom
+              ? []
+              : [
+                  `${part.getAttribute("data-testid") ?? part.tagName.toLowerCase()} is not begun in sight: ` +
+                    `${Math.round(box.top)} to ${Math.round(box.bottom)} in a room of ${Math.round(room.top)} to ${Math.round(room.bottom)}`,
+                ];
+          });
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await frame.click("[data-testid=velero-backups-create]");
+      await frame.waitForSelector(createBackup("workspace"), { timeout: 30_000 });
+      // A name as long as a backup of the form may have, which the field, the review and the result carry whole.
+      await frame.locator(CREATE_FIELD).first().fill("views-by-hand-".padEnd(216, "x"));
+      await everyLayout("backup-create-form", top, cluster.BACKUPS, undefined, inSight(CREATE_FIELD));
+      await frame.click(createBackup("ask"));
+      await frame.waitForSelector(createBackup("review"), { timeout: 30_000 });
+      await everyLayout("backup-create-review", top, cluster.BACKUPS, undefined, inSight(createBackup("review")));
+      await frame.click(createBackup("back"));
+      await frame.waitForSelector(createBackup("review"), { state: "detached", timeout: 30_000 });
+      await cluster.showList(frame);
+      expect(found("backup-create-form")).toEqual({});
+      expect(found("backup-create-review")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "asks a schedule of the form with the keyboard alone: the command of the list, the name and Escape in it, the expression, a flag, the review and Escape back to the form, and the way back to the list",
+    async () => {
+      const keyboard = started.window.keyboard;
+      const named = () => frame.locator(SCHEDULE_FIELD).first().inputValue();
+      const inField = (id: string) =>
+        frame.evaluate(
+          (testid) => document.activeElement?.closest(`[data-testid=${testid}]`) != null,
+          `velero-schedule-create-${id}`,
+        );
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, SCHEDULES);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await frame.locator("[data-testid=velero-refresh]").focus();
+      await cluster.tabTo(frame, (focus) => focus === "velero-schedules-create", 40);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(createSchedule("workspace"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      // The field of the name after the way back. Escape in it takes back what was typed, and the view stays.
+      for (let presses = 0; presses < 6 && !(await inField("field")); presses += 1) await keyboard.press("Tab");
+      expect(await inField("field")).toBe(true);
+      await keyboard.type("views-by-hand", { delay: 20 });
+      await keyboard.press("Escape");
+      expect([await named(), await frame.locator(createSchedule("workspace")).count()]).toEqual(["", 1]);
+      await keyboard.type("views-by-hand", { delay: 20 });
+      // The expression, next, and a flag by its checkbox.
+      await keyboard.press("Tab");
+      expect(await inField("expression")).toBe(true);
+      await keyboard.type("CRON_TZ=Europe/Rome 0 3 * * *", { delay: 10 });
+      await cluster.tabTo(frame, (focus) => focus === "velero-schedule-create-skipImmediately", 20);
+      await keyboard.press("Space");
+      expect(await frame.locator(createSchedule("skipImmediately")).isChecked()).toBe(true);
+      // Back to the expression: Enter asks for the review, which has the focus; Escape leaves it, and the focus is on
+      // the command that asks again, the form as it was.
+      for (let presses = 0; presses < 10 && !(await inField("expression")); presses += 1)
+        await keyboard.press("Shift+Tab");
+      expect(await inField("expression")).toBe(true);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(createSchedule("review"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-schedule-create-review")).toBe("velero-schedule-create-review");
+      await keyboard.press("Escape");
+      await frame.waitForSelector(createSchedule("review"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-schedule-create-ask")).toBe("velero-schedule-create-ask");
+      expect(await named()).toBe("views-by-hand");
+      // Escape outside a field leaves the view for the list.
+      await keyboard.press("Escape");
+      await frame.waitForSelector(createSchedule("workspace"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-schedules-create")).toBe("velero-schedules-create");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "asks a restore with the keyboard alone: the command of the view of a backup, the name and Escape in it, a choice of the cluster-scoped resources, the review, the name of the backup typed and Escape in it, Escape back to the form, and the way back to the backup",
+    async () => {
+      const keyboard = started.window.keyboard;
+      const named = () => frame.locator(RESTORE_FIELD).first().inputValue();
+      const inField = (id: string) =>
+        frame.evaluate(
+          (testid) => document.activeElement?.closest(`[data-testid=${testid}]`) != null,
+          `velero-restore-create-${id}`,
+        );
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await cluster.openWorkspace(frame, RESTORABLE, cluster.BACKUPS);
+      await frame.locator("[data-testid=velero-back]").focus();
+      await cluster.tabTo(frame, (focus) => focus === "velero-backup-restore", 20);
+      await keyboard.press("Enter");
+      await frame.waitForSelector("[data-testid=velero-restore-backup-workspace]", { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      // The field of the name after the way back, with the name proposed: what is typed in it is taken back by Escape,
+      // which gives the proposal back, and the view stays.
+      for (let presses = 0; presses < 6 && !(await inField("field")); presses += 1) await keyboard.press("Tab");
+      expect(await inField("field")).toBe(true);
+      const second = (instant: number) => new Date(instant).toISOString().slice(0, 19).replace(/[-:T]/g, "");
+
+      expect(await named()).toMatch(new RegExp(`^${RESTORABLE}-\\d{14}$`));
+      await keyboard.type("-by-hand", { delay: 20 });
+      const before = Date.now();
+
+      await keyboard.press("Escape");
+      const after = Date.now();
+      // The proposal is made again of the time of Escape, to the second.
+      const proposed = await named();
+
+      expect(proposed).toMatch(new RegExp(`^${RESTORABLE}-\\d{14}$`));
+      expect([
+        proposed >= `${RESTORABLE}-${second(before)}`,
+        proposed <= `${RESTORABLE}-${second(after + 1000)}`,
+        await frame.locator("[data-testid=velero-restore-backup-workspace]").count(),
+      ]).toEqual([true, true, 1]);
+      await keyboard.press("ControlOrMeta+A");
+      await keyboard.type("views-restore-by-hand", { delay: 20 });
+      // A choice of the cluster-scoped resources, by its radio button, and back to the field.
+      await cluster.tabTo(frame, (focus) => focus === "velero-restore-create-clusterResources-every", 60);
+      await keyboard.press("ArrowDown");
+      expect(await frame.locator(restoreOf("clusterResources-none")).isChecked()).toBe(true);
+      for (let presses = 0; presses < 60 && !(await inField("field")); presses += 1) await keyboard.press("Shift+Tab");
+      expect(await inField("field")).toBe(true);
+      // Enter asks for the review, which has the focus; the name of the backup is typed in it, and Escape there takes
+      // it back; Escape on the review leaves it, and the focus is on the command that asks again, the form as it was.
+      await keyboard.press("Enter");
+      await frame.waitForSelector(restoreOf("review"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-restore-create-review")).toBe("velero-restore-create-review");
+      for (let presses = 0; presses < 10 && !(await inField("typed")); presses += 1) await keyboard.press("Tab");
+      expect(await inField("typed")).toBe(true);
+      await keyboard.type(RESTORABLE, { delay: 20 });
+      expect(await frame.locator(restoreOf("create")).isDisabled()).toBe(false);
+      await keyboard.press("Escape");
+      expect(await frame.locator(restoreOf("create")).isDisabled()).toBe(true);
+      await frame.locator(restoreOf("review")).focus();
+      await keyboard.press("Escape");
+      await frame.waitForSelector(restoreOf("review"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-restore-create-ask")).toBe("velero-restore-create-ask");
+      expect(await named()).toBe("views-restore-by-hand");
+      // Escape outside a field leaves the view for the view of the backup, whose keyboard starts from its way back.
+      await keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-restore-backup-workspace]", {
+        state: "detached",
+        timeout: 30_000,
+      });
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows Restore, its form and its review, in both themes, at every size",
+    async () => {
+      const top = () =>
+        frame.evaluate(() => {
+          const page = document.querySelector<HTMLElement>("[data-testid=velero-backups-page]");
+
+          if (page) page.scrollTop = 0;
+        });
+      const inSight = (selector: string) => async () =>
+        frame
+          .locator(selector)
+          .first()
+          .evaluate((part) => {
+            part.scrollIntoView({ block: "start" });
+            let room = { top: 0, bottom: window.innerHeight };
+
+            for (let holder = part.parentElement; holder; holder = holder.parentElement) {
+              if (!["auto", "scroll"].includes(getComputedStyle(holder).overflowY)) continue;
+              const box = holder.getBoundingClientRect();
+
+              room = { top: Math.max(room.top, box.top), bottom: Math.min(room.bottom, box.bottom) };
+            }
+            const box = part.getBoundingClientRect();
+
+            return box.top >= room.top - 1 && box.top + 40 <= room.bottom
+              ? []
+              : [
+                  `${part.getAttribute("data-testid") ?? part.tagName.toLowerCase()} is not begun in sight: ` +
+                    `${Math.round(box.top)} to ${Math.round(box.bottom)} in a room of ${Math.round(room.top)} to ${Math.round(room.bottom)}`,
+                ];
+          });
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await cluster.openWorkspace(frame, RESTORABLE, cluster.BACKUPS);
+      await frame.click("[data-testid=velero-backup-restore]");
+      await frame.waitForSelector("[data-testid=velero-restore-backup-workspace]", { timeout: 30_000 });
+      // The longest name a restore may have, the namespace the backup includes, and a mapping of it into a namespace of
+      // the longest name.
+      const source = String(await frame.locator(RESTORE_SOURCES).first().getAttribute("data-testid")).replace(
+        "velero-restore-create-includedNamespaces-",
+        "",
+      );
+
+      await frame.locator(RESTORE_FIELD).first().fill("views-restore-".padEnd(216, "x"));
+      await frame.click(restoreOf(`includedNamespaces-${source}`));
+      await frame.click(restoreOf("namespaceMapping-add"));
+      await frame.locator(restoreOf("namespaceMapping-source-0")).fill(source);
+      await frame.locator(restoreOf("namespaceMapping-target-0")).fill("restored-".padEnd(63, "x"));
+      await frame.click(restoreOf("clusterResources-needed"));
+      await everyLayout("restore-form", top, cluster.BACKUPS, undefined, inSight(RESTORE_FIELD));
+      await frame.click(restoreOf("ask"));
+      await frame.waitForSelector(restoreOf("review"), { timeout: 30_000 });
+      await everyLayout("restore-review", top, cluster.BACKUPS, undefined, inSight(restoreOf("review")));
+      await frame.click(restoreOf("back"));
+      await frame.waitForSelector(restoreOf("review"), { state: "detached", timeout: 30_000 });
+      await cluster.showList(frame);
+      expect(found("restore-form")).toEqual({});
+      expect(found("restore-review")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows Create schedule, its form and its review, in both themes, at every size",
+    async () => {
+      const top = () =>
+        frame.evaluate(() => {
+          const page = document.querySelector<HTMLElement>("[data-testid=velero-schedules-page]");
+
+          if (page) page.scrollTop = 0;
+        });
+      const inSight = (selector: string) => async () =>
+        frame
+          .locator(selector)
+          .first()
+          .evaluate((part) => {
+            part.scrollIntoView({ block: "start" });
+            let room = { top: 0, bottom: window.innerHeight };
+
+            for (let holder = part.parentElement; holder; holder = holder.parentElement) {
+              if (!["auto", "scroll"].includes(getComputedStyle(holder).overflowY)) continue;
+              const box = holder.getBoundingClientRect();
+
+              room = { top: Math.max(room.top, box.top), bottom: Math.min(room.bottom, box.bottom) };
+            }
+            const box = part.getBoundingClientRect();
+
+            return box.top >= room.top - 1 && box.top + 40 <= room.bottom
+              ? []
+              : [
+                  `${part.getAttribute("data-testid") ?? part.tagName.toLowerCase()} is not begun in sight: ` +
+                    `${Math.round(box.top)} to ${Math.round(box.bottom)} in a room of ${Math.round(room.top)} to ${Math.round(room.bottom)}`,
+                ];
+          });
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await frame.click("[data-testid=velero-schedules-create]");
+      await frame.waitForSelector(createSchedule("workspace"), { timeout: 30_000 });
+      // The longest name a schedule may have, and an expression of 200 characters.
+      expect(LONG_EXPRESSION).toHaveLength(200);
+      await frame.locator(SCHEDULE_FIELD).first().fill("a".repeat(63));
+      await frame.locator(SCHEDULE_EXPRESSION).first().fill(LONG_EXPRESSION);
+      await everyLayout("schedule-create-form", top, SCHEDULES, undefined, inSight(SCHEDULE_FIELD));
+      await frame.click(createSchedule("ask"));
+      await frame.waitForSelector(createSchedule("review"), { timeout: 30_000 });
+      await everyLayout("schedule-create-review", top, SCHEDULES, undefined, inSight(createSchedule("review")));
+      await frame.click(createSchedule("back"));
+      await frame.waitForSelector(createSchedule("review"), { state: "detached", timeout: 30_000 });
+      await cluster.showList(frame);
+      expect(found("schedule-create-form")).toEqual({});
+      expect(found("schedule-create-review")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "asks a pause and a resume with the keyboard alone: the command of the view, the review and Escape back, the choice by its checkbox, and the way back to the view",
+    async () => {
+      const keyboard = started.window.keyboard;
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, SCHEDULES);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      for (const [name, action] of [
+        [SCHEDULED, "pause"],
+        [SKIPPING, "resume"],
+      ] as const) {
+        await cluster.openWorkspace(frame, name, SCHEDULES);
+        // The command after the way back of the view, on the line of its name.
+        expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+        await cluster.tabTo(frame, (focus) => focus === `velero-schedule-${action}`, 10);
+        await keyboard.press("Enter");
+        await frame.waitForSelector(`[data-testid=velero-schedule-${action}-workspace]`, { timeout: 30_000 });
+        expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+        if (action === "resume") {
+          // The choice by its checkbox, proposed as the schedule carries it, and taken back.
+          await cluster.tabTo(frame, (focus) => focus === "velero-schedule-patch-skip", 10);
+          expect(await frame.locator(schedulePatch("skip")).isChecked()).toBe(true);
+          await keyboard.press("Space");
+          expect(await frame.locator(schedulePatch("skip")).isChecked()).toBe(false);
+        }
+        // The command that asks for the review, which has the focus once shown; Escape leaves it for the command.
+        await cluster.tabTo(frame, (focus) => focus === "velero-schedule-patch-ask", 10);
+        await keyboard.press("Enter");
+        await frame.waitForSelector(schedulePatch("review"), { timeout: 30_000 });
+        expect(await cluster.focusOn(frame, "velero-schedule-patch-review")).toBe("velero-schedule-patch-review");
+        await keyboard.press("Escape");
+        await frame.waitForSelector(schedulePatch("review"), { state: "detached", timeout: 30_000 });
+        expect(await cluster.focusOn(frame, "velero-schedule-patch-ask")).toBe("velero-schedule-patch-ask");
+        // Escape outside a field leaves the workspace for the view, whose way back has the focus, and then the view
+        // for its row.
+        await keyboard.press("Escape");
+        await frame.waitForSelector(`[data-testid=velero-schedule-${action}-workspace]`, {
+          state: "detached",
+          timeout: 30_000,
+        });
+        await frame.waitForSelector(`[data-testid=velero-schedule-name] >> text="${name}"`, { timeout: 60_000 });
+        expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+        await keyboard.press("Escape");
+        await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { state: "detached", timeout: 60_000 });
+        expect(await cluster.focusOn(frame, name)).toBe(name);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows Pause and Resume, their forms and their reviews, in both themes, at every size",
+    async () => {
+      // The page is looked at from its top, then the beginning of the form, or of the review, is brought into sight
+      // and left there for the picture, as for the other actions.
+      const top = () =>
+        frame.evaluate(() => {
+          const page = document.querySelector<HTMLElement>("[data-testid=velero-schedules-page]");
+
+          if (page) page.scrollTop = 0;
+        });
+      const inSight = (selector: string) => async () =>
+        frame
+          .locator(selector)
+          .first()
+          .evaluate((part) => {
+            part.scrollIntoView({ block: "start" });
+            let room = { top: 0, bottom: window.innerHeight };
+
+            for (let holder = part.parentElement; holder; holder = holder.parentElement) {
+              if (!["auto", "scroll"].includes(getComputedStyle(holder).overflowY)) continue;
+              const box = holder.getBoundingClientRect();
+
+              room = { top: Math.max(room.top, box.top), bottom: Math.min(room.bottom, box.bottom) };
+            }
+            const box = part.getBoundingClientRect();
+
+            return box.top >= room.top - 1 && box.top + 40 <= room.bottom
+              ? []
+              : [
+                  `${part.getAttribute("data-testid") ?? part.tagName.toLowerCase()} is not begun in sight: ` +
+                    `${Math.round(box.top)} to ${Math.round(box.bottom)} in a room of ${Math.round(room.top)} to ${Math.round(room.bottom)}`,
+                ];
+          });
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, SCHEDULES);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      for (const [name, action] of [
+        [SCHEDULED, "pause"],
+        [SKIPPING, "resume"],
+      ] as const) {
+        await cluster.openWorkspace(frame, name, SCHEDULES);
+        await frame.click(`[data-testid=velero-schedule-${action}]`);
+        await frame.waitForSelector(`[data-testid=velero-schedule-${action}-workspace]`, { timeout: 30_000 });
+        await everyLayout(`schedule-${action}-form`, top, SCHEDULES, undefined, inSight(schedulePatch("what")));
+        await frame.click(schedulePatch("ask"));
+        await frame.waitForSelector(schedulePatch("review"), { timeout: 30_000 });
+        await everyLayout(`schedule-${action}-review`, top, SCHEDULES, undefined, inSight(schedulePatch("review")));
+        // Nothing is sent: the review is left, then the workspace and the view.
+        await frame.click(schedulePatch("back"));
+        await frame.waitForSelector(schedulePatch("review"), { state: "detached", timeout: 30_000 });
+        await cluster.closeWorkspace(frame);
+        await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { timeout: 30_000 });
+        await cluster.closeWorkspace(frame);
+        expect(found(`schedule-${action}-form`)).toEqual({});
+        expect(found(`schedule-${action}-review`)).toEqual({});
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "asks a deletion with the keyboard alone: the command of the view after Restore, the review, its field after the text, the name typed and taken back by Escape, Delete backup and Do not delete it reached, Do not delete it and Escape back to the command, and the way back to the view, with nothing sent",
+    async () => {
+      const keyboard = started.window.keyboard;
+      // Whether the focus is in the field of the name: the host gives its own element the identifier, or the input.
+      const inTyped = () =>
+        frame.evaluate(() => document.activeElement?.closest("[data-testid=velero-backup-delete-typed]") != null);
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await cluster.openWorkspace(frame, RESTORABLE, cluster.BACKUPS);
+      await frame.locator("[data-testid=velero-back]").focus();
+      // On the line of the name, Restore and then Delete backup, each one press away (SPEC-0017, the decisions of the
+      // second pull request of T4.6).
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-backup-restore", 20)).toBe(1);
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-backup-delete", 20)).toBe(1);
+      await keyboard.press("Enter");
+      await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      // The command that asks for the review, which has the focus once shown.
+      await cluster.tabTo(frame, (focus) => focus === "velero-backup-delete-ask", 10);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(deleteOf("review"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-delete-review")).toBe("velero-backup-delete-review");
+      // The text of the request is the first stop after the review, a region the keyboard reaches whatever its length,
+      // and the field of the name the second.
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-backup-delete-text", 3)).toBe(1);
+      let presses = 1;
+
+      for (; presses < 10 && !(await inTyped()); presses += 1) await keyboard.press("Tab");
+      expect([await inTyped(), presses]).toEqual([true, 2]);
+      // The name of the backup typed in its field enables Delete backup; Escape there takes it back, and the review
+      // stays.
+      await keyboard.type(RESTORABLE, { delay: 20 });
+      expect(await frame.locator(deleteOf("run")).isDisabled()).toBe(false);
+      await keyboard.press("Escape");
+      expect([
+        await frame.locator(DELETE_TYPED).first().inputValue(),
+        await frame.locator(deleteOf("run")).isDisabled(),
+        await frame.locator(deleteOf("review")).count(),
+      ]).toEqual(["", true, 1]);
+      // Typed again: Delete backup is the next stop, enabled and not pressed, and Do not delete it the one after it,
+      // which Enter takes: the review is left, and the focus is on the command that asks again.
+      await keyboard.type(RESTORABLE, { delay: 20 });
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-backup-delete-run", 3)).toBe(1);
+      expect(await frame.locator(deleteOf("run")).isDisabled()).toBe(false);
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-backup-delete-back", 3)).toBe(1);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(deleteOf("review"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-delete-ask")).toBe("velero-backup-delete-ask");
+      // Escape on the review leaves it as well, and the focus is on the command that asks again.
+      await keyboard.press("Enter");
+      await frame.waitForSelector(deleteOf("review"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-delete-review")).toBe("velero-backup-delete-review");
+      await keyboard.press("Escape");
+      await frame.waitForSelector(deleteOf("review"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-delete-ask")).toBe("velero-backup-delete-ask");
+      // Escape outside a field leaves the workspace for the view, whose way back has the focus, and then the view for
+      // its row.
+      await keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", {
+        state: "detached",
+        timeout: 30_000,
+      });
+      await frame.waitForSelector(`[data-testid=velero-backup-name] >> text="${RESTORABLE}"`, { timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { state: "detached", timeout: 60_000 });
+      expect(await cluster.focusOn(frame, RESTORABLE)).toBe(RESTORABLE);
+      // Nothing was sent: no request to delete a backup is in the installation of the views.
+      expect(cluster.deleteRequestsOf(cluster.E2E_VIEWS_NAMESPACE)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows Delete backup, its workspace and its review with the name typed, and the workspace of the backup of 63 characters in progress, held back with its words, in both themes, at every size",
+    async () => {
+      // The page is looked at from its top, then the beginning of the workspace, or of the review, is brought into
+      // sight and left there for the picture, as for the other actions.
+      const top = () =>
+        frame.evaluate(() => {
+          const page = document.querySelector<HTMLElement>("[data-testid=velero-backups-page]");
+
+          if (page) page.scrollTop = 0;
+        });
+      const inSight = (selector: string) => async () =>
+        frame
+          .locator(selector)
+          .first()
+          .evaluate((part) => {
+            part.scrollIntoView({ block: "start" });
+            let room = { top: 0, bottom: window.innerHeight };
+
+            for (let holder = part.parentElement; holder; holder = holder.parentElement) {
+              if (!["auto", "scroll"].includes(getComputedStyle(holder).overflowY)) continue;
+              const box = holder.getBoundingClientRect();
+
+              room = { top: Math.max(room.top, box.top), bottom: Math.min(room.bottom, box.bottom) };
+            }
+            const box = part.getBoundingClientRect();
+
+            return box.top >= room.top - 1 && box.top + 40 <= room.bottom
+              ? []
+              : [
+                  `${part.getAttribute("data-testid") ?? part.tagName.toLowerCase()} is not begun in sight: ` +
+                    `${Math.round(box.top)} to ${Math.round(box.bottom)} in a room of ${Math.round(room.top)} to ${Math.round(room.bottom)}`,
+                ];
+          });
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await cluster.openWorkspace(frame, RESTORABLE, cluster.BACKUPS);
+      await frame.click("[data-testid=velero-backup-delete]");
+      await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", { timeout: 30_000 });
+      await everyLayout("backup-delete-form", top, cluster.BACKUPS, undefined, inSight(deleteOf("what")));
+      await frame.click(deleteOf("ask"));
+      await frame.waitForSelector(deleteOf("review"), { timeout: 30_000 });
+      await frame.locator(DELETE_TYPED).first().fill(RESTORABLE);
+      await everyLayout("backup-delete-review", top, cluster.BACKUPS, undefined, inSight(deleteOf("review")));
+      // Nothing is sent: the review is left, then the workspace and the view.
+      await frame.click(deleteOf("back"));
+      await frame.waitForSelector(deleteOf("review"), { state: "detached", timeout: 30_000 });
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 30_000 });
+      await cluster.closeWorkspace(frame);
+      // The backup of the views with a name of 63 characters is InProgress: Delete backup is held back for it, and the
+      // workspace of its deletion, opened by the address as a link opens it, says why with its name in the title and in
+      // what the deletion is, and asks nothing. Its review waits for a Completed backup of that length.
+      await cluster.openWorkspace(frame, LONG_BACKUP, cluster.BACKUPS);
+      expect(await frame.locator("[data-testid=velero-backup-delete]").isDisabled()).toBe(true);
+      await frame.evaluate((name) => {
+        const search = new URLSearchParams(window.location.search);
+
+        search.append("view", `backup-delete/${name}`);
+        window.history.pushState({}, "", `${window.location.pathname}?${search}`);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }, LONG_BACKUP);
+      await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", { timeout: 30_000 });
+      expect(await cluster.addressViews(frame)).toEqual([`backup/${LONG_BACKUP}`, `backup-delete/${LONG_BACKUP}`]);
+      await frame.waitForSelector(deleteOf("held"), { timeout: 30_000 });
+      expect(await frame.locator(deleteOf("ask")).isDisabled()).toBe(true);
+      await everyLayout("backup-delete-held", top, cluster.BACKUPS, undefined, inSight(deleteOf("what")));
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 30_000 });
+      await cluster.closeWorkspace(frame);
+      expect(found("backup-delete-form")).toEqual({});
+      expect(found("backup-delete-review")).toEqual({});
+      expect(found("backup-delete-held")).toEqual({});
     },
     TIMEOUT,
   );

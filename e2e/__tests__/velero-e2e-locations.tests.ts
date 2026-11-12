@@ -168,6 +168,8 @@ describe("views of the locations", () => {
         "velero-backup-repositories",
         "velero-pod-volume-backups",
         "velero-pod-volume-restores",
+        "velero-data-uploads",
+        "velero-data-downloads",
       ]);
       await frame.waitForSelector("[data-testid=velero-state-choose]", { timeout: 60_000 });
       await frame.click(`[data-testid="velero-choice-${cluster.E2E_VIEWS_NAMESPACE}"]`);
@@ -220,6 +222,8 @@ describe("views of the locations", () => {
         "Backup Repositories",
         "Pod Volume Backups",
         "Pod Volume Restores",
+        "Data Uploads",
+        "Data Downloads",
       ]);
       expect(await frame.locator(".TabLayout .TabLayout").count()).toBe(0);
       expect(await cluster.notices(frame, [])).toEqual({});
@@ -326,8 +330,8 @@ describe("views of the locations", () => {
       );
       expect(await workspace(STORAGE).locator("[data-testid=velero-location-refused]").count()).toBe(0);
       // The backups that name the location by their spec or by the label the release writes, as the cluster
-      // holds them: the one the controller ran, the two the server synced from the store, and the one it
-      // refused. Their words are built from their phases, by the rule of the views.
+      // holds them: the two the controller ran, of the ConfigMaps and of the volume, the two the server synced
+      // from the store, and the one it refused. Their words are built from their phases, by the rule of the views.
       const read = cluster.kubectlE2E("get", "backups.velero.io", "--namespace", cluster.E2E_NAMESPACE, "-o", "json");
 
       expect(read.status).toBe(0);
@@ -340,6 +344,7 @@ describe("views of the locations", () => {
       expect(naming.map(({ metadata }) => metadata.name).sort()).toEqual(
         [
           `fixture-backup-${cluster.E2E_FIXTURE_RUN}`,
+          `fixture-volume-backup-${cluster.E2E_FIXTURE_RUN}`,
           `fixture-synced-backup-${cluster.E2E_FIXTURE_RUN}`,
           `fixture-synced-backup-no-log-${cluster.E2E_FIXTURE_RUN}`,
           `fixture-invalid-backup-${cluster.E2E_FIXTURE_RUN}`,

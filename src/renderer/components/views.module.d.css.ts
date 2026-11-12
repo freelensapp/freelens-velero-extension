@@ -24,6 +24,7 @@ declare const classNames: {
   readonly choiceOrigin: "choiceOrigin";
   readonly form: "form";
   readonly formField: "formField";
+  readonly preLine: "preLine";
   readonly formError: "formError";
   readonly namespaces: "namespaces";
   readonly named: "named";
@@ -40,6 +41,7 @@ declare const classNames: {
   readonly back: "back";
   readonly title: "title";
   readonly band: "band";
+  readonly volumeHalf: "volumeHalf";
   readonly factName: "factName";
   readonly factValue: "factValue";
   readonly factNote: "factNote";
@@ -53,6 +55,7 @@ declare const classNames: {
   readonly references: "references";
   readonly muted: "muted";
   readonly list: "list";
+  readonly listWithCommand: "listWithCommand";
   readonly rowLink: "rowLink";
   readonly link: "link";
   readonly messageLines: "messageLines";
@@ -92,6 +95,14 @@ declare const classNames: {
   readonly writeConfirmation: "writeConfirmation";
   readonly writeObject: "writeObject";
   readonly writeActions: "writeActions";
+  readonly commands: "commands";
+  readonly backupName: "backupName";
+  readonly review: "review";
+  readonly reviewColumns: "reviewColumns";
+  readonly reviewPart: "reviewPart";
+  readonly reviewMeaning: "reviewMeaning";
+  readonly reviewMeaningPart: "reviewMeaningPart";
+  readonly reviewText: "reviewText";
   readonly serverFocus: "serverFocus";
   readonly serverNames: "serverNames";
   readonly serverProviders: "serverProviders";
@@ -172,5 +183,13 @@ declare const classNames: {
   readonly volumeDetailTitle: "volumeDetailTitle";
   readonly volumeFields: "volumeFields";
   readonly volumeFieldName: "volumeFieldName";
+  readonly templateForm: "templateForm";
+  readonly templateField: "templateField";
+  readonly templateChoices: "templateChoices";
+  readonly templateChoice: "templateChoice";
+  readonly mappingPair: "mappingPair";
+  readonly mappingInput: "mappingInput";
+  readonly flagChoice: "flagChoice";
+  readonly flagNote: "flagNote";
 };
 export = classNames;

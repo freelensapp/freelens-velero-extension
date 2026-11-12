@@ -27,6 +27,8 @@ const VIEW_OF: Partial<Record<ReferenceKind, ViewKind>> = {
   BackupRepository: "backup-repository",
   PodVolumeBackup: "pod-volume-backup",
   PodVolumeRestore: "pod-volume-restore",
+  DataUpload: "data-upload",
+  DataDownload: "data-download",
 };
 
 export function Fact({ name, note, children }: { name: string; note?: ReactNode; children: ReactNode }) {
@@ -35,6 +37,30 @@ export function Fact({ name, note, children }: { name: string; note?: ReactNode;
       <div className={styles.factName}>{name}</div>
       <div className={styles.factValue}>{children}</div>
       {note ? <div className={styles.factNote}>{note}</div> : null}
+    </div>
+  );
+}
+
+// The text a review shows of what it sends, under its title: a region the Tab key reaches whatever its length, named
+// by its title. A text longer than its room scrolls, and the keyboard scrolls it once it is reached (WCAG 2.1, 2.1.1,
+// which the rule of axe-core for a region that scrolls reads).
+export function ReviewText({ id, title, children }: { id: string; title: string; children: string }) {
+  return (
+    <div className={styles.reviewPart}>
+      <h4 className={styles.factName} id={`${id}-text-title`}>
+        {title}
+      </h4>
+      {/* biome-ignore lint/a11y/useSemanticElements: the text is preformatted, and a region is what it is to who does not see it */}
+      <pre
+        className={styles.reviewText}
+        data-testid={`${id}-text`}
+        role="region"
+        aria-labelledby={`${id}-text-title`}
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a text that scrolls is reached by the keyboard, which scrolls it
+        tabIndex={0}
+      >
+        {children}
+      </pre>
     </div>
   );
 }
@@ -101,6 +127,9 @@ export function Restores({ restores }: { restores: RelatedRestores }) {
 export interface WorkspaceProps {
   kind: ViewKind;
   name: string;
+  // What the view is called, when it is not the name of its object: the workspace of an action is named by the
+  // action, and the way back names the object.
+  title?: string;
   // Of the object that is shown, when it was found: what tells it from one created later with its name.
   uid?: string;
   // The object is a restore with a time of deletion: Velero holds it until it has removed what it keeps
@@ -109,6 +138,8 @@ export interface WorkspaceProps {
   // Where the way back leads, in words.
   back: string;
   onBack: () => void;
+  // The commands of the object, on the line of its name: what is read under the name keeps its room.
+  commands?: ReactNode;
   children?: ReactNode;
 }
 
@@ -119,7 +150,7 @@ const TEXT_FIELD =
 // What every view of one object has around it: its name, the way back, and Escape that takes it from
 // wherever the focus is, a text field apart: there the key is of what was typed, as it is in the search
 // field of the host, and the view is never left from inside one.
-export function Workspace({ kind, name, uid, deleting, back, onBack, children }: WorkspaceProps) {
+export function Workspace({ kind, name, title, uid, deleting, back, onBack, commands, children }: WorkspaceProps) {
   const way = React.useRef<HTMLButtonElement>(null);
   const view = `${kind}/${name}`;
   const [opened, setOpened] = React.useState<{ view: string; uid?: string }>({ view, uid });
@@ -157,8 +188,9 @@ export function Workspace({ kind, name, uid, deleting, back, onBack, children }:
           {back}
         </button>
         <span className={styles.title} id={`velero-${kind}-title`} data-testid={`velero-${kind}-name`}>
-          {name}
+          {title ?? name}
         </span>
+        {commands}
       </div>
       {replaced ? (
         <p role="status" className={`${styles.notice} ${styles.noticeWarning}`} data-testid={`velero-${kind}-replaced`}>

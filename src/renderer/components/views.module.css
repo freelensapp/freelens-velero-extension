@@ -1,3 +1,30 @@
+/* The words the views write in a color of the theme of the host that says something, a link, a success, a warning or a
+   failure, at the contrast of AA, 4.5 to 1 (WCAG 2.1, 1.4.3), on every background the views write them on: the one of
+   the page, of a list, of the target bar, of a field, of the rows of a kind of resources, and of the row of a list the
+   pointer is on or that is selected, `--tableBgcSelected`, which the host draws under the row. A color of the host that
+   does not reach it there is mixed with the strongest words of the theme, `--textColorAccent`, by the least share that
+   reaches it, which keeps its hue: in the dark theme the links, #00a7a0 made #33b9b3; the successes, #4caf50 made
+   #65ba69; and the failures, #ce3933 made #e4928f; the warnings are the color of the host. They are defined on the
+   body, which every surface of the extension is under: its pages, its sections in the details of the host, which the
+   host draws in its drawer outside any page, and its error page, which is drawn in place of either. Where a color is
+   not defined, the words would take the one around them. */
+:global(body) {
+  --veleroTextLink: color-mix(in srgb, var(--primary) 80%, var(--textColorAccent));
+  --veleroTextOk: color-mix(in srgb, var(--colorOk) 86%, var(--textColorAccent));
+  --veleroTextWarning: var(--colorWarning);
+  --veleroTextError: color-mix(in srgb, var(--colorError) 55%, var(--textColorAccent));
+}
+
+/* In the light theme, the flag the host gives the body of a page for the styles of components: the links, #00a7a0
+   made #0c7874; the successes, #399c3d made #337b36; the warnings, #ff9800 made #976110; and the failures, #ce3933
+   made #c73832. */
+:global(body.theme-light) {
+  --veleroTextLink: color-mix(in srgb, var(--primary) 65%, var(--textColorAccent));
+  --veleroTextOk: color-mix(in srgb, var(--colorOk) 73%, var(--textColorAccent));
+  --veleroTextWarning: color-mix(in srgb, var(--colorWarning) 53%, var(--textColorAccent));
+  --veleroTextError: color-mix(in srgb, var(--colorError) 96%, var(--textColorAccent));
+}
+
 .page {
   display: flex;
   flex-direction: column;
@@ -12,6 +39,12 @@
      is given less, the page fits, the scrollbar goes, the bar is one line again, and the page begins
      again, at every frame. */
   scrollbar-gutter: stable;
+  color: var(--textColorPrimary);
+}
+
+/* The host writes the text of a code element in one grey for both themes, #b4b5b4, which the light theme does not
+   read at the contrast of AA: there it is written in the words of the page. */
+:global(body.theme-light) .page code {
   color: var(--textColorPrimary);
 }
 
@@ -126,7 +159,7 @@
 /* The error a page or a section of the details threw, in the place of the part that threw it. */
 .errorMessage {
   margin-bottom: 12px;
-  color: var(--colorError);
+  color: var(--veleroTextError);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -184,9 +217,14 @@
   min-width: 0;
 }
 
+/* Words written on several lines, as Velero writes some of its errors, keep their lines. */
+.preLine {
+  white-space: pre-line;
+}
+
 .formError {
   flex: 1 0 100%;
-  color: var(--colorError);
+  color: var(--veleroTextError);
 }
 
 .namespaces {
@@ -247,11 +285,11 @@
 }
 
 .signalFailure {
-  color: var(--colorError);
+  color: var(--veleroTextError);
 }
 
 .signalWarnings {
-  color: var(--colorWarning);
+  color: var(--veleroTextWarning);
 }
 
 /* What is said to who does not see a mark, and takes no room from who does. */
@@ -265,7 +303,7 @@
 }
 
 .signalNone {
-  color: var(--colorOk);
+  color: var(--veleroTextOk);
 }
 
 .signalUnknown {
@@ -294,7 +332,7 @@
   padding: 4px 8px 4px 0;
   border: 0;
   background: transparent;
-  color: var(--primary);
+  color: var(--veleroTextLink);
   font: inherit;
   cursor: pointer;
 }
@@ -317,6 +355,12 @@
   gap: 16px 24px;
   padding: 16px 0;
   border-top: 1px solid var(--borderFaintColor);
+}
+
+/* One kind of the operations of the volumes of a backup or a restore, under its title: the pod volume operations,
+   then the data movement. */
+.volumeHalf {
+  padding: 8px 0;
 }
 
 .fact {
@@ -477,7 +521,7 @@
     min-width: calc(16ch + 16px);
   }
 
-  /* The last submission of a schedule is a time as the start of an operation is. */
+  /* The last submission of a schedule is a time as the start of an operation is; it is shown from 1,201 pixels. */
   .list :global(.TableCell.started),
   .list :global(.TableCell.submitted) {
     min-width: calc(20.5ch + 16px);
@@ -536,6 +580,20 @@
   }
 }
 
+/* A head that holds the command of its list is wider by it: its search goes under the others in a room a little
+   wider, so that a command as long as Create schedule leaves the page as wide as its room. */
+@container (max-width: 640px) {
+  .listWithCommand :global(.header) {
+    flex-wrap: wrap;
+  }
+
+  .listWithCommand :global(.header .Input.SearchInput) {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
 /* In a narrow room the columns that say where and when give their room to the ones that say what: the
    name, the phase, the failure and the progress stay. What is not shown is in the workspace of the object.
    The installation is the first to go: it is the same in every row, and the target bar says it. */
@@ -582,7 +640,7 @@
 }
 
 .rowLink:hover {
-  color: var(--primary);
+  color: var(--veleroTextLink);
 }
 
 .rowLink:focus-visible {
@@ -596,7 +654,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--primary);
+  color: var(--veleroTextLink);
   font: inherit;
   text-align: left;
   overflow-wrap: anywhere;
@@ -648,10 +706,11 @@
   flex-grow: 1.2;
 }
 
-/* What a schedule submitted and the newest of its backups are both in the band of its view: in a narrow room
-   they give theirs to the next run and the adherence, which say what they said of a schedule at a glance, and
-   then the expression does. The name, paused, the next run, the adherence and the validation stay. */
-@container (max-width: 760px) {
+/* What a schedule submitted and the newest of its backups are both in the band of its view: in a room under
+   1,200 pixels they give theirs, with the installation, to the next run and the adherence, which say what they
+   said of a schedule at a glance, so that what the list shows in a window of 1440 by 900 is read whole; under
+   640 the expression does. The name, paused, the next run, the adherence and the validation stay. */
+@container (max-width: 1200px) {
   .list :global(.TableCell.submitted),
   .list :global(.TableCell.newest) {
     display: none;
@@ -775,7 +834,7 @@
   align-items: flex-start;
   gap: 6px;
   margin-top: 4px;
-  color: var(--colorWarning);
+  color: var(--veleroTextWarning);
   overflow-wrap: anywhere;
 }
 
@@ -825,7 +884,7 @@
 
 .stripFailing {
   border-color: var(--colorError);
-  color: var(--colorError);
+  color: var(--veleroTextError);
 }
 
 /* A failure is said by a shape as well: a mark of many, and one of an operation in flight, have the same
@@ -1140,6 +1199,78 @@
   margin: 8px 0;
 }
 
+/* The commands of an object, on the line of its name, at its end: what is read under the name, the tabs of an
+   operation and their lists, keeps its room. On a line too short for them they go under the name, and their words
+   under them. */
+.commands {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+/* The field of the name of a backup asked from a schedule, with its rule and what is wrong with it under it. */
+.backupName {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 640px;
+  margin: 12px 0 8px;
+}
+
+/* The review of an action: what it means beside the text it sends, side by side where the room is there for both,
+   one under the other where it is not. */
+.review {
+  container-type: inline-size;
+}
+
+.reviewColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px 24px;
+  margin: 12px 0;
+}
+
+@container (min-width: 1000px) {
+  .reviewColumns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.reviewPart {
+  min-width: 0;
+}
+
+.reviewMeaning {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  /* A name of a namespace or of a restore is one long word: it breaks where the room ends. */
+  overflow-wrap: anywhere;
+}
+
+.reviewMeaningPart {
+  margin-top: 6px;
+}
+
+.reviewText {
+  max-height: 480px;
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  overflow: auto;
+  border: 1px solid var(--borderFaintColor);
+  background: var(--layoutTabsBackground);
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  white-space: pre;
+}
+
+.reviewText:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 /* What the band of the server gives the focus to when a command went: the words that say what it is
    doing, and the version the server answered. */
 .serverFocus:focus {
@@ -1183,11 +1314,11 @@
 
 .serverProviders li > :first-child {
   flex: 0 0 auto;
-  color: var(--colorOk);
+  color: var(--veleroTextOk);
 }
 
 .serverProviders li[data-loaded="false"] > :first-child {
-  color: var(--colorWarning);
+  color: var(--veleroTextWarning);
 }
 
 /* The tabs of a workspace and the panel of a diagnostic tab. The strip of the host is one line that is
@@ -1338,7 +1469,7 @@
 .artifactMark {
   flex: 0 0 auto;
   margin-top: 2px;
-  color: var(--colorError);
+  color: var(--veleroTextError);
 }
 
 /* A load the operator cancelled, and a file the store does not have, are no fault: their mark is another
@@ -1606,7 +1737,7 @@
 }
 
 .linesCopy:hover {
-  color: var(--primary);
+  color: var(--veleroTextLink);
 }
 
 .linesCopy:focus-visible {
@@ -1949,9 +2080,11 @@
   font-weight: 400;
 }
 
-/* The row of a resource, over the rows of its items. */
+/* The row of a resource, over the rows of its items. Its words are in the grey of the host that the dark theme reads at
+   the contrast of AA on the stripe of a table, 4.88 to 1, where the words of the page are 4.41 to 1. */
 .resourcesKind {
   background: var(--tableBgcStripe);
+  color: var(--textColorTertiary);
   font-weight: 600;
 }
 
@@ -1965,7 +2098,7 @@
 }
 
 .resourcesFailed {
-  color: var(--colorError);
+  color: var(--veleroTextError);
 }
 
 /* The volumes of an operation: how many there are, then a table of the host, one row for each volume,
@@ -2100,7 +2233,7 @@
 }
 
 .volumeOpen:hover {
-  color: var(--primary);
+  color: var(--veleroTextLink);
 }
 
 .volumeOpen:focus-visible {
@@ -2172,4 +2305,80 @@
   color: var(--textColorSecondary);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+/* The form of the template of a backup: its fields one under the other, in a column of a width that reads, each with
+   its label, what Velero does when it is not set and what is wrong with it. */
+.templateForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+  margin: 12px 0;
+}
+
+.templateField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The namespaces the host lists, as many side by side as the room holds, in a part that scrolls when they are many. */
+.templateChoices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 4px 16px;
+  max-height: 168px;
+  margin: 0;
+  padding: 4px 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.templateChoice {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A pair of the mapping of the namespaces of a restore: the namespace of the backup and the one it is restored into,
+   side by side where the room holds them, one under the other where it does not. */
+.mappingPair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.mappingInput {
+  flex: 1 1 12ch;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--borderColor);
+  border-radius: 4px;
+  background: var(--inputControlBackground);
+  color: var(--textColorPrimary);
+  font: inherit;
+}
+
+/* A flag of a schedule of the form: its checkbox and label, and its note under them, flag under flag. */
+.flagChoice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.flagNote {
+  margin: 0;
 }

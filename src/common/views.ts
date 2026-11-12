@@ -15,6 +15,16 @@ export const VIEW_KINDS = [
   "backup-repository",
   "pod-volume-backup",
   "pod-volume-restore",
+  "data-upload",
+  "data-download",
+  "backup-now",
+  "backup-create",
+  "schedule-create",
+  "restore-backup",
+  "restore-schedule",
+  "schedule-pause",
+  "schedule-resume",
+  "backup-delete",
 ] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
@@ -27,13 +37,26 @@ export interface ViewTarget {
 // something of the families it reads: what is missing of the others is not said over it. A family of the
 // operations of the volumes is read while a view that reads it is open, and only then. Each view reads the
 // families it shows, and no other: the families read at every read are asked whatever view is open, and a view
-// that reads fewer of them asks no less of the cluster.
+// that reads fewer of them asks no less of the cluster. A backup and a restore are shown with the band of their
+// operations of the volumes, the pod volume operations and the data movement of their own kind.
 export const VIEWS: Record<
   ViewKind,
   { family: Family; reads: readonly Family[]; title: string; noun: string; plural: string }
 > = {
-  backup: { family: "backups", reads: BACKUPS_AND_LOCATIONS, title: "Backups", noun: "backup", plural: "backups" },
-  restore: { family: "restores", reads: BACKUPS_AND_LOCATIONS, title: "Restores", noun: "restore", plural: "restores" },
+  backup: {
+    family: "backups",
+    reads: [...BACKUPS_AND_LOCATIONS, "podVolumeBackups", "dataUploads"],
+    title: "Backups",
+    noun: "backup",
+    plural: "backups",
+  },
+  restore: {
+    family: "restores",
+    reads: [...BACKUPS_AND_LOCATIONS, "podVolumeRestores", "dataDownloads"],
+    title: "Restores",
+    noun: "restore",
+    plural: "restores",
+  },
   schedule: {
     family: "schedules",
     reads: BACKUPS_AND_LOCATIONS,
@@ -56,11 +79,20 @@ export const VIEWS: Record<
     noun: "volume snapshot location",
     plural: "volume snapshot locations",
   },
-  // A repository is shown with the location it is kept in. The operations of the volumes that write into it or
-  // read from it come with the band that shows them.
+  // A repository is shown with the location it is kept in, and with what used it: the operations of the volumes that
+  // wrote into it or read from it, and the backups and the restores they belong to.
   "backup-repository": {
     family: "backupRepositories",
-    reads: ["backupRepositories", "storageLocations"],
+    reads: [
+      "backupRepositories",
+      "storageLocations",
+      "podVolumeBackups",
+      "podVolumeRestores",
+      "dataUploads",
+      "dataDownloads",
+      "backups",
+      "restores",
+    ],
     title: "Backup Repositories",
     noun: "backup repository",
     plural: "backup repositories",
@@ -79,6 +111,90 @@ export const VIEWS: Record<
     title: "Pod Volume Restores",
     noun: "pod volume restore",
     plural: "pod volume restores",
+  },
+  "data-upload": {
+    family: "dataUploads",
+    reads: ["dataUploads", "backups", "storageLocations", "backupRepositories"],
+    title: "Data Uploads",
+    noun: "data upload",
+    plural: "data uploads",
+  },
+  // A data download is shown with the data upload whose snapshot it restores, when one is found.
+  "data-download": {
+    family: "dataDownloads",
+    reads: ["dataDownloads", "dataUploads", "restores", "storageLocations", "backupRepositories"],
+    title: "Data Downloads",
+    noun: "data download",
+    plural: "data downloads",
+  },
+  // The workspace of a backup asked from a schedule by hand is of the schedule, by its name: it reads what the view of
+  // the schedule reads, and says of the schedule what a view says of what it shows.
+  "backup-now": {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Back up now",
+    noun: "schedule",
+    plural: "schedules",
+  },
+  // The workspace of a backup of the form is of no object: it is opened over the list of the Backups, and reads the
+  // locations it offers and the backups whose names it says are taken.
+  "backup-create": {
+    family: "backups",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Create backup",
+    noun: "backup",
+    plural: "backups",
+  },
+  // The workspace of a schedule of the form is of no object: it is opened over the list of the Schedules, and reads the
+  // locations it offers, the schedules whose names it says are taken, and the backups the offset of the server is
+  // derived from.
+  "schedule-create": {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Create schedule",
+    noun: "schedule",
+    plural: "schedules",
+  },
+  // The workspace of a restore is of the backup it is asked from, by its name, or of the schedule whose backups it
+  // offers: it reads the backups, the restores whose names it says are taken, and the storage locations.
+  "restore-backup": {
+    family: "backups",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Restore",
+    noun: "backup",
+    plural: "backups",
+  },
+  // The workspace of the deletion of a backup is of the backup, by its name: it reads what the view of the backup
+  // reads, whose storage location the review names.
+  "backup-delete": {
+    family: "backups",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Delete backup",
+    noun: "backup",
+    plural: "backups",
+  },
+  "restore-schedule": {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Restore",
+    noun: "schedule",
+    plural: "schedules",
+  },
+  // The workspace of a pause or of a resume is of the schedule, by its name: it reads what the view of the schedule
+  // reads, whose backups and offset say what a resume would do.
+  "schedule-pause": {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Pause schedule",
+    noun: "schedule",
+    plural: "schedules",
+  },
+  "schedule-resume": {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Resume schedule",
+    noun: "schedule",
+    plural: "schedules",
   },
 };
 
@@ -135,4 +251,10 @@ export function openedFrom(path: ViewTarget[], target: ViewTarget): ViewTarget[]
 // The path after the way back is taken.
 export function closed(path: ViewTarget[]): ViewTarget[] {
   return path.slice(0, -1);
+}
+
+// The path after the view that is shown gives its place to another: the workspace of an action to the view of what
+// it created, whose way back leads where the workspace was opened from.
+export function replaced(path: ViewTarget[], target: ViewTarget): ViewTarget[] {
+  return openedFrom(closed(path), target);
 }

@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M3 / T4.1
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`, for the phase Failed of a DownloadRequest, which no release has
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md), whose T0.6 is the create-only adapter and the service this gate is enforced in; [target discovery](SPEC-0002-installation-discovery.md); the [architecture](../development/ARCHITECTURE.md#ipc-errors-and-write-policy)
 - **Approval:** Approved by the lead maintainer on 2026-09-30, as drafted, with the open question of REQ-115 decided: the adapter runs the plugin a context names for its credential
 
@@ -173,8 +173,9 @@ Turn writes on for the installation velero-demo of the cluster local-demo
 Until they are turned off, or another installation is selected, the extension
 may create in that namespace the requests the views ask for on purpose: a
 DownloadRequest for the log, the results, the resources or the volumes of an
-operation, and a ServerStatusRequest for the version of the server. Each one is
-confirmed where it is asked for. Nothing else is written.
+operation, a ServerStatusRequest for the version of the server, and a Backup from
+a schedule, asked from the view of the schedule. Each one is confirmed where it is
+asked for. Nothing else is written.
 ```
 
 These identifiers are synthetic. The tab of an artifact and the band of the
@@ -411,3 +412,54 @@ green on the nightly of the validation target on 2026-10-17, as the
 records: writes turned on, the text arrived, one creation was counted on the API
 server, no kubectl was left, and the plugin ran under the proxy of Freelens alone,
 never under the extension or the kubectl of the tunnel.
+
+### 2026-11-08: The Text Of A Body (T4.2 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says, approved
+with it: `write.confirm` answers, for a write whose body the review shows, the text
+of that body beside the token and its expiry, written once by the main process, and
+the run of that write carries the token and the identifier of the request, and
+nothing of the body: the main process sends the text it kept with the token. A
+confirmation is for its kind, its namespace, its target and, for a backup asked from
+a schedule or of the form, the name of the backup, and for a restore the name of the
+restore, and its token runs for nothing else. The first
+kind of a body is `backup-from-schedule`, with the first pull request of T4.2, and
+the second `backup`, the backup of the form, with the first pull request of T4.3: its
+confirmation carries the name of the backup and the fields of its template, and its
+run the name alone. The kind `restore` comes with the first pull request of T4.4: its
+confirmation carries the backup by its name and its UID, the name of the restore and
+the fields of its form, and its run the backup, the name of the restore and the name
+of the backup as the operator typed it, which the main process compares before the
+token is taken. The kinds `schedule-pause` and `schedule-resume` come with the first
+pull request of T4.5: their confirmation carries the schedule by its name and its
+UID, and for a resume the expression the review read and the choice of skipping a
+run, and their run the schedule alone; the text kept with the token is the JSON patch
+of the action. The kind `delete-backup` comes with the first pull request of T4.6:
+its confirmation carries the backup by its name and its UID, and its run the backup
+and the name of the backup as the operator typed it, which the main process compares
+before the token is taken; the text kept with the token is the DeleteBackupRequest of
+the backup. The rest of this spec is read with the amendment, and is not changed by
+it. The text
+travels in the answer of the confirmation, within the bound of a request: one the
+answer cannot carry is not confirmed, and no token is given for it.
+
+### 2026-11-08: The Ends Kept For A Cluster (T4.2 Of SPEC-0017)
+
+As REQ-250 of [SPEC-0017](SPEC-0017-write-actions.md#requirements) says, approved
+with it, after REQ-243 of SPEC-0016: the end of a backup, asked from a schedule or of
+the form, whose request was sent is kept by the main process for its cluster, with
+what to look for and where, until a frame of that cluster has shown it or the
+extension is deactivated; each action of SPEC-0017 adds its kind with its slice. REQ-113 and
+GATE-06 are read with it: what a write is at and its cancel stay for the frame that
+asked it, and the ends kept for a cluster are given to every frame of that cluster,
+which may say it showed one. Two procedures come with the third pull request of T4.2:
+
+| Procedure | From the renderer | The main process answers |
+| --- | --- | --- |
+| `write.ends` | The cluster | The ends kept for the cluster of the frame: the identifier of the request, the kind, the namespace, the context, what to look for and how it ended, sixteen at most |
+| `write.shown` | The cluster and the identifier of the request | Nothing: the end is not kept any more |
+
+Nothing more is broadcast: the views of a cluster ask for its ends at every read of
+the installation, and a frame is given the ends of its own cluster alone. The rest
+of this spec is read with the amendment, and is not changed by it otherwise.

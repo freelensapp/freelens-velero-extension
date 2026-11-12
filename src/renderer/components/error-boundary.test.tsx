@@ -7,6 +7,7 @@
 import { Renderer } from "@freelensapp/extensions";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { hostLog } from "../../../test/freelens-extensions";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { Backup } from "../api/kinds";
@@ -77,7 +78,7 @@ function backupObject(name: string): Backup {
 // The views of an installation whose backups are the ones given, with its namespace chosen.
 function installationWith(...backups: unknown[]): Installation {
   const table: Record<string, Answer> = {
-    "/apis/velero.io/v1": { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    "/apis/velero.io/v1": { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     "/apis/velero.io/v1/backupstoragelocations": list({ metadata: { name: "default", namespace: A } }),
     [path("backups", A)]: list(...backups),
     [path("restores", A)]: list(),

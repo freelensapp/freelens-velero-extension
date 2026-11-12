@@ -1,15 +1,15 @@
 # Testing Strategy
 
-Date: 2026-10-25
+Date: 2026-10-29
 
 Status: T0.3-T0.6 scaffold, environment, fixture and compiled-main transport checks
 pass. The [integration test](#integration-tests) covers the activation in Freelens.
 The [end-to-end tests](#end-to-end-tests) bring the environment up on the hosted
 runner and on the machines of the contributors. Since T0.7 every packaged layer runs
 on Freelens v2, at the validation target of
-[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
-v2.0.0-0-nightly-2026-10-25 on the machines of the contributors, and Freelens built
-from source at its commit, `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, in CI.
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the release Freelens 2.0.0 on
+the machines of the contributors, and Freelens built from source at its commit, the
+one of its tag v2.0.0, `b9b53e16056578c5407312eba5823a089972f6d5`, in CI.
 
 This is a desktop Electron extension with renderer UI, main-process Kubernetes
 operations and object-storage transport. The binding safety/privacy rules are in
@@ -32,8 +32,8 @@ T0.3 used Node v24.15.0, pnpm v10.34.4 and the SDK of Freelens 1, and the
 manifest of the extension accepted the hosts compatible with Freelens 1. Electron/Playwright host launch, app
 installation, display support, fixture images and runtime authentication were then
 unverified and separately gated. No Kubernetes access occurred during scaffold
-checks. Since T0.7 the toolchain is Node 24.21.0 of `.nvmrc`, pnpm 12.14.0 and the
-SDK `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-25, and the manifest declares
+checks. Since T0.7 the toolchain is Node 24.21.0 of `.nvmrc`, pnpm 12.15.0 and the
+SDK `@freelensapp/extensions` 2.0.0, and the manifest declares
 `engines.freelens` as `^2.0.0`.
 
 T0.4 preflight confirmed the explicitly local Docker daemon and existing kind
@@ -90,10 +90,15 @@ isolated profile, as the [suites of the views](#suites-of-the-views) start it.
 `pnpm e2e:integration` builds and packs the extension and runs them against the
 disposable environment of this repository, checking its target before and after;
 the [workflow](../../.github/workflows/integration-tests.yaml) builds Freelens from
-source at the commit of the validation target, cached by that commit, brings the
-environment up with `pnpm e2e:cluster:up`, which installs Velero and the CRDs of
-the reviewed release and places no fixture, runs them, uploads the screenshots of
-a failure as `integration` and always takes the environment down.
+source at the commit of the validation target, through the
+[action](../../.github/actions/build-freelens/action.yaml) it shares with the views,
+cached by that commit, brings the environment up with
+`pnpm e2e:cluster:up:definitions`, which installs the CRDs of
+the reviewed release alone, with no Velero server, node agent or store, and places
+no fixture, runs them, uploads the screenshots of a failure as `integration` and
+always takes the environment down. Each session places an object of its own that
+no controller reads: the sessions test the views, not Velero, so they cannot depend
+on what a controller would do, and a run does not wait for one.
 
 FND-10, the [test of the installation](../../integration/__tests__/extensions.tests.ts),
 installs the tarball from the Extensions page of an isolated profile and checks
@@ -109,21 +114,74 @@ that:
 - the bundled transport downloads and decodes an artifact inside the main process,
   keeps the signed query and the Host header, turns a 404 into a missing artifact
   without the URL in its message, and refuses a URL of another origin;
+- the bundled transport downloads and decodes an artifact over HTTPS inside the
+  main process ([REQ-289](../specs/SPEC-0018-release-readiness.md)), from a store
+  on the loopback of that process whose certificate an authority made for the test
+  signed, the authority given inline as a storage location gives it, its PEM in
+  base64, and read by the adapter of the bundle; the same store with no authority
+  given, and the authority given for a name the certificate of the store is not
+  for, each end as `tls-invalid`, a certificate refused, with nothing of the URL in
+  the words of the failure, read in its message, its text, its fields, enumerable
+  or not, its stack and its cause. The certificate is valid for 127.0.0.1, the
+  address every download connects to, so the refusal of another name shows the
+  name of the URL checked, and not the address. The store counts three
+  connections, records the name each ClientHello asks for, the name of the URL of
+  each download in their order, and counts one request, the verified one: nothing
+  is sent over a connection that was not verified, and nothing is asked again
+  without the verification;
+- the route to the store of a signed URL is resolved inside the main process
+  ([REQ-290](../specs/SPEC-0018-release-readiness.md)) by `resolveRoute`, which the
+  main bundle exports for it, for a storage location whose URL names 198.18.250.10,
+  an address literal of 198.18.0.0/15, a range the extension counts as private:
+  nothing of the tests listens there, the runners do not route it, and a unit case
+  of the environment keeps it outside every subnet the environment takes from that
+  range, reading it where the case does, in
+  [`velero-route.ts`](../../integration/helpers/velero-route.ts). Without the
+  allowance of private addresses for the cluster the route is refused,
+  `destination-denied` with what the operator may allow, a private address for the
+  origin of the store, and the words the main process makes of that very refusal,
+  by `downloadFailureOf`, which the main bundle exports beside it, say so with
+  nothing of the path or the signature of the URL; with the allowance the route is
+  direct to that address, at the port of the URL. The cluster, the resolver of the
+  machine and kubectl are stand-ins that refuse what they are asked, and the route
+  asks the allowance alone. Each resolution has a time of its own, eight seconds,
+  well within the one of the evaluation, so that the case puts the classes of Node
+  back before it gives up. While the routes are resolved, and for a turn of the loop
+  and a tenth of a second after them, the case records on the classes of the sockets
+  and of the servers of Node every connection and every listener whose stack names
+  the build the host made of the extension, and every connection to that address:
+  none. What else the host opens meanwhile is neither recorded nor touched;
 - the files of the log of the host hold the activation of the extension, and no
   line at the level of an error, nor does what either process wrote.
 
-No cluster takes part in FND-10. Beside it, the integration test of the template
-has a session for each of the five kinds of the first milestones (the three of
-SPEC-0014 get theirs with their fixtures, in a later pull request of T5.1, as the
-amendment of 2026-10-27 of SPEC-0015 says), each a file of its own,
+No cluster takes part in FND-10. Its certificates are made by the case, outside
+the host, before the downloads, by the helper of the unit tests,
+[`tls-fixture.ts`](../../test/tls-fixture.ts), with the first `openssl` of the
+PATH, which must be OpenSSL 3 or later, as for the unit tests of the transport:
+the LibreSSL of macOS at `/usr/bin/openssl` does not know `-copy_extensions`. The
+helper reads `openssl version` before it makes anything, and stops with what it
+found and what is needed. Beside it, the integration test of the template
+has a session for each of the ten kinds the extension shows: the five of the first
+milestones, the three of SPEC-0014 under `velero.io/v1`, which the last pull request
+of T5.1 added, as the amendment of 2026-10-27 of SPEC-0015 says, and the two of the
+data movement under `velero.io/v2alpha1`, which the last pull request of T5.2 added.
+Each is a file of its own,
 [`backups`](../../integration/__tests__/backups.tests.ts),
 [`restores`](../../integration/__tests__/restores.tests.ts),
 [`schedules`](../../integration/__tests__/schedules.tests.ts),
-[`storage-locations`](../../integration/__tests__/storage-locations.tests.ts) and
+[`storage-locations`](../../integration/__tests__/storage-locations.tests.ts),
 [`snapshot-locations`](../../integration/__tests__/snapshot-locations.tests.ts),
+[`backup-repositories`](../../integration/__tests__/backup-repositories.tests.ts),
+[`pod-volume-backups`](../../integration/__tests__/pod-volume-backups.tests.ts),
+[`pod-volume-restores`](../../integration/__tests__/pod-volume-restores.tests.ts),
+[`data-uploads`](../../integration/__tests__/data-uploads.tests.ts) and
+[`data-downloads`](../../integration/__tests__/data-downloads.tests.ts),
 made from [one helper](../../integration/helpers/velero-kinds.ts). A session places
 one synthetic object of its kind, which the CRD of the reviewed release accepts, in
-a namespace of its own, `velero-integration-<list>`, which no server of Velero reads,
+a namespace of its own, `velero-integration-<list>`, which no server of Velero reads
+(the cache of the server holds its own namespace, and the node agent selects the pod
+volume operations and the data movement of its own by a field, v1.18.4
+`pkg/cmd/server/server.go:272-276` and `pkg/cmd/cli/nodeagent/server.go:183-199`),
 both labelled `freelensapp.io/velero-integration-session`, after it removed what an
 earlier run left; it starts Freelens with the isolation of the suites, with the
 kubeconfig of the environment as the one cluster of the catalog, and checks three
@@ -141,14 +199,15 @@ environment.
 ## End-To-End Tests
 
 The [scripts](../../e2e/scripts/) create a dedicated kind cluster,
-`freelens-velero-dev`, with Velero, its AWS plugin and SeaweedFS, every image an
-official release pinned by digest. The contract is
+`freelens-velero-dev`, with Velero, its AWS plugin and SeaweedFS, or with the CRDs
+of the release alone, every image an official release pinned by digest. The contract is
 [SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md).
 
 | Command | What it does |
 | --- | --- |
 | `pnpm e2e:cluster:up` | Installs the pinned kind and kubectl, pulls the images, creates the cluster, installs the storage and Velero, verifies the environment. Run again, it resumes the environment it owns |
-| `pnpm e2e` | Builds the extension, then runs the fixtures and the transport proof: real backups and restores of synthetic data, their artifacts fetched through the compiled main |
+| `pnpm e2e:cluster:up:definitions` | Installs the pinned kind and kubectl, pulls the images, creates the cluster and installs the CRDs of the release alone: no server, node agent or store. The environment of the integration tests and, with `node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev`, of the suites of the views that read no controller. It refuses an environment that holds more than the CRDs and the static fixtures it made, and leaves out the verification of `pnpm e2e:cluster:up`: the proof of the egress rules and the checks of the cleanup and of an installation free of fixtures, which the E2E workflow runs on main, every night and on a pull request that changes what it runs. On its environment, the actions that install, ask or verify a server refuse to run |
+| `pnpm e2e` | Builds the extension, then runs the fixtures and the transport proof: real backups and restores of synthetic data, their artifacts fetched through the compiled main process, and Back up now end to end, a backup of the real schedule of the run, which the proof places and the cleanup of the run removes, asked through the procedures of the compiled main process, Completed by the server of the release and deleted through a DeleteBackupRequest it processes once it ended; and, since the third pull request of T4.3, a backup of the form of the ConfigMaps of the run, asked through the same procedures, Completed with the fields of its text the server keeps as sent, and deleted the same way; and, since the third pull request of T4.7, three schedules of the form asked through the same procedures with the controller of the release running (REQ-242): one of every two minutes, created clear of an instant, read Enabled with no backup at its creation and exactly one backup at the first look that finds one after its first instant, which ends Completed with the location, the namespaces and the resources of its template and is deleted by the server; one the controller refuses read FailedValidation with the words the views say for it; and one paused with skip immediately true, read with no phase, skip immediately still true and no last skipped; no backup of the three left; each removed by its name with its UID as the precondition, one whose answer was lost by its name when it was created since the proof began, and every backup of them through the server once it ended, whatever ended the proof; and, since the third pull request of T4.4, a restore of the backup of the run asked through the same procedures with the name of the backup typed, into a namespace its mapping names, of the ConfigMaps of the run alone, Completed by the server, every ConfigMap of the run in the namespace of the mapping with what it holds in the source and the labels Velero writes on what it restores, and the restore and the namespace it made removed, whatever ended the proof; and, since the third pull request of T4.5, two schedules of every three minutes paused through the same procedures and left so through an instant and a look of the controller, with no backup; resumed, the one with skip immediately false submits one backup at once, which ends and is deleted by the server, and the one with skip immediately true submits none, read with skip immediately set back to false and a last skip of its resume; a resume whose schedule changed between its review and its run refused by the test of its patch, which the API server answers with 422, counted once by its metrics, and the run says as a conflict, the schedule as it was changed; each removed with the backup of the first, whatever ended the proof; and, since the third pull request of T4.6, a backup of the ConfigMaps of the run, Completed, deleted through the same procedures with its name typed once its location is Available, its review the request the release makes for that backup with no other request of it, read completed once the main process reads the backup gone, or in progress or not read only when the run used its thirty seconds, and then gone with its request, which the server deletes with it, both read until they are gone; and a backup of a storage location that is not there, FailedValidation, whose request the server refuses with the one error of a refusal, `backup deletion failed: backup storage location <location> not found`, the request it refused the one the run created, alone, and the backup keeping its phase; the backup it refused and its request removed first, the backup by its object, the other through the request of the action once it ended, and every request of them, one at a time, each with its UID as the precondition, a backup whose answer was lost by its name when it carries the label of the run and was created since the proof began, whatever ended the proof; and, since the pull request of the identities of T6.1 (REQ-288 of SPEC-0018), the session of the extension in the proof of the download over HTTP, with its request of the version of the server, and in every proof of an action runs as the operator of the README, an account of the installation with the role of the actions alone, made for the run and removed with it, and what the proofs place, read and delete beside the session, the metrics of the API server, the ConfigMaps and the namespace of a restore, the backups of the proof of a deletion and the change another hand makes among it, with the kubeconfig of the environment, a backup of a proof still going through a DeleteBackupRequest as the extension writes it, sent with that kubeconfig as well, and read until it is gone with it, so that the teardown does not depend on the role the run proves; the modes over TLS keep that kubeconfig, since the authority of the second is in a Secret the role does not read |
 | `pnpm e2e:cluster:down` | Deletes the node, the network and the state the journal owns, after the identity check. The installed binaries stay |
 | `pnpm demo:up` | Brings the environment up and leaves the fixtures in place, to look at them in Freelens |
 | `pnpm demo:down` | The same as `pnpm e2e:cluster:down` |
@@ -157,7 +216,11 @@ What a machine needs: Docker with four processors and 6 GiB of memory or more,
 and Node.js of `.nvmrc`. kind and kubectl are downloaded from their official
 releases, checked against the checksums pinned in
 [local-platform.mts](../../e2e/scripts/local-platform.mts) and kept under the
-private state: the binaries of the host are neither used nor changed.
+private state: the binaries of the host are neither used nor changed. A release
+that does not answer, or answers a timeout, too many requests or a failure of its
+server, is asked again after 10, 30 and 60 seconds, and so is the registry for the
+index and the pull of an image; what comes back is checked as before, and a
+checksum or an identity that does not match is never asked again.
 
 | Platform | Host | Network shape |
 | --- | --- | --- |
@@ -191,8 +254,11 @@ and the verification removes what an earlier verification left of its temporary
 check, by the label of its owner and by its uid.
 
 The [workflow](../../.github/workflows/e2e-tests.yaml) runs the three commands on
-the hosted runner for every pull request. It uploads nothing of the private
-state.
+the hosted runner on main, every night, and for every pull request that changes
+what they run: the scripts of the environment, the main process, the modules of
+common or the toolchain. A pull request that changes only the renderer, the suites
+of the views, the documents, the unit tests or the configuration of the linters
+does not run them. It uploads nothing of the private state.
 
 Renovate follows the pins. kind, its node image and kubectl move in one pull
 request, Velero and its plugin in another. The checksums of kind and kubectl are
@@ -214,37 +280,42 @@ file at a time, no retry), with the helpers of
 `FREELENS_APP` names, through `_electron.launch` of Playwright, which reaches the
 main process of the application as well as its window: a bundle, a folder or an
 executable, and never one installed in `/Applications`. On a machine of a
-developer it is the nightly of the validation target, v2.0.0-0-nightly-2026-10-25,
-built from `7801fb10`, its download checked against the checksum the release
-publishes beside it; in CI it is Freelens built from source at that commit, as the
-[views workflow](../../.github/workflows/views-tests.yaml) builds it, cached by the
-commit. On a Linux without a display the runner starts them under `xvfb-run`.
+developer it is the release of the validation target, Freelens 2.0.0, built from
+`b9b53e16`, its download checked against the checksum the release
+publishes beside it; in CI it is Freelens built from source at that commit by the
+[action](../../.github/actions/build-freelens/action.yaml) the
+[views workflow](../../.github/workflows/views-tests.yaml) and the integration
+workflow share, cached by the commit. On a Linux without a display the runner
+starts them under `xvfb-run`.
 
 | Command | What it does |
 | --- | --- |
 | `pnpm demo:up` | The environment with the fixtures left in place, once |
 | `pnpm demo:views` | The fixtures of the views and of their tabs, and for who looks at the demo by hand the kubeconfigs of its two readers and what each artifact of the tabs holds: see [TRY-IT.md](TRY-IT.md) |
-| `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views and of their tabs in place, waits for the server to remove the requests to Velero it removes, tells the suites what the artifacts of the tabs hold, makes for the run the identity of the views that may not port-forward and the one whose token an `exec` plugin gives, and gives the suites the kubeconfig of the first in `E2E_NO_PORT_FORWARD_KUBECONFIG`, the one of the second in `E2E_EXEC_PLUGIN_KUBECONFIG`, and in `E2E_EXEC_PLUGIN_RUNS` the file of the private state where its plugin, [`local-exec-credential.sh`](../../e2e/scripts/local-exec-credential.sh), names the executable of the process of each of its runs, runs the suites, then removes the two identities, their kubeconfigs, the token of the plugin and that file |
-| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite. The pattern is a part of the names of the files, or several separated by spaces: CI runs `velero-e2e pre-review extensions`, every suite, the pre-review and FND-10, in one run |
+| `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views and of their tabs in place, waits for the server to remove the requests to Velero it removes, tells the suites what the artifacts of the tabs hold, makes for the run the identity of the views that may not port-forward and the one whose token an `exec` plugin gives, and gives the suites the kubeconfig of the first in `E2E_NO_PORT_FORWARD_KUBECONFIG`, the one of the second in `E2E_EXEC_PLUGIN_KUBECONFIG`, and in `E2E_EXEC_PLUGIN_RUNS` the file of the private state where its plugin, [`local-exec-credential.sh`](../../e2e/scripts/local-exec-credential.sh), names the executable of the process of each of its runs; since the pull request of the identities of T6.1 it makes as well the reader of the README (REQ-288 of SPEC-0018), an account of the installation of the views bound to the Role of the README that reads the views and to its ClusterRole, which lists the storage locations of the whole cluster, and gives its kubeconfig in `E2E_README_READER_KUBECONFIG`; it runs the suites, then removes the identities, their kubeconfigs, the token of the plugin and that file |
+| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite. The pattern is a part of the names of the files, or several separated by spaces: CI runs the suites, the pre-review and FND-10 in six parts side by side, each a job with an environment of its own: `velero-e2e-artifacts`; `pre-review`; `velero-e2e-volumes velero-e2e-server velero-e2e-repositories`, the three on the environment of `pnpm demo:up`, for the suites that read what only a server makes; and, on the CRDs of the release alone, the eleven other suites with `extensions`, FND-10, in two parts, and the suite of the actions of SPEC-0017, `velero-e2e-actions`, in one of its own. Every part runs on main, every night and on demand, and a pull request runs the parts its changed files reach, by the rules of [`views-parts.json`](../../e2e/views-parts.json). On an environment brought up with `pnpm e2e:cluster:up:definitions` and its static fixtures, `node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev`, which place the installation with the counterparts of what the controllers leave in the one of the demo, the runner places the fixtures of the views and of the adherence, waits for no server, stands in for it at the storage location of the installation while the suites run, and runs only those suites: `velero-e2e-actions velero-e2e-adherence velero-e2e-data-movement velero-e2e-gate velero-e2e-journey velero-e2e-locations velero-e2e-overview velero-e2e-preferences velero-e2e-restores velero-e2e-restricted velero-e2e-scale velero-e2e-schedules extensions` |
 | `pnpm pre-review` | The pass before the review of a milestone |
 
 | Suite | What it proves |
 | --- | --- |
-| `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace, which opens at its summary, the first of five tabs, with the ways of the summary and no field; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log. On v2 as well: the identifier of the cluster the same in the address of its frame and in the catalogs of both processes, and the reads of the views leaving from the frame, the same ones the API server counts; every page with the tabs of the group, and its kinds out of the Custom Resources tree of the host until the extension is disabled, eight since the first pull request of T5.1, with the nine entries under Velero; the search of the host with the focus when a list opens, and given it back at Ctrl or Cmd with F; a view opened from a row under the details of the host, which stay over it and over what its ways open until they are closed, since the click of a way draws its target again before it reaches the window, where the suite reads it; no action of the extension that opens the details of the host, but the links of the host to the pod and the node of an operation of the volumes, which the views of the suite do not show; and a section of the details that throws, kept in its place with the error page of the extension, the rest of the drawer and of the cluster view left, and the error in the log of the frame with the name of the extension. 19 cases |
-| `velero-e2e-overview` | The Overview as the first entry under Velero, with what the API server counted when it opens; what was read of the five families; what needs attention by its rules, in its order, with the reason of each; what is in flight; the newest completed backup; the three windows, on the line of time and in the list; ten lines of twelve schedules; every way of the page followed, and the way back; the installation of the demo as the fixtures of the tabs leave it, with what ended with a failure inside the window computed from the times the cluster holds, the backups synced from the store at their start, the count of the items and the newest completed backup by the time each completed; no value of the whole in any installation; two thousand operations within the budget, and the scroll after a read; since the second pull request of T3.3 the adherence of the schedules: the summary and the line before the items of the schedules whose adherence is not known, by reason, with its way to their list, in each installation, the count computed from the fixtures; rule A11 in the installation of the views exactly when its schedule that names its zone is overdue, computed by the suite from its creation and the clock through Intl; the next run and the adherence on the lines of the schedules, and, in a window of 1440 by 900, the band of the schedules alone on its row and the storage under it, each table of lines with all its columns in the room of its band and none reached by scrolling it, no words of the lines clipped with no ellipsis and no tip and none off the line of their row, at the zoom of 1 and at twice it, what each table shows, cuts and leaves behind the scroll of its band written in the report `overview-lines.json`; since the third pull request, the schedule the controller validated in the installation of the demo, with its line, awaited, and no item; the interval of the views overdue, an item of rule A11 at every hour, so that every rule gives an item; and the schedule that names its zone with a line among the ten when a rule names it; since the first pull request of T5.1, the nine entries under Velero and the tabs of the group, and, the installation chosen, its six families read in its namespace, the backup repositories among them, and none of the pod volume operations |
+| `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace, which opens at its summary, the first of five tabs, with the ways of the summary and no field; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log. On v2 as well: the identifier of the cluster the same in the address of its frame and in the catalogs of both processes, and the reads of the views leaving from the frame, the same ones the API server counts; every page with the tabs of the group, and its kinds out of the Custom Resources tree of the host until the extension is disabled, eight since the first pull request of T5.1, with the nine entries under Velero, and ten since the first of T5.2, with eleven; every request of the frame of the cluster of a kind of Velero or of a version of its group, under the second only its discovery and the lists of its two kinds; the search of the host with the focus when a list opens, and given it back at Ctrl or Cmd with F; a view opened from a row under the details of the host, which stay over it and over what its ways open until they are closed, since the click of a way draws its target again before it reaches the window, where the suite reads it; no action of the extension that opens the details of the host, but the links of the host to the pod and the node of an operation of the volumes, which the views of the suite do not show; and a section of the details that throws, kept in its place with the error page of the extension, the rest of the drawer and of the cluster view left, and the error in the log of the frame with the name of the extension. 19 cases |
+| `velero-e2e-overview` | The Overview as the first entry under Velero, with what the API server counted when it opens; what was read of the five families, six since the third pull request of T5.1, the backup repositories the sixth, which no installation of the fixtures holds, so that no item of A12 or A13 is drawn until the fixtures of the fourth pull request of T5.1; what needs attention by its rules, in its order, with the reason of each; what is in flight; the newest completed backup; the three windows, on the line of time and in the list; ten lines of twelve schedules; every way of the page followed, and the way back; the installation of the demo as the fixtures of the tabs leave it, with what ended with a failure inside the window computed from the times the cluster holds, the backups synced from the store at their start, the count of the items and the newest completed backup by the time each completed; no value of the whole in any installation; two thousand operations within the budget, and the scroll after a read; since the second pull request of T3.3 the adherence of the schedules: the summary and the line before the items of the schedules whose adherence is not known, by reason, with its way to their list, in each installation, the count computed from the fixtures; rule A11 in the installation of the views exactly when its schedule that names its zone is overdue, computed by the suite from its creation and the clock through Intl; the next run and the adherence on the lines of the schedules, and, in a window of 1440 by 900, the band of the schedules alone on its row and the storage under it, each table of lines with all its columns in the room of its band and none reached by scrolling it, no words of the lines clipped with no ellipsis and no tip and none off the line of their row, at the zoom of 1 and at twice it, what each table shows, cuts and leaves behind the scroll of its band written in the report `overview-lines.json`; since the third pull request, the schedule the controller validated in the installation of the demo, with its line, awaited, and no item; the interval of the views overdue, an item of rule A11 at every hour, so that every rule from A1 to A11 gives an item; and the schedule that names its zone with a line among the ten when a rule names it; since the first pull request of T5.1, the nine entries under Velero and the tabs of the group, eleven since the first of T5.2, and, the installation chosen, its six families read in its namespace, the backup repositories among them, and none of the pod volume operations, nor of the data movement since the second pull request of T5.2 |
 | `velero-e2e-preferences` | What is kept between two starts of the application, which is the two maps of the namespaces, the window of the recent operations and what the operator allowed the downloads to do, and nothing else; a namespace that is not there any more stays selected; what the file says was allowed is shown in the target bar, one is taken back through the main process, the one that is left is found at the next start, and once the last is taken back nothing is allowed at the start after it |
-| `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries, which opens at its summary under the five tabs, with the ways of the summary and no field; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log |
-| `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty; a location shown with the Secrets it names, to an identity the API server refuses the Secrets to; the Overview, which says what the rules did not look at and, since the second pull request of T3.3, of how many schedules the adherence is not known; since the fourth, the interval of the views overdue and the schedule of five fields not known for want of an offset; since the first pull request of T5.1, the lists of the backup repositories, the pod volume backups and the pod volume restores denied, with no row and no count, and no notice of the backup repositories over the view of a backup, which shows nothing of them, as decided while implementing, on 2026-10-26 |
-| `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore, the history of a schedule, the backups that name a location and the newest completed backup of the Overview are said denied or not known, and are neither absent nor empty; since the fourth pull request of T3.3, the interval of the views overdue with the words that whether a backup holds the submissions is not known, in its row and in its band, the schedule of five fields not known since the backups are denied, and the count by reason of what is not known on the Overview; since the first pull request of T5.1, no notice of the backup repositories over the view of a restore or of a schedule, which show nothing of them, as decided while implementing, on 2026-10-26 |
-| `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log; since the first pull request of T3.3 the next run and the adherence of each schedule: a run said of the schedule that names its zone, computed by the suite from its creation and the clock through Intl, never by the code of the extension, and none of the paused, refused and not read ones, the ones of five fields not known for want of the zone of the server; the band of a schedule line by line; the items of the details agreeing with the row; the order by the next run and by adherence both ways, a search by the word of a state; and the columns at each edge of the room of the list and in a window of 1440 by 900, before the case that resizes a column, with no words clipped with no ellipsis and no tip and none off the line of their row, the width of the window and the zoom of each room written in the report `schedules-rooms.json`; SCHED-03 restated outside the cells, the band and the items; since the third pull request, twelve schedules in the installation of the views, the interval that submitted two days back overdue and first in both orders, and the one of five fields that submitted not known for want of the zone of the server; since the first pull request of T5.1, the nine entries under Velero and the tabs of the group |
+| `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries, which opens at its summary under the five tabs, with the ways of the summary and no field; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log; since the second pull request of T5.1, a restore that opens asks one list of the pod volume restores of the namespace, counted on the API server, and nothing else, and its band of the volumes says that the installation holds none of the restore, with no row and no way, and of the one that failed its validation that it did not run; since the fifth pull request of T5.1, the band of the mapped restore draws eleven links of the host, the pod of each of its seven pod volume restores and the node of the four a node agent accepted; since the second pull request of T5.2, a restore that opens asks one list of the pod volume restores and one of the data downloads, and the band of the mapped restore holds its eight data downloads in its second half, the claims of their rows among the ways of the view, and sixteen links of the host, the node of the four data downloads whose data path has one beside the twelve of the pod volume restores, the one of the preparing timeout now accepted on a node |
+| `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty; a location shown with the Secrets it names, to an identity the API server refuses the Secrets to; the Overview, which says what the rules did not look at and, since the second pull request of T3.3, of how many schedules the adherence is not known; since the fourth, the interval of the views overdue and the schedule of five fields not known for want of an offset; since the first pull request of T5.1, the lists of the backup repositories, the pod volume backups and the pod volume restores denied, with no row and no count, and no notice of the backup repositories over the view of a backup, which shows nothing of them, as decided while implementing, on 2026-10-26; since the second pull request of T5.1, the notice of the pod volume backups over the view of a backup, which shows them in its band, denied with the restores and the snapshot locations; since the third pull request of T5.1, the cell of the backup repositories denied on the Overview, the line that says their readiness and their maintenance were not checked, and the way of the cell to their list, which says the same; since the fifth pull request of T5.1, the band of a backup says to the first reader that its pod volume backups cannot be read and how many it has is not known, with no count, no group and no row; since the first pull request of T5.2, the lists of the data uploads and of the data downloads denied as the three of the volumes are, and the notice of the data uploads over the view of a backup, which shows them in the second half of its band; since the pull request of the identities of T6.1 (REQ-288 of SPEC-0018), in an application of its own, the reader of the README, with the role of the README that reads the views: every namespace that holds a storage location suggested, the ten lists of the installation of the views with their rows and nothing denied over them, and the six cells of the Overview read; Back up now refused at the read of the schedule, before any review, and Pause at the patch, each with the words of what the identity may not do, writes left on, no backup of the name, the schedule as it was and no write of any kind of Velero counted; and the objects of Velero as they were |
+| `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore, the history of a schedule, the backups that name a location and the newest completed backup of the Overview are said denied or not known, and are neither absent nor empty; since the fourth pull request of T3.3, the interval of the views overdue with the words that whether a backup holds the submissions is not known, in its row and in its band, the schedule of five fields not known since the backups are denied, and the count by reason of what is not known on the Overview; since the first pull request of T5.1, no notice of the backup repositories over the view of a restore or of a schedule, which show nothing of them, as decided while implementing, on 2026-10-26; since the second pull request of T5.1, the notice of the pod volume restores over the view of a restore, which shows them in its band, denied after the one of the backups, in the order of what the view reads; since the third pull request of T5.1, the cell of the backup repositories denied on the Overview and the line that says their readiness and their maintenance were not checked, until the fixtures of the fourth pull request of T5.1 give this identity the repositories; since the fourth pull request of T5.1, the band of the mapped restore in rows with no notice of them, the cell of the backup repositories, 9, with A12 and A13, and a case that reads the three lists of its namespace; since the fifth pull request of T5.1, a pod volume restore with the restore it belongs to, and a pod volume backup with its backup denied, which is not absent |
+| `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log; since the first pull request of T3.3 the next run and the adherence of each schedule: a run said of the schedule that names its zone, computed by the suite from its creation and the clock through Intl, never by the code of the extension, and none of the paused, refused and not read ones, the ones of five fields not known for want of the zone of the server; the band of a schedule line by line; the items of the details agreeing with the row; the order by the next run and by adherence both ways, a search by the word of a state; and the columns at each edge of the room of the list and in a window of 1440 by 900, before the case that resizes a column, with no words clipped with no ellipsis and no tip and none off the line of their row, the width of the window and the zoom of each room written in the report `schedules-rooms.json`; SCHED-03 restated outside the cells, the band and the items; since the third pull request, twelve schedules in the installation of the views, the interval that submitted two days back overdue and first in both orders, and the one of five fields that submitted not known for want of the zone of the server; since the first pull request of T5.1, the nine entries under Velero and the tabs of the group, eleven since the first of T5.2 |
 | `velero-e2e-adherence` | The adherence of the schedules on its fixtures, placed by the clock in the three installations the operator names, and on the schedule the controller of the demo validated, each expectation computed by the helper of the suites, [`velero-adherence.ts`](../../integration/helpers/velero-adherence.ts), from the objects as the cluster holds them and from the clock, by the rules of the controller and never by the code of the extension, at the clock before a read of the page less twenty seconds and after it plus a second, with every duration read back into its span: first the nineteen cases of the helper, of the words the suite expects and of the counters it reads, which start no application; then the list of the installation of the states, its eight schedules with their next run, their state, their mark and their words, a tip on each cell, shown only when the cell is pointed at, and the note that the clock of the cluster is ahead, within a second of this machine by the time of its API server; the orders by the next run and by adherence both ways and a search by the word of a state; the band of each schedule line by line; the way to the held backup and back over the list, which is where it was; the installation of two offsets, the older submission before the newer and the change said; the details of the host of a schedule of five states, and of a schedule of another installation, not known for want of the offset of its server; the Overview with the items of rule A11 in the order of the page and the count by reason of the installation of the views; the real schedule, Enabled, nothing submitted, its next run a year after its creation in its row, its band and its line; ADH-16 in the packaged application, ten searches and ten orders of the list of three hundred schedules and twenty changes of the window of their Overview, in the reports `adh-16-list-performance.json` and `adh-16-overview-performance.json`; and the guard, with the PATCH the controller sends the schedule it validated at each look, of that schedule by its name, left out and bounded, of no other scope, no POST of a backup, and only reads with the Schedules and then the Overview open for a period of the reads each. 30 cases |
-| `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the backups that name it, by how each ended; the synthetic ones, which are late; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known, and one a synced backup names that the installation does not have, said absent by the list and by the workspace of the backup; no way to select, edit, delete or set as default; the sections in the details of the host, the link of each of the two kinds leading to its view with the drawer gone and no error in the files of the log; since the first pull request of T5.1, the nine entries under Velero and the tabs of the group |
-| `velero-e2e-volumes` | The backup repositories, the pod volume backups and the pod volume restores, on the fixtures that exist, where none of them is: the three lists empty in the installation of the views, each saying of what it is the list; the repositories of the installation of the demo, none since no backup of the file system ran; the reads of the pod volume operations counted on the API server, one list of a family at each read while its list is shown, and none while the list of the backups or the Overview is; nothing written. 4 cases, 312 seconds alone in the packaged application on 2026-10-27, 273 of them the waits of the reads it counts, and 312 seconds in the run of the pattern of the hosted job that day; on the hosted runner, 289.88 seconds in the first run of the job, on 2026-10-27, and 290.73 in the second, as the reporter of the job prints them |
-| `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
-| `velero-e2e-gate` | The gate of the writes: off when the session starts, on every page of the group; on through the dialog of the host, which names the cluster, its context and the namespace, and not before the dialog is answered; off when another installation is selected, when the dialog is left, and when the application is started again; each frame of a cluster with a gate of its own; on v2, every request bound to the frame it comes from by the address of the frame that a handler of the main process reads, a request of the second frame for the first cluster refused; nothing of it in the store, and nothing written to the cluster |
+| `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the backups that name it, by how each ended; the synthetic ones, which are late; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known, and one a synced backup names that the installation does not have, said absent by the list and by the workspace of the backup; no way to select, edit, delete or set as default; the sections in the details of the host, the link of each of the two kinds leading to its view with the drawer gone and no error in the files of the log; since the first pull request of T5.1, the nine entries under Velero and the tabs of the group, eleven since the first of T5.2 |
+| `velero-e2e-repositories` | The nine backup repositories of the views, read by the suite with `kubectl` in their namespace before the page: the cells of each row against what the cluster holds of it, the last maintenance how long ago by two readings of the clock with the mark of a newest one that failed; the orders of the readiness and of the last maintenance, each both ways; the search by a word of a message, of the readiness, of the type and of a maintenance that failed; the view of the repository whose newest maintenance failed, its three maintenances newest first with their durations and message; the next maintenance of each of the nine, due, late by how long, due in how long or why none is; the identifier of the one of restic as written; the details of the host, which read as the row and lead to the view, with the drawer gone; what used the real repository of the installation, its pod volume backup and its pod volume restore, each a way and back; no way to select, edit or delete a repository, and no control that writes in its view; nothing written. 10 cases |
+| `velero-e2e-volumes` | The backup repositories, the pod volume backups and the pod volume restores, on the fixtures that exist, where none of them is: the three lists empty in the installation of the views, each saying of what it is the list; the repositories of the installation of the demo, none since no backup of the file system ran; the reads of the pod volume operations counted on the API server, one list of a family at each read while its list is shown, and none while the list of the backups or the Overview is, which is the count of KIND-13 of SPEC-0014 on the API server as well since the third pull request of T5.1; since the second pull request of T5.1, one list of the pod volume backups at each read while a backup is open and none of the pod volume restores, and the converse while a restore is open, each window begun once the band of the view was answered; nothing written. 4 cases, 312 seconds alone in the packaged application on 2026-10-27, 273 of them the waits of the reads it counts, and 312 seconds in the run of the pattern of the hosted job that day; on the hosted runner, 289.88 seconds in the first run of the job, on 2026-10-27, and 290.73 in the second, as the reporter of the job prints them. 5 cases since the second pull request of T5.1: 407 seconds alone in the packaged application on a second Linux machine on 2026-10-29, and 407 in the run of the pattern there, and 413.29 seconds on the hosted runner, in the first run of the job of the pull request, as the reporter of the job prints them; since the fourth pull request of T5.1, the three lists empty in the installation of the defaults, the one repository of the demo, Ready, read by its labels, rows in the lists of the views, and the band of the mapped restore in rows; since the fifth pull request of T5.1: the pod volume backup of the name of the daily backup read on the cluster before the band says none, its owner reference naming the backup its labels do not; the view of a pod volume backup of each phase with what the phase means; the band of the backup in progress counted by phase, ten rows and ten more, each a way and back; the one pod volume backup of a backup that partially failed, with its message and no repository; the details of the host of a pod volume backup and of a pod volume restore; the pod volume backup of the real backup of the volume as the cluster holds it, and the way to its repository and back; the pod volume restore of the real restore of the volume and the real repository, with its cells and its last maintenance, as the cluster holds them; the way of the details of the host to the view, with the drawer gone; no way to select, edit, cancel or delete in the lists, and no control that writes in the views. 13 cases; since the second pull request of T5.2, the band of the backup in progress read by its first half, the second holding its twelve data uploads |
+| `velero-e2e-scale` | A thousand backups, a thousand restores and two thousand pod volume backups: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed; the view of the backup of two hundred operations opened twenty times with its band whole, within the budget, its family listed at each read and at no opening; one list of the pod volume backups at each read while their list is open, none of the pod volume restores and none of either while the Overview is, and nothing of a pod or of a Job read, counted on the API server where no controller runs, after the control that the counters see a list of the pods and one of the Jobs that `kubectl` makes. 12 cases; since the second pull request of T5.2, the two hundred data uploads of the same namespace, their list measured as the one of the pod volume backups, one list of them at each read while it is open and none of the three other families, and none of the four while the Overview is. 13 cases |
+| `velero-e2e-data-movement` | The data uploads and the data downloads of the views, on the CRDs of the release alone: their lists against what the cluster holds of each, the data mover not set said Built-in and one the release does not run marked as not known; the view of a data upload of each phase with what the phase means; the twelve data uploads of the backup in progress in the second half of its band, ten and ten more, each a way and back; the way from the data download that completed to the data upload of its snapshot and back, and nothing said of one whose snapshot no data upload names; what a data movement New waits for; the details of the host of each kind and their way to the view; one list of a family at each read while its list or a view that shows it is open, none of the other, and neither while the Overview is, counted on the API server; no way to select, edit, cancel or delete, by pointer or by keyboard, and no control that writes in the views; nothing written. 9 cases |
+| `velero-e2e-actions` | The actions of SPEC-0017, on the CRDs of the release alone, where no controller runs (ACT-11): Back up now in the view of the schedule with a history of the installation of the views, which with writes off fills the form, asks no review for Enter, leads to the target bar and writes nothing; the review, whose text is the one the builder makes of the schedule as the API server holds it, left by Escape and by its command, nothing written; the creation, exactly one POST of a Backup answered 201 and no other write of any kind of Velero, every field of the text with the same value in the object and no other field in its metadata but the ones the API server writes of every object, the words that Velero has not read it after thirty seconds of reads, and the way to its view, which takes the place of the workspace; the backup in the history of the schedule at the next read (NOW-05); a name already taken, a POST answered 409, said with the words of the main process, the way to the backup that has it, and a name proposed of the time the creation failed, to the second, as the command line proposes one (NOW-04, whose name of the next second, when the name taken is the one of that second, is proven at the unit layer); the reader of a part, as a second entry of the catalog, shown the review and refused at the creation with the words of what it may not do, writes left on and nothing written; and, once the suite removed the backup it created, the objects of Velero as they were. The workspace in both themes, at every size and with the keyboard alone (ACT-10) is in the pre-review. 8 cases; since the third pull request of T4.3, Create backup in the header of the list of the Backups, which with writes off offers in its menu the storage locations a backup can go to, the one marked default first and chosen and the others by their names, says why the others cannot be chosen, offers each namespace the host lists, asks no review for Enter and writes nothing; the review of the fields set, whose text is the one the builder makes of them, with what the time to live means, left by Escape, nothing written; the creation, exactly one POST of a Backup answered 201 and no other write, every field of the text with the same value in the object, a text of a name and a namespace alone, no label and no annotation, the words that Velero has not read it, and the way to its view, whose way back is the list, shown again; a name the installation read said before the review, and at the creation a POST answered 409 that keeps the name, with the way to the backup that has it; and the reader of a part refused at the creation of a backup of the form as well, writes left on. 12 cases; since the third pull request of T4.7 of SPEC-0016, Create schedule in the header of the list of the Schedules, which with writes off fills the form, asks no review for Enter and writes nothing; the review of the schedule of the fields set, the flags written, whose text is the one the builder makes of them, left by Escape, nothing written; the creation, exactly one POST of a Schedule answered 201 and no other write, every field of the text with the same value in the object, the words that Velero has not read it, and the way to its view, whose way back is the list (REQ-241); a name the installation read said before the review, and a POST answered 409 that leaves the schedule that has it as it was, its resourceVersion unchanged, with the way to it; and the reader of a part refused at the creation of a schedule of the form as well; the workspace over the list, named in the address, and the list with its search and its scroll as they were once it closes; a review shown when writes go off dropped, and nothing created; the PATCH the controller of the environment of the demo sends the real schedule at every look left out of the counts of the schedules, as the writes leave it out. 17 cases; since the third pull request of T4.4 of SPEC-0017, Restore in the view of a backup that ended well, and its words why not for one that failed its validation, which with writes off writes nothing; the review of the restore of the fields set, with the namespace of the backup mapped, whose text is the one the builder makes of them, left by Escape, nothing written; the creation, enabled only once the name of the backup is typed, exactly one POST of a Restore answered 201 and no other write, every field of the text with the same value in the object, and the way to its view; a name the installation read said before the review, and a POST answered 409 that keeps the form, with the way to the restore that has it; Restore from the view of a schedule, of the newest of its backups that ended well, exactly one POST of its text; and the reader of a part refused at the creation of a restore as well. 22 cases; since the third pull request of T4.5 of SPEC-0017, Pause in the view of the schedule of the form, over the view and named in the address, which with writes off writes nothing; its pause, exactly one PATCH of the Schedule answered 200, the text of its review, and no other write but the PATCH of the storage location the runner sends in place of the server, the schedule read paused with nothing else of it changed, and the way to its view, which offers Resume; its resume with skip immediately proposed as the schedule carries it, one PATCH, the text of its review, the schedule read resumed with skip immediately as written, since no controller runs; and the reader of a part refused at the patch, with the words that it may not patch schedules there, writes left on and the schedule as it was. 25 cases; since the third pull request of T4.6 of SPEC-0017, no row of the list of the Backups that offers a deletion; Delete backup in the view of the backup of the form, which no controller started, with the words of its phase, offered with writes off as well, and disabled for the backup in progress with the words why, over the view and named in the address, which with writes off writes nothing and leads to the writes of the target bar; the review, whose text is the request of the backup, with what it means and its parts by their names, Delete backup enabled only once the name is typed as it is written, and not for one character less, one more, the name in capitals or after a space, Enter on each sending nothing, left by Escape and by its command, a new review asking for the name again, nothing written; the deletion, exactly one POST of a DeleteBackupRequest answered 201, the text of its review, no write of the backup and no other write of any kind of Velero, no DELETE, the request and the backup read at least ten times each after the creation, the request alone in the namespace, with every field of the text, a name generated from its prefix and no phase, the shape of the text written in the case, the backup as it was, the words that Velero had not started it, the way to the view of the backup, and a new review that says the request that is there; and the reader of a part refused at the creation of the request, its review saying that the other requests could not be read, nothing left that may have been created, the deletion offered again, writes left on and nothing written. 28 cases |
+| `velero-e2e-gate` | The gate of the writes: off when the session starts, on every page of the group; on through the dialog of the host, which names the cluster, its context and the namespace, and not before the dialog is answered; off when another installation is selected, when the dialog is left, and when the application is started again; each frame of a cluster with a gate of its own; on v2, every request bound to the frame it comes from by the address of the frame that a handler of the main process reads, a request of the second frame for the first cluster refused; nothing of it in the store, and nothing written to the cluster; since the third pull request of T4.7, the dialog names the Backup of the form and the Schedule of the form, each with where it is asked |
 | `velero-e2e-server` | The band of the server in the Overview: nothing asked of the cluster when the page opens, nor for a command that is not confirmed; the object shown before it is created, reached with the keyboard alone and left with Escape; the version and the plugins of the real server of the environment, against what the server wrote into the request, each plugin once; kept through a read and a visit to another page, and dropped with the installation; the answer and the confirmation in both themes, at every size; a request no server answers, said not answered after ten seconds and left as it was created; the refusal of the cluster to the reader of a part, with writes left on; what the API server counted of the requests, by verb and by code; the request the server processed, removed by the server five minutes after |
-| `velero-e2e-artifacts` | The tabs in the workspace of a backup and of a restore, on the real backup and the real restore of the installation and on the fixtures of the tabs. On the real operations: the five tabs in their order, as a list of tabs, with the tab in the address; nothing of a DownloadRequest created or read when a tab opens, by a click or by its address, nor for a confirmation that is left; the first state with writes off and on, and the confirmation with the object, reached and left with the keyboard alone; the four artifacts of each, loaded through a request of their own, which the cluster holds by the name the tab gave it, with the steps of a load, a load again as another request and a load cancelled as soon as its command is offered; the log in its lines, its levels, its search, its lines wrapped, a line copied and a hundred rows mounted at most, against the file the suite saved of it; the results against the counters of the status; the resource list, with the actions of a restore and the filter; the volume information of no volume; the log saved into a file through the dialog of the host, and nothing written when the dialog is left; the keys of the strip; the section in the details of the host; the tabs in both themes, at 900 by 650 and at twice the zoom, checked for what lies over something else, is wider than its room or is cut; what the API server counted of the requests, and each removed by the server before the suite ends. On the fixtures of the tabs: the log of the backup synced without one, a file the store does not have, said by the phase of a backup that ended, with no command to try again, and its results, resource list and volume information, which are the empty forms, said in the words of each viewer; the logs of the backup and of the restore that failed their validation, nothing written, through a request each; the results, the resources and the volumes of the backup synced with the artifacts made for the tabs, each message in its parts, the resources sorted with their counts and the filter, each volume with its details by the names the release writes; the load of its log cancelled once its request is in the cluster and asked again, with the steps in their order and the pages rising to the last; the log of 200,000 lines saved with the digest the fixtures counted, its levels, its searches, its long lines and the one across two pages, a hundred rows mounted at most; the measures of ten searches, ten filters and twenty scroll gestures on it, within their budgets, once sixty idle frames of the window say that a frame can be timed; another installation, where writes are off and nothing of the tabs is held, and in the installation of the views, with writes on for it, the backup whose storage location is not there, said before any request; the restore asked from a schedule that has no backup, nothing to ask for; and the reader of a part, as a second entry of the catalog, refused the creation. On v2 as well: every load that ended with its text came through the tunnel, the kubectl the host prepared for the version of the cluster; the identity of the views that may not port-forward, as a third entry of the catalog, refused at the port-forward with the words that name `create` on `pods/portforward`, its request left in the cluster and no kubectl left; the identity whose token an `exec` plugin of the test environment gives, with what the documentation lists for the writes and for a download through the cluster, as a fourth entry of the catalog: the log of the real backup loaded through the tunnel, one creation counted, no kubectl left, and the plugin run by the proxy of the host alone, `freelens-k8s-proxy`, and neither by its main process, where the extension runs, nor by the kubectl of the tunnel; a disable and an enable from the Extensions page, after which the procedures are registered once each, writes are off until they are turned on, the file of the store is saved once for one change, and a load is one creation, one kubectl and one answer; the cluster disconnected in the catalog with a load in flight, its kubectl ended, nothing of the extension counted on its API server for a minute, the cluster still disconnected, and connected again, a new frame with writes off; no kubectl of the application after the refused port-forward, after the disable, after the disconnection and at the end; and the memory of the frame with the log of 200,000 lines placed whole. Twenty-five second gestures over the suite, each a request but a cancel that lands before the creation, each told to the guard by its name, written into once by the server and removed by it before the suite ends, and at the end what a failed case left in the installation of the views, which no server reads, removed with the one helper of the suites that deletes; what each tab is to show the suite reads in `tab-fixtures.json`, beside the reports. 52 cases |
-| `pre-review` | Every view, 39 of them, in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page, and the eight views of the tabs by the check of a tab as well: a diagnostic tab with writes off, its confirmation, the log of the backup that failed its validation, which the store does not have, the resources of the real restore with their actions, the log of the synced backup loaded, searched and with a level chosen, the same with its lines wrapped, its results, and its volumes with a detail open; a page that stands still at the widths where its target bar goes to a second line, and at the ones where the bar of the log does; the journeys with the keyboard alone: the tabs from the way back, with the arrows, Home and End, Enter and the address, the command, the confirmation and the command that creates, the focus after a load, after a cancelled load and after a failure with no command to ask again, and the search by its label, with its count told to who does not see, against `tab-fixtures.json`, which it reads beside its reports. It tells its guard the requests it asks for, five, or six when its cancel lands after the creation, and waits for the server to remove them before its last case. Its reports are `pre-review-layout.json`, every layout with what the two checks found, and `pre-review-tabs.json`, the views with their requests, the facts of the journeys, the ledger and the items left to human judgment. Since the fourth pull request of T3.3, the list of the installation of the states of the adherence, the band of its held schedule, the band of its schedule with a name of 63 characters and its Overview, every mark of the adherence hidden from who does not see it with its word beside it, and the band read with the keyboard alone, from the list to the schedule, to the backup that holds it and back on the way back and on the row. 35 cases |
+| `velero-e2e-artifacts` | The tabs in the workspace of a backup and of a restore, on the real backup and the real restore of the installation and on the fixtures of the tabs. On the real operations: the five tabs in their order, as a list of tabs, with the tab in the address; nothing of a DownloadRequest created or read when a tab opens, by a click or by its address, nor for a confirmation that is left; the first state with writes off and on, and the confirmation with the object, reached and left with the keyboard alone; the four artifacts of each, loaded through a request of their own, which the cluster holds by the name the tab gave it, with the steps of a load, a load again as another request and a load cancelled as soon as its command is offered; the log in its lines, its levels, its search, its lines wrapped, a line copied and a hundred rows mounted at most, against the file the suite saved of it; the results against the counters of the status; the resource list, with the actions of a restore and the filter; the volume information of no volume, and since the second pull request of T5.1 the band of the volumes in the summary of each, which says what the release does with the pod volume operations of one that ended and that the installation holds none of it, with no row and no way, nothing written; the log saved into a file through the dialog of the host, and nothing written when the dialog is left; the keys of the strip; the section in the details of the host; the tabs in both themes, at 900 by 650 and at twice the zoom, checked for what lies over something else, is wider than its room or is cut; what the API server counted of the requests, and each removed by the server before the suite ends. On the fixtures of the tabs: the log of the backup synced without one, a file the store does not have, said by the phase of a backup that ended, with no command to try again, and its results, resource list and volume information, which are the empty forms, said in the words of each viewer; the logs of the backup and of the restore that failed their validation, nothing written, through a request each; the results, the resources and the volumes of the backup synced with the artifacts made for the tabs, each message in its parts, the resources sorted with their counts and the filter, each volume with its details by the names the release writes, and the two rows of a pod volume backup of a synthetic pod, which no operation of the installation matches, whose details offer no way and say nothing absent; the load of its log cancelled once its request is in the cluster and asked again, with the steps in their order and the pages rising to the last; the log of 200,000 lines saved with the digest the fixtures counted, its levels, its searches, its long lines and the one across two pages, a hundred rows mounted at most; the measures of ten searches, ten filters and twenty scroll gestures on it, within their budgets, once sixty idle frames of the window say that a frame can be timed; another installation, where writes are off and nothing of the tabs is held, and in the installation of the views, with writes on for it, the backup whose storage location is not there, said before any request; the restore asked from a schedule that has no backup, nothing to ask for; and the reader of a part, as a second entry of the catalog, refused the creation. On v2 as well: every load that ended with its text came through the tunnel, the kubectl the host prepared for the version of the cluster; the identity of the views that may not port-forward, as a third entry of the catalog, with the band of the volumes of the real backup read and not denied, refused at the port-forward with the words that name `create` on `pods/portforward`, its request left in the cluster and no kubectl left; the identity whose token an `exec` plugin of the test environment gives, with what the documentation lists for the writes and for a download through the cluster, as a fourth entry of the catalog: the band of the volumes of the real backup read and not denied, the log of the real backup loaded through the tunnel, one creation counted, no kubectl left, and the plugin run by the proxy of the host alone, `freelens-k8s-proxy`, and neither by its main process, where the extension runs, nor by the kubectl of the tunnel; a disable and an enable from the Extensions page, after which the procedures are registered once each, writes are off until they are turned on, the file of the store is saved once for one change, and a load is one creation, one kubectl and one answer; the cluster disconnected in the catalog with a load in flight, its kubectl ended, nothing of the extension counted on its API server for a minute, the cluster still disconnected, and connected again, a new frame with writes off; no kubectl of the application after the refused port-forward, after the disable, after the disconnection and at the end; and the memory of the frame with the log of 200,000 lines placed whole. Twenty-six second gestures over the suite, each a request but a cancel that lands before the creation, each told to the guard by its name, written into once by the server and removed by it before the suite ends, and at the end what a failed case left in the installation of the views, which no server reads, removed with the one helper of the suites that deletes; what each tab is to show the suite reads in `tab-fixtures.json`, beside the reports. The tab of the volumes of the real backup of the volume of the run, whose row of a pod volume backup leads to the pod volume backup of the installation that made it, and back. 55 cases |
+| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page, and the eight views of the tabs by the check of a tab as well: a diagnostic tab with writes off, its confirmation, the log of the backup that failed its validation, which the store does not have, the resources of the real restore with their actions, the log of the synced backup loaded, searched and with a level chosen, the same with its lines wrapped, its results, and its volumes with a detail open; a page that stands still at the widths where its target bar goes to a second line, and at the ones where the bar of the log does; the journeys with the keyboard alone: the tabs from the way back, with the arrows, Home and End, Enter and the address, the command, the confirmation and the command that creates, the focus after a load, after a cancelled load and after a failure with no command to ask again, and the search by its label, with its count told to who does not see, against `tab-fixtures.json`, which it reads beside its reports. It tells its guard the requests it asks for, five, or six when its cancel lands after the creation, and waits for the server to remove them before its last case. Its reports are `pre-review-layout.json`, every layout with what the two checks found, and `pre-review-tabs.json`, the views with their requests, the facts of the journeys, the ledger and the items left to human judgment. Since the fourth pull request of T3.3, the list of the installation of the states of the adherence, the band of its held schedule, the band of its schedule with a name of 63 characters and its Overview, every mark of the adherence hidden from who does not see it with its word beside it, and the band read with the keyboard alone, from the list to the schedule, to the backup that holds it and back on the way back and on the row. 35 cases; since the fifth pull request of T5.1, six views more: the three lists of the backup repositories and of the pod volume operations, the view of the repository whose newest maintenance failed with its maintenances and what used it, the band of the backup in progress with all of its rows, and the view of its pod volume backup that failed with a message of several lines. 38 cases; since the second pull request of T5.2, four views more, 50 in all: the lists of the data uploads and of the data downloads, the view of a data upload that failed with a message of several lines and the one of a data download with the way to the data upload of its snapshot; the band of the backup in progress whole, its two halves, and the band of the mapped restore with its eight data downloads, read with the keyboard alone through their ways and the links of their nodes. 39 cases; since the fourth pull request of T4.2, two views more, 52 in all: Back up now from the schedule with a name of 63 characters, its form and its review, the page looked at from its top, where its target bar is, and the field of the name whole in sight, or the beginning of the review in sight, once brought there; and Back up now with the keyboard alone, from the row of the schedule to its command, the name and Escape in it, Enter to the review, which has the focus, Escape back to the command that asks again, and the way back to the schedule and to its row, with writes on and nothing created. 41 cases; since the third pull request of T4.3, two views more, 54 in all: Create backup, its form and its review, with a name of 216 characters, the page looked at from its top and the field of the name, or the beginning of the review, in sight once brought there; and one journey more, a backup of the form asked with the keyboard alone, from the command of the list to the name and Escape in it, a namespace the host lists by its checkbox, Enter to the review, which has the focus, Escape back to the command that asks again, and the way back to the list, to the command, with nothing created. 43 cases; since the third pull request of T4.7 of SPEC-0016, two views more, 56 in all: Create schedule, its form and its review, with the longest name a schedule may have and an expression of 200 characters, the page looked at from its top and the field of the name, or the beginning of the review, in sight once brought there; and a schedule of the form asked with the keyboard alone, from the command of the list to the name and Escape in it, the expression, a flag by its checkbox, Enter in the expression to the review, which has the focus, Escape back to the command that asks again, and the way back to the list, to the command, with nothing created. 45 cases; since the third pull request of T4.4 of SPEC-0017, two views more, 58 in all: Restore, its form and its review, with a name of 216 characters and a target of 63; and a restore asked with the keyboard alone, from the command of the view of a backup to the name and Escape in it, which gives a proposal of its time back, a choice of the cluster-scoped resources, the review, the name of the backup typed and Escape in it, Escape back to the form, and the way back to the backup, with nothing created. 47 cases; since the third pull request of T4.5 of SPEC-0017, four views more, 62 in all: Pause and Resume, each its form and its review, a resume with its choice of skipping a run; and a pause and a resume asked with the keyboard alone, from the command on the line of the name of the schedule, the choice by its checkbox, Enter to the review, which has the focus, Escape back to the command that asks again, Escape back to the view, whose way back has the focus, and Escape back to the row of the schedule, with nothing sent. 49 cases; since the third pull request of T4.6 of SPEC-0017, three views more, 65 in all: Delete backup, its workspace and its review with the name typed, and the workspace of the backup of 63 characters of the views, in progress, which holds Delete backup back with its words; and a deletion asked with the keyboard alone, from the command on the line of the name of the backup, one press after Restore, Enter to the review, which has the focus, the text of the request the first stop after it, a region the keyboard reaches whatever its length, and the field of the name the second, the name typed and taken back by Escape, Delete backup and Do not delete it reached, Enter on Do not delete it and Escape on a new review back to the command that asks again, Escape back to the view, whose way back has the focus, and Escape back to the row of the backup, with nothing sent; the walk of the tabs from the way back passes Delete backup, enabled for a backup that failed its validation. 51 cases |
 
 The check of the layout, which every suite asks of the pages it shows, looks at
 the page and at what holds it, up to the frame of the cluster: what is wider
@@ -267,13 +338,24 @@ wider than its room, no part of a detail over another. The pre-review asks the
 check of a tab of the eight views of the tabs, beside the check of the page.
 
 The suites read the application and the cluster, and write to neither, but for
-two, each of which asks the extension for the write it proves. The suite of the
+three, each of which asks the extension for the write it proves, and the pre-review,
+which asks for the loads of the tabs it shows. The suite of the
+actions asks the extension to create Backups, and since the third pull request of
+T4.7 Schedules, in the installation of the views, on the CRDs of the release alone,
+and removes each one by its name, with its UID as the precondition of the deletion,
+through the helpers that remove a backup and a schedule a suite of the actions
+created; one whose creation the view did not say is removed by its name when it was
+created since the suite began. Since the third pull request of T4.6 it asks for
+DeleteBackupRequests as well, which no controller processes there, and removes the
+request it read by its name, with the UID it read as the precondition, and any other
+request of a backup whose deletion it asked, found by the label of the UID of the
+backup, when it was created since the suite began. The suite of the
 band of the server asks the extension to create a ServerStatusRequest, in the
 namespace of the installation, in a namespace of the fixtures and, refused, as the
 reader of a part. It leaves nothing behind. It waits for the server to remove the
 request it processed, which the release does when it looks at it again, five
-minutes after; and it removes the one no server looks at, with the one helper of
-the suites that deletes, which takes the requests of one kind, ServerStatusRequests
+minutes after; and it removes the one no server looks at, with the helper of the
+suites that deletes the requests of the extension, which takes the requests of one kind, ServerStatusRequests
 or DownloadRequests, that carry the label of the extension in a namespace of the
 fixtures, and nothing else. The suite of
 the tabs asks the extension to create DownloadRequests, of the artifacts of the
@@ -305,20 +387,24 @@ server, which ended 600 to 657 seconds after its last load; in the run of
 the twelve suites of the final runs of the same day, 789.8 seconds of the 1,862.7
 of the run, with a wait of 588 seconds, 617 after its last load, and the
 pre-review 714.5 seconds alone in those runs. After that wait, the suite removes
-with the one helper of the suites that deletes the DownloadRequests of the
-extension a failed case left in the installation of the views, which no server
+with the helper of the suites that deletes the requests of the extension the
+DownloadRequests a failed case left in the installation of the views, which no server
 reads, and says what it removed: nothing, in a run where every case passed. It
 saves the log of the backup and the one of 200,000 lines into a
 folder of the profile of its run, which goes with the run, through the dialog of
 the host, which it replaces in the main process of the application with one that
 answers what the case asks. The helper that runs
 `kubectl` for the suites refuses every verb but `get`. Each suite compares what
-the API server holds of Velero before and after: the version of every synthetic
-object, the identity of the objects of the real installation, the version and the
-status of the schedule its controller validated, and the absence of any request to
-Velero. A request is listed by its namespace, its kind and its name, and never
-read whole: the status of a DownloadRequest the server processed carries the URL it
-signed.
+the API server holds of Velero before and after, of ten kinds, the backup
+repositories, the pod volume operations and the data movement among them: the
+version of every synthetic object, the identity of the objects of the real
+installation, the version
+and the status of the schedule its controller validated, the version and the status
+of the real repository (its status alone when the server writes it at each pass,
+which the measure of the environment of 2026-11-02 says it does not), and the
+absence of any request to Velero. A request is listed by its namespace, its kind
+and its name, and never read whole: the status of a DownloadRequest the server
+processed carries the URL it signed.
 
 What is asked of the cluster is counted by the API server, not by the driver of
 the test: on v2 the reads of a frame of a cluster, the host's and the views' alike,
@@ -400,16 +486,21 @@ up, and the suite passes on its second start. The file goes when it is read.
 | Restores | `velero-views-<run>` | A restore as Velero keeps one it took: into two namespaces, in flight with a failure, with the schedule of its backup written beside the backup, the resources Velero excludes and the timeout it fills; one asked from a schedule that has no backup, which failed its validation; one of a backup that is not there any more |
 | Reader | `velero-views-<run>` | A service account that reads backups, schedules and storage locations of its namespace. Its token lasts two hours and its kubeconfig is in the private state for as long as the suites run |
 | Schedules | `velero-views-<run>` | One with a history: a backup a day for six days, two of them an hour from each other, and the newest that failed its validation and never started; one that names its time zone; three whose backups go to a location that is not there, to one that is read-only, and to the one marked default; two that Velero has not read, one of them created paused; one in the phase New, which the API has and the release does not write; one that was read, then paused and asked to skip; and, since the third pull request of T3.3 of SPEC-0013, two that submitted two days before the fixtures were started and have no backup, one of five fields, whose zone is not known for want of a submission with its backup in the installation, and an interval of six hours, overdue at every age of the environment. The ones Velero read carry `skipImmediately`, which it writes into every schedule it reads, and the last submission of the one with a history is the time its newest backup was created |
-| Second reader | `velero-views-<run>` | A service account that reads restores, schedules, storage locations and snapshot locations of its namespace, and not the backups |
+| Second reader | `velero-views-<run>` | A service account that reads restores, schedules, storage locations, snapshot locations, pod volume backups, pod volume restores, data uploads, data downloads and backup repositories of its namespace, and not the backups |
+| Reader of the README | `velero-views-<run>`, and the whole cluster | The identity of the role of the README that reads the views (REQ-288 of SPEC-0018), which the runner of the suites makes for its run and removes after it: a service account of the namespace bound to the Role of the README, `list` on the ten families there, and to its ClusterRole, `list` on the storage locations of the whole cluster. Its token lasts two hours |
 | Locations | `velero-views-<run>` | Storage locations: one that names its frequency and one that names none, each with a validation that is days old; one whose name and bucket have 63 characters and whose prefix has many parts; one without a status; one unavailable, with a message of three lines; one that names the Secret of its credential and the one of its certificate, with the validation and the sync turned off and an address that carries a query. A snapshot location with a phase, and one without a status that names the Secret of its credential. No Secret is among the fixtures |
 | Defaults | `velero-defaults-<run>` | Two storage locations marked default, the one that is read-only created first. The one the release would keep is the one created last; of two created in the same second it is not settled which. The suite reads when each was created, and expects what the view says of that |
 | Overview | `velero-overview-<run>` | An installation no controller reads, placed by the clock: a default storage location validated two days before, one that is unavailable, one that reports nothing; twelve schedules, of which one was refused, one was not read and names the location that is unavailable, one is paused, and two carry the time of the last backup the release asked for them; backups and restores that ended one hour to forty days before, some with a failure; operations in flight, at work, waiting with its place in the queue, and with a failure; a backup a client asked from the schedule that was refused, and a restore, which failed their validation and never started |
-| Long lists | `velero-scale-<run>` | A thousand backups and a thousand restores in every phase, spread over the thirty days before they were placed, each restore of one of the backups, and no storage location: nothing suggests the namespace, the operator names it |
+| Operations | `velero-views-<run>` | Twenty-three pod volume operations, each created after its owner, a backup or a restore of the views, with the UID the cluster gave it in its owner reference and its labels: thirteen pod volume backups of `backup-inprogress` in every phase and none, an empty uploader among them, one Failed of `views-history-4`, one InProgress of the backup of 63 characters, one Completed of `views-daily-20260901030000` whose UID label is of an earlier backup of that name, and seven pod volume restores of `restore-mapped`, one of the legacy controller of restic. Since the second pull request of T5.2, twenty-one data movements served under the second version of the group, each with the labels the CSI plugin writes, the name and the UID of its owner, the operation ID and, for an upload, the UID of its claim: twelve data uploads of `backup-inprogress` in every phase and none, one completed with the snapshot ID a data download restores, one of an empty volume, one that failed with a message of three lines, one of the preparing timeout and one with a data mover of its own; one InProgress of the backup of 63 characters; and eight data downloads of `restore-mapped` in every phase, one whose snapshot no data upload names. Every status is one the release writes in that phase, but New, which the CRDs admit and the release reads as no phase, with the fields its node agent writes together, a cancellation asked for each Canceling and Canceled, and the acceptance a preparing timeout fires on; their names are their owner's with five generated letters and digits, the same at every placement |
+| Repositories | `velero-views-<run>` | Nine backup repositories with the three labels the release writes: the kopia and the restic one of the workloads the operations name, one NotReady with a message of several lines, one with no status, one due, two of one triple, a name of 63 characters and one of 133. One pod volume backup names a triple of no repository |
+| Long lists | `velero-scale-<run>` | A thousand backups and a thousand restores in every phase, spread over the thirty days before they were placed, each restore of one of the backups; 2,000 pod volume backups, two of each of the first nine hundred backups and two hundred of the last, each owned by its backup, in the phases the release writes in turn; since the second pull request of T5.2, 200 data uploads, one of each of the two hundred backups before the nine hundred and first, in the phases in turn; and no storage location: nothing suggests the namespace, the operator names it |
+| Volume | `velero-source-<run>`, `velero-restored-<run>`, `velero-demo` | A pod whose `emptyDir` named `data` holds a megabyte of random bytes and their checksum, annotated for the file system backup; a backup of it, which makes the node agent back up the volume and the server make the repository of the namespace, Ready and maintained once a week; and a restore of it into the destination namespace, whose pod prints the checksum of what was restored. Placed by the live fixtures, found by their labels |
 | Tabs | `velero-demo` | Two backups the server syncs from files the store is given: one that failed in part, with the four artifacts made for the tabs, and one that completed with no log. A backup and a restore the server refuses for naming both kinds of selector, and a restore asked from a schedule that has no backup. See [the fixtures of the tabs](#the-fixtures-of-the-tabs) |
 | Adherence | `velero-adherence-<run>` | An installation no controller reads and nothing suggests, placed by the clock in two phases: eight schedules, awaited, overdue by a day and more with no backup of its submission, held beyond the grace by a backup in progress asked by hand, submitted at every look, its zone derived from the backup of its own submission, with no submission and the offset of that one, with its last submission a day after the placement, and one with a name of 63 characters and an expression that names its zone. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
 | Two offsets | `velero-adherence-split-<run>` | Two schedules of five fields whose submissions were named two hours east of UTC and at UTC, the older twenty seconds before the newer, placed by the clock in two phases |
 | Budget of the adherence | `velero-adherence-scale-<run>` | Three hundred schedules of the expressions of the measure of the unit run, each with the backup of its submission named two hours east of UTC, placed by the clock in two phases, and no storage location |
-| Real schedule | `velero-demo` | One schedule the controller of the installation validates, `@every 8760h`, whose next run is a year after its creation, with the spec of the real backup as its template and no `skipImmediately`, which the controller writes. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
+| Real schedule | `velero-demo` | One schedule the controller of the installation validates, `@every 8760h`, whose next run is a year after its creation, with the spec of the real backup as its template and no `skipImmediately`, which the controller writes; on the CRDs of the release alone its counterpart, Enabled, with `skipImmediately` written as the controller writes it. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
+| Counterparts | `velero-demo` | On the CRDs of the release alone, what the controllers of the installation of `pnpm demo:up` leave in it, by the names of the run, each as the release leaves it: the schedule validated, the backup taken and its restore, the backup of the volume and its restore, the backup and the two restores refused, the two backups synced from the store; the storage location with the two times the runner of the views writes once a minute, standing in for the server. Placed by `fixtures-static`; see the amendment of 2026-11-07 of SPEC-0015 |
 
 They are put in place by `pnpm e2e:views`, once: a second run finds them. The
 times of the history of a schedule are counted back from when the fixtures were
@@ -429,7 +520,13 @@ objects of its own run from that namespace and creates the ones of now; it remov
 nothing when it finds there what is not of its run, and places nothing by the
 clock in another namespace, the others of the run among them. The ones of the
 adherence are placed in two phases, by the clock of this machine read when their
-placement starts, as [their section](#the-fixtures-of-the-adherence) says.
+placement starts, as [their section](#the-fixtures-of-the-adherence) says. The
+long lists are placed in two phases by their owners: the backups and the restores
+first, then the pod volume backups, made with the UIDs the cluster gave the
+backups, in one create; their digest is made with placeholder UIDs. When they are
+placed again, the pod volume backups are removed first and read until they are
+gone, then the rest, which the collector of the cluster would otherwise remove
+behind the new ones.
 What the suites expect of them holds for the twelve hours: an operation of three
 hours before is of the last day until the fixtures are placed again. The
 operations that never started are at the time they were created, which is the
@@ -439,7 +536,9 @@ order among themselves.
 No controller validates a synthetic location: what one reports is of a
 validation that is days old, whatever the age of the environment, and the views
 say that it may be out of date. The validation that is fresh is the one of the
-location of the installation, which its controller validates every minute. The
+location of the installation, which its controller validates every minute, and
+which on the CRDs of the release alone the runner of the views writes once a
+minute, standing in for the server. The
 locations of the namespace of the phases have a phase and no validation time,
 which the release writes together: they are what a view shows of a status that
 carries one without the other.
@@ -517,13 +616,56 @@ the answers 50.4 ms at the 95th percentile, the longest frame of a gesture 21.3 
 50, 31 rows mounted, an idle frame of 16.7 ms at the median.
 
 Their [workflow](../../.github/workflows/views-tests.yaml) builds Freelens from
-source at the commit of the validation target, or takes the build the cache keeps
-for that commit, and runs every suite, the pre-review and FND-10 on the hosted
-runner for every pull request, in one run of the runner of `pnpm e2e:views`, within
-two hours; then, whatever the suites found, once the environment came up, it
-removes the fixtures of the tabs with the cleanup of the fixtures and verifies the
-installation they leave. It uploads the directory of their screenshots and reports,
-`e2e-artifacts/`, as `views`, and nothing else:
+source at the commit of the validation target, through the
+[action](../../.github/actions/build-freelens/action.yaml) it shares with the
+integration tests, or takes the build the cache keeps for that commit, and runs
+the suites, the pre-review and FND-10 on the hosted
+runner in six parts side by side: the suite of the
+artifacts; the pre-review; the suites of the volumes, of the server and of the
+repositories, the three parts on the environment with its fixtures and the server of the release, for what only a
+server makes, the files of the store, its bandwidth, a repository and a volume it
+backed up; and the eleven other suites with FND-10, in two parts, and the suite of the actions in a third, on the
+CRDs of the release alone with no controller, where the static fixtures hold the counterparts of what the
+controllers leave in the installation of the demo, each as the release leaves it,
+and the runner stands in for the server at the storage location of the
+installation, writing once a minute the two times the server writes. A first job
+decides which parts a run takes, by
+[`views-plan.mts`](../../e2e/scripts/views-plan.mts) and the rules of
+[`views-parts.json`](../../e2e/views-parts.json): every part on main, every night
+and on demand; on a pull request, the parts its changed files reach. A change to
+the runner, the environment, the build of Freelens, the main process, the
+toolchain or the rules runs every part, and so does a file no rule knows; a
+document, a unit test, another
+workflow or the configuration of a linter runs none; a view of the renderer or a
+module of common runs the two parts without a controller, with the part of the
+artifacts or of the volumes and the server when it is one of theirs or one of the
+state, the reads, the way between the processes or the frame those parts rest on;
+a style sheet or a component of the frame of the views runs the pre-review with
+them. The pre-review, which alone drives the keyboard and both themes over every
+view, runs on such a pull request, on main after every merge and every night: a
+change to the structure of one view meets it in the run of main after its merge. Each part is a
+job that brings up an environment of its own, places its fixtures and runs its
+suites in one run of the runner of `pnpm e2e:views`, within two hours; then, on
+the environment with its fixtures, whatever the suites found, once the environment
+came up, it removes the fixtures of the tabs with the cleanup of the fixtures and
+verifies the installation they leave. A run takes about as long as its longest
+part: on 2026-11-06 the one job took 57 minutes, and the first run of four parts
+21, its longest part 20 minutes 56 seconds, each part about eight minutes of
+environment, placement and cleanup beside its suites. The parts were divided by
+the time of their suites in the one job: 853, 729, 745 and 610 seconds, the 610
+again into the 375 of the five suites that read the server, 380 with FND-10, and
+the 230 of the five that read none, which the part without a controller ran
+together. On 2026-11-07 that part was divided again by the times of its eleven
+suites in the run of main of that day: 317 seconds of suites for the adherence,
+the Overview, the journey, the two readers and FND-10, and 337 for the schedules,
+the locations, the restores, the gate, the scale and the preferences, of the 761 of
+the step that placed the fixtures and ran them. The job
+`views in Freelens v2` passes when the parts the first job chose passed, or when it
+chose none, and a unit test fails if a file of the suites is in no part or in two, a
+session of the integration test in any, or a suite that reads a controller in a part
+that has none. Each part uploads the
+directory of its screenshots and reports, `e2e-artifacts/`, as `views-` and the
+name of the part, and nothing else:
 the private state of the environment is elsewhere, and a test of the workflow
 fails if a path of it is ever named there. Since the pin moved to a commit of the
 host with the fix of its list layout, the scale suite holds BACK-12 and REST-11 to
@@ -624,13 +766,21 @@ anything is asked to be deleted, so that the server makes the backup it deletes
 the folder with. The real backup and the refused one are deleted by the same
 rules, the restore without a backup by its identity, and so is the schedule the
 controller validated, which the journal then forgets: the verification of the
-installation refuses one that holds a schedule. Before the namespaces of the run
-are removed, one check: none of the eleven operations of the run is in the
-installation, each looked for by its name, nor the schedule, nor a backup that
-carries its label, which would be a submission nothing here removes; and the store
-holds none of the twenty keys the client may ask of the run, nine of the fourteen
-the server wrote for the real backup and the real restore and the eleven of the
-tabs. A cleanup stopped at
+installation refuses one that holds a schedule. The backup of the volume goes by
+the same rules, with its restore; its pod volume operations go with their owners,
+waited for two minutes at most; the repository of the volume, which the record of
+the run names, is deleted by its UID once that backup is gone, and refused when its
+labels or its UID are not the recorded ones. The data of the repository stays in
+the bucket until `pnpm demo:down`. Before the namespaces of the run are removed,
+one check: none of the fourteen operations of the run is in the installation, each
+looked for by its name, nor the schedule, nor a backup that carries its label,
+which would be a submission nothing here removes, nor a pod volume operation of the
+volume or its repository, each by its labels; and the store
+holds none of the twenty-nine keys the client may ask of the run, nine of the fourteen
+the server wrote for the real backup and the real restore, the eleven of the
+tabs, and the nine the server writes for the backup and the restore of the volume,
+laid out as the ones of the real operations; the keys of the repository of the
+volume, under the prefix of the location, are not asked. A cleanup stopped at
 any point is taken up by the next from what that one finds. A run placed with the
 fixtures of the adherence is cleaned by scripts that know them: scripts older than
 them know neither the three namespaces of the adherence nor the schedule the
@@ -638,15 +788,24 @@ controller validated, would call the run cleaned with that schedule left in
 `velero-demo`, and the verification would then refuse the installation. Nothing in the scripts
 removes a key of the store: when files of the tabs are in the store and no backup
 comes of them, or a key is left, the cleanup stops and names them, and the way out
-is `pnpm demo:down`. The hosted job of the views places the fixtures of the tabs
-on every run and, after the pre-review, runs this cleanup and then the
+is `pnpm demo:down`. Each part of the hosted job of the views on the environment
+with its fixtures places the fixtures of the tabs on every run and, after its
+suites, runs this cleanup and then the
 verification of the installation it leaves, before it uploads the reports and
 takes the environment down: the removal of the namespaces of the views runs on the
 hosted runner for the first time with the pull request that added the step. In
 the final runs of that pull request, on 2026-10-07, after the twelve suites and
 the pre-review, the cleanup took 118 seconds, 42 of them the two deletions the
 server carried out, and the verification 22; on the hosted runner, on 2026-10-13,
-the step took 112 seconds for the cleanup and 9 for the verification. After this
+the step took 112 seconds for the cleanup and 9 for the verification. With the
+volume of the run, on 2026-11-02 on the second Linux machine, `pnpm demo:up`
+took 134 and 149 seconds, the pod volume backup and restore of the volume 11
+seconds from the acceptance of the one to the completion of the other; the
+cleanup after the suites 151 seconds and the verification 10; and `pnpm e2e`,
+which runs the live flow and its cleanup twice more, 384 seconds on 2026-11-04.
+The cleanup after the transport proof waits for the repository of the volume to be
+Ready before it asks the deletion of the backup of the volume, six minutes at most
+(SPEC-0014, the decisions of 2026-11-04). After this
 cleanup, or after `pnpm e2e`, the fixtures of the demo are gone with the fixtures
 of the tabs: `pnpm e2e:views` refuses by name, in a few seconds, until the two
 fixture steps of `pnpm demo:up` put them back, which takes about a hundred
@@ -693,7 +852,12 @@ Nothing but the suite reads the cluster while a suite of the views runs: the gua
 of a suite counts on the API server the reads of the kinds of Velero in the whole
 cluster, whoever sends them. A read of the requests of every namespace once a
 minute, made beside the suites to watch them, failed the guard of the suite of the
-schedules.
+schedules. The one exception is the runner of the views on the CRDs of the release
+alone, which stands in for the server at the storage location of the installation:
+once a minute a read of that location by its name and a PATCH of it, which the
+guard leaves out as it leaves out the ones of the server, and which a window that
+compares reads takes again, as it takes a read anything else asked in the same
+time.
 
 Every suite starts only when the cluster holds the fixtures it needs, each probed
 by its name, the five of the tabs and the schedule the controller validated among
@@ -774,7 +938,10 @@ written. The placement stops by name on a schedule of another run, on one of thi
 whose expression, pause or template are not the ones the scripts make, as other
 scripts may leave on an environment kept for days, on one the controller refused, on one that carries a last submission or whose label a backup
 carries, and on one whose next run is less than a day away, which says to create
-the environment again. The cleanup of the fixtures removes it by its identity, and
+the environment again. The placement of the views stops as well when the next
+maintenance of the repository of the volume is less than a day away, about six days
+after `pnpm demo:up` with `168h`, and says to create the environment again. The
+cleanup of the fixtures removes the schedule by its identity, and
 its end check names it when it is left. Before a suite takes its first snapshot,
 the helpers stop it when the schedule submitted since its placement, by its last
 submission or a backup that carries its label: the suite would take that backup
@@ -836,8 +1003,8 @@ starting no application, which run alone with `pnpm exec vitest run --config
 vitest.integration.config.ts e2e/__tests__/velero-e2e-adherence.tests.ts -t
 "what the suite of the adherence expects, computed by the rules of the
 controller"`. The suite reads the cluster only with `kubectl get` in a namespace
-and the counters of the API server, never inside a measure, and runs in the run
-of the pattern `velero-e2e`, as the hosted job runs it (LM6 of SPEC-0013). It
+and the counters of the API server, never inside a measure, and runs in the part
+without a controller of the hosted job (LM6 of SPEC-0013, and its amendments). It
 took 137.97 and 132.81 seconds alone on the machine of the runs on 2026-10-26, 4
 minutes 11 seconds and 4 minutes 1 second with the build, the pack and the start
 of its runner, 133.85 seconds in the run of the pattern on 2026-10-27, and
@@ -852,7 +1019,21 @@ the first pull request of T5.1 brings the run of the pattern to 55 minutes 18
 seconds on the machine of the runs on 2026-10-27, its suites 53 minutes 31
 seconds, 16 files and 252 cases; on the hosted runner, in the first run of the
 job that day, 47 minutes 10 seconds, its suites 46 minutes 2 seconds, 16 files
-and 252 cases, in a job of 52 minutes 48 seconds of its 150.
+and 252 cases, in a job of 52 minutes 48 seconds of its 150. With the band of
+the volumes, the second pull request of T5.1 adds two cases to the suite of the
+tabs and one to the suite of the volumes, 16 files and 255 cases: on 2026-10-29,
+on Freelens 2.0.0, 48 minutes 7 seconds on a second Linux machine, Ubuntu 26.04
+under WSL 2, its suites 46 minutes 47 seconds, and on the hosted runner, in the
+first run of the job of the pull request, 50 minutes 49 seconds, its suites 48
+minutes 47 seconds, in a job of 56 minutes 8 seconds of its 150. The third pull
+request of T5.1 adds no case, 16 files and 255 cases: on 2026-11-02, on Freelens
+2.0.0, 48 minutes 10 seconds on the second Linux machine, its suites 46 minutes
+48 seconds, and on the hosted runner, in the first run of the job of the pull
+request, 49 minutes 38 seconds, its suites 48 minutes 16 seconds, in a job of 55
+minutes 43 seconds of its 150. The fourth pull request of T5.1 adds one case to the
+suite of the restricted restores, 16 files and 256 cases: on 2026-11-02, on
+Freelens 2.0.0, 50 minutes 2 seconds on the second Linux machine, its suites 47
+minutes 56 seconds.
 
 ## Critical Journeys
 
@@ -917,7 +1098,7 @@ and synthetic-status outcomes supplement, not replace, real-controller proof.
 | Validation failures | Missing BSL and invalid inputs; distinguish actual controller result from forced presentation | Live where reproducible; otherwise labelled synthetic |
 | Future/bad data | Unknown enum, impossible timestamps, negative counts, contradictory phase/progress | Unit/component mocks, not schema-invalid cluster fixtures |
 | Isolation | Equal names in two namespaces/clusters, recreated UID, removed selection and late completion | Unit plus authorized local integration |
-| Permissions | CRD list denied, namespace-only reads, one-kind list denied, diagnostic create denied, certificate Secret denied | Restricted local credentials and injected typed failures |
+| Permissions | CRD list denied, namespace-only reads, one-kind list denied, diagnostic create denied, certificate Secret denied; the two roles of the README, the reader refused a backup at the read of its schedule and the patch of a schedule, the operator allowed every action | Restricted local credentials and injected typed failures; the identities of the two roles of the README |
 | Network | Authenticated direct/in-cluster S3, Host/path/query/SNI, negative signature/expiry, CRC32/multipart integrity, CA inline/reference, redirects, DNS policy, timeout/cancel and byte limits | Local runtime and loopback contract servers |
 | Safety/privacy | BackupContents, generic delete/bulk, write-gate bypass, sensitive URL/Secret sentinel in diagnostics | Main/component plus packaged-app tests |
 
@@ -944,6 +1125,14 @@ include child-process refusal checks with an empty executable path, proving that
 wrong targets and malformed journals stop without external tools. Co-locate future pure/main
 tests with their modules and reuse the integration directory convention for packaged
 journeys. No actual Electron installation result is implied by stubbed bundle tests.
+
+The build test holds each file the host loads, `dist/main.js`, `dist/renderer.js`
+and `dist/renderer.css`, under a ceiling of bytes, set a quarter above its size when
+the ceiling was set ([REQ-317](../specs/SPEC-0018-release-readiness.md)), with that
+size and its date written beside it. A change that passes a ceiling fails the unit
+run until the ceiling is moved, in the pull request that needs it, with its reason
+written beside it in place of the size and said in that pull request. No other file
+of the build has one: the host loads these three alone.
 
 Mock the host boundary for unit tests; use a transport interface for Kubernetes
 status codes and cancellation. Small local HTTP/TLS servers exercise streaming and
@@ -1046,6 +1235,22 @@ the runs, on 2026-10-15, on the final code of the slice with Vitest 5.0.5, the
 thousand took 42.7 ms at the 95th percentile and 31.5 at the median, 102 on the
 first call, and the one schedule 0.04 ms.
 
+The measure of the index of the operations of the volumes,
+[`volume-index.measure.ts`](../../test/volume-index.measure.ts), times the index of
+an installation of 1,000 backups, 1,000 restores and 2,000 pod volume backups made
+for a read, each read a new array of the same objects, and the band of a backup of
+200 of them found in it, twenty times after five that warm them, each within 250
+milliseconds at the 95th percentile (KIND-18 of SPEC-0014, REQ-194); beside the
+times it asserts that a tick of the clock answers the index of the read, that a
+read makes a new one, and that the band holds the 200, each counted once. It prints
+its numbers as one line, `KIND-18 unit`, before anything is asserted, and it imports
+the source, as the other measures do. The 200 data uploads of the requirement join
+it with the data movement. In the unit run of the second pull request of T5.1, on
+2026-10-29, at a load of 3.3, the index took 8.64 ms at the 95th percentile and 4.97
+at the median, and the band 0.05 ms; on a quiet machine, a second Linux machine at a
+load of 0.50 after the rebase on the move to Freelens 2.0.0, 3.49 ms at the 95th
+percentile and 2.11 at the median, and the band 0.04 ms.
+
 In the packaged application ADH-16 is measured by the suite of the adherence, on
 the installation of the three hundred schedules of the same expressions, each
 with the backup of its submission: three interactions that warm the list, then
@@ -1147,12 +1352,13 @@ newest one and to the one that holds; the line
 of time of the history is the one of the tests of the view, unchanged.
 [The test of the stylesheet](../../src/renderer/components/views.module.test.ts)
 reads the rules of the room of a list and holds the columns each gives up at 1,200,
-1,000, 760 and 640 pixels, none of the name, paused, the next run, the adherence and
-the validation at any width, and a width of their own for paused, the next run, the
-adherence, the last submission and the age from 1,000 pixels. The reader is held to
-the header Date, read with the middle of the request, absent, not a date and on a
-refused answer, and to no path that is not of the kinds of Velero, a Deployment
-among them; the state, to the offset kept, carried and dropped with the installation
+1,000 and 640 pixels, the installation, the last submission and the newest backup at
+1,200 since 2026-10-26, and none at 760, none of the name, paused, the next run, the
+adherence and the validation at any width, and a width of their own for paused, the
+next run, the adherence, the last submission and the age from 1,000 pixels. The
+reader is held to the header Date, read with the middle of the request, absent, not
+a date and on a refused answer, and to no path that is not of the kinds of Velero,
+a Deployment among them; the state, to the offset kept, carried and dropped with the installation
 and the time of the API server taken from the newest answer that listed.
 
 The second pull request of the third slice of the adherence puts the signal in the
@@ -1451,6 +1657,24 @@ fallback of kubectl: it downloads the log. Until T0.7 the router had `create` al
 and the downloader both verbs, as the WebSocket of the client of the extension
 needed them; the identities follow the kubectl of the host since the amendment of
 2026-10-16 of SPEC-0015. The accounts and their roles are removed with the run.
+
+Since the pull request of the identities of T6.1 (REQ-288 of SPEC-0018), the session
+of the extension in the proof over HTTP, with its request of the version of the
+server, and in the proofs of the actions runs as the operator of the README: an
+account of the namespace of the installation bound to the Role of the README for the
+views, the tabs, a download through the cluster, the version of the server and every
+action, and to its ClusterRole, with a credential of two hours, made for the run and
+removed with the four identities above. Its context holds the kubeconfig of the
+environment beside it, for what the role does not allow the proofs and the session
+never asks: the metrics of the API server, the ConfigMaps and the namespace of a
+restore, the backups the proof of a deletion makes, the change another hand makes to
+a schedule, and the removals that delete an object, which the extension never asks.
+A backup a proof made goes, as before, through a DeleteBackupRequest as the extension
+writes it, sent with the kubeconfig of the environment and read until it is gone with
+it, so that the teardown does not depend on the role the run proves; the reads that
+check what the session made stay with the operator. The modes over TLS run with the
+kubeconfig of the environment as they did, since the authority of the second is in a
+Secret, which the role does not read.
 
 ```sh
 pnpm test:unit

@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { confirmDialogs } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { REQUEST_LABELS, REQUEST_PREFIX } from "../../common/ipc";
@@ -38,7 +39,7 @@ const location = (name: string, namespace: string, provider?: string) => ({
 
 function answers(more: Record<string, Answer> = {}): Record<string, Answer> {
   return {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list(location("default", A, "aws"), location("default", B, "aws")),
     ...Object.fromEntries(
       [A, B].flatMap((namespace) => [

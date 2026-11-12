@@ -1,6 +1,6 @@
 // What stands for the host in the tests: the API of `@freelensapp/extensions` as the host gives it on its global,
 // written from its source at the validation target, freelensapp/freelens at
-// 7801fb10a5f20af308093b39e5f79cd6e8c3461d, with a record of what was asked of it. Every part names the file
+// b9b53e16056578c5407312eba5823a089972f6d5, with a record of what was asked of it. Every part names the file
 // and the lines it follows. A namespace has the names it has a double for and refuses any other, recorded with
 // what the scaffold must not reach: a name the SDK of v2 does not export has no double, since a double of such a
 // name does not compile (the `satisfies` of each namespace below), so a component or a function the host
@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { reaction, toJS } from "mobx";
+import { observable, reaction, toJS } from "mobx";
 import { addressChanges, addressPath, addressSearch, createPageParam, navigate, resetAddress } from "./host-address";
 import { hostComponents } from "./host-components";
 
@@ -792,6 +792,25 @@ export const Main = namespace("Main", {
   Ipc: IpcMainStub,
 } satisfies Exported<typeof Sdk.Main>);
 
+// `namespaceStore` of the host (packages/core/src/renderer/components/namespaces/store.ts at the validation target): the
+// namespaces the frame of the cluster lists, each an object of the host with its name and its labels, which a test
+// gives. The store is the host's: the extension reads its items and asks it nothing.
+export const hostNamespaces = observable.array<{ name: string; labels?: Record<string, string> }>([], { deep: false });
+// Whether the store loaded the namespaces, `isLoaded` of its item store: a test that gives no namespace says when the
+// store has not loaded them.
+export const hostNamespacesLoaded = observable.box(true);
+const namespaceStore = {
+  get isLoaded() {
+    return hostNamespacesLoaded.get();
+  },
+  get items() {
+    return hostNamespaces.map((namespace) => ({
+      getName: () => namespace.name,
+      metadata: { name: namespace.name, labels: namespace.labels ?? {} },
+    }));
+  },
+};
+
 export const Renderer = namespace("Renderer", {
   LensExtension: RendererExtensionStub,
   K8s: blockedNamespace("Renderer.K8s"),
@@ -809,6 +828,7 @@ export const Renderer = namespace("Renderer", {
     apiManager,
     detailsFor,
     menuItemFor,
+    namespaceStore,
   } satisfies Exported<typeof Sdk.Renderer.K8sApi>),
   Component: namespace("Renderer.Component", hostComponents),
   // `createPageParam` and `navigate` of the host (packages/core/src/extensions/renderer-api/navigation.ts lines 55

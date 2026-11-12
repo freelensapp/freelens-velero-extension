@@ -1,0 +1,116 @@
+{
+  "parts": [
+    {
+      "name": "artifacts",
+      "environment": "demo",
+      "suites": ["velero-e2e-artifacts"],
+      "paths": [
+        "^src/renderer/components/(artifact-|log-viewer|results-viewer|resources-viewer|volumes-viewer|workspace-tabs|write-confirmation|target-bar)",
+        "^src/renderer/pages/(backup-workspace|restore-workspace)",
+        "^src/renderer/(state|api)/",
+        "^src/renderer/navigation\\.",
+        "^src/renderer/details/(backup|restore)-details",
+        "^src/common/(artifact-|diagnostic-|allowances|ipc|frame)",
+        "^src/common/volume-(band|index|references)\\.",
+        "^e2e/__tests__/velero-e2e-artifacts\\."
+      ]
+    },
+    {
+      "name": "pre-review",
+      "environment": "demo",
+      "suites": ["pre-review"],
+      "paths": [
+        "\\.(css|scss)$",
+        "^src/renderer/components/(views-frame|workspace|workspace-tabs|family-page|history-strip|target-bar)\\.",
+        "^e2e/__tests__/pre-review\\."
+      ]
+    },
+    {
+      "name": "volumes-and-server",
+      "environment": "demo",
+      "suites": ["velero-e2e-volumes", "velero-e2e-server", "velero-e2e-repositories"],
+      "paths": [
+        "^src/renderer/components/(volume-|views-frame|write-confirmation|target-bar)",
+        "^src/renderer/pages/(server-band|volume-|pod-volume-|repositor|data-)",
+        "^src/renderer/details/(repository|volume-operation)-details\\.",
+        "^src/renderer/(state|api)/",
+        "^src/common/(volume-|server-version|repository-view|allowances|ipc|frame)",
+        "^src/common/(discovery|views)\\.",
+        "^e2e/__tests__/velero-e2e-(volumes|server|repositories)\\."
+      ]
+    },
+    {
+      "name": "static-views-1",
+      "environment": "definitions",
+      "suites": [
+        "velero-e2e-adherence",
+        "velero-e2e-overview",
+        "velero-e2e-journey",
+        "velero-e2e-restricted",
+        "velero-e2e-data-movement",
+        "extensions"
+      ],
+      "paths": ["^src/(renderer|common)/", "^e2e/__tests__/", "^integration/__tests__/extensions\\."]
+    },
+    {
+      "name": "static-views-2",
+      "environment": "definitions",
+      "suites": [
+        "velero-e2e-schedules",
+        "velero-e2e-locations",
+        "velero-e2e-restores",
+        "velero-e2e-gate",
+        "velero-e2e-scale",
+        "velero-e2e-preferences"
+      ],
+      "paths": ["^src/(renderer|common)/", "^e2e/__tests__/", "^integration/__tests__/extensions\\."]
+    },
+    {
+      "name": "actions",
+      "environment": "definitions",
+      "suites": ["velero-e2e-actions"],
+      "paths": [
+        "^src/renderer/pages/(backup-now-|backup-create-|schedule-create-|restore-create-|backups-page|backup-workspace|schedule-workspace|schedules-page|open-view|schedule-patch-|backup-delete-)",
+        "^src/renderer/(state|api)/",
+        "^src/renderer/navigation\\.",
+        "^src/renderer/components/(target-bar|workspace\\.|write-confirmation|backup-template-form|template-choices|family-page|artifact-viewer|views-frame)",
+        "^src/common/(backup-from-schedule|backup-now-words|backup-create-words|backup-form|backup-template|label-selector|go-duration|kept-end-words|ipc|location-view|schedule-adherence|schedule-history|schedule-create-words|schedule-form|restore-form|restore-create-words|restore-candidates|views|schedule-patch|schedule-patch-words|schedule-signal|backup-delete-words|delete-request)\\.",
+        "^e2e/__tests__/velero-e2e-actions\\."
+      ]
+    }
+  ],
+  "everyPart": [
+    "^src/main/",
+    "^e2e/scripts/",
+    "^e2e/views-parts\\.json$",
+    "^integration/helpers/",
+    "^test/tls-fixture\\.ts$",
+    "^\\.github/workflows/views-tests\\.yaml$",
+    "^\\.github/actions/build-freelens/",
+    "^package\\.json$",
+    "^pnpm-lock\\.yaml$",
+    "^pnpm-workspace\\.yaml$",
+    "^vite\\.config\\.",
+    "^vitest\\.",
+    "^build/",
+    "(^|/)tsconfig[^/]*\\.json$",
+    "^\\.nvmrc$",
+    "^mise\\.(toml|lock)$"
+  ],
+  "noPart": [
+    "\\.md$",
+    "^docs/",
+    "^LICENSE$",
+    "^\\.github/(?!workflows/views-tests\\.yaml$|actions/build-freelens/)",
+    "^\\.trunk/",
+    "^\\.renovaterc\\.json5?$",
+    "^\\.claude/",
+    "\\.test\\.tsx?$",
+    "^test/",
+    "^environment-tests/",
+    "^integration/(?!__tests__/extensions\\.|helpers/)",
+    "^knip\\.jsonc$",
+    "^biome\\.jsonc$",
+    "^\\.(editorconfig|gitattributes|gitignore|yamllint\\.yaml|yamlfmt\\.yaml|markdownlint\\.yaml)$"
+  ]
+}

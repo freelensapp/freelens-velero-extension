@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { hostObject } from "../../../test/freelens-extensions";
 import { drawerValue } from "../../../test/host-components";
 import {
@@ -183,7 +184,7 @@ const restored = podVolumeRestore(
 
 function answers(more: Answers = {}): Answers {
   return {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list(location("default")),
     [path("backups")]: list(nightly, weekly),
     [path("restores")]: list(monday),
@@ -469,6 +470,7 @@ describe("the view of a pod volume operation", () => {
     expect(value(belongs, "Backup")).toBe("nightly (In progress)");
     expect(value(belongs, "Storage location")).toBe("default");
     expect(value(belongs, "Repository")).toBe("shop-default-kopia");
+    expect(note(belongs, "Repository")).toBe(VOLUME_WORDS.repositoryNote.pod);
     const of = within(workspace).getByTestId("velero-volume-of");
     const pod = within(of).getByText("cart-0").closest("a") as HTMLAnchorElement;
     const node = within(of).getByText("worker-1").closest("a") as HTMLAnchorElement;
@@ -786,6 +788,39 @@ describe("the notices over a view", () => {
     }
     mount(denied, (made) => <RepositoriesPage installation={made} />);
     expect((await screen.findByTestId("velero-notice-backupRepositories")).textContent).toContain("access is denied");
+  });
+
+  it("say the denied pod volume backups over a backup and over a repository, and nothing over a restore or a schedule", async () => {
+    const denied = answers({ [path("podVolumeBackups")]: { status: 403 }, [path("schedules")]: list(daily) });
+
+    for (const [kind, name, page, said] of [
+      ["backup", "nightly", (made: Installation) => <BackupsPage installation={made} />, true],
+      [
+        "backup-repository",
+        "shop-default-kopia",
+        (made: Installation) => <RepositoriesPage installation={made} />,
+        true,
+      ],
+      ["restore", "monday", (made: Installation) => <RestoresPage installation={made} />, false],
+      ["schedule", "daily", (made: Installation) => <SchedulesPage installation={made} />, false],
+    ] as const) {
+      const { installation: made } = mount(denied, page);
+
+      act(() => openView({ kind, name }));
+      await screen.findByTestId(`velero-${kind}-workspace`);
+      // The view of a restore and of a schedule ask the family of no band of theirs: it is read here for the case.
+      const release = said ? undefined : made.need({}, ["podVolumeBackups"]);
+
+      await waitFor(() => expect(made.read("podVolumeBackups").status).toBe("forbidden"));
+      await act(async () => {});
+      expect([
+        kind,
+        screen.queryByTestId("velero-notice-podVolumeBackups")?.textContent?.includes("access is denied") ?? false,
+      ]).toEqual([kind, said]);
+      release?.();
+      act(() => closeViews());
+      cleanup();
+    }
   });
 
   it("say nothing of the denied restores over a pod volume backup, and say it over a pod volume restore", async () => {

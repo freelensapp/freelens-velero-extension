@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { listProps } from "../../../test/host-components";
 import {
   backup,
@@ -16,7 +17,7 @@ import {
   repository,
   restore,
 } from "../../../test/volume-builders";
-import { emptyPreferences, heldPreferences, RESOURCES, TITLES } from "../../common/discovery";
+import { ALWAYS, emptyPreferences, heldPreferences, ON_DEMAND, RESOURCES, TITLES } from "../../common/discovery";
 import { VIEWS } from "../../common/views";
 import {
   LIST_NOTES,
@@ -35,6 +36,8 @@ import { OverviewPage } from "./overview-page";
 import { PodVolumeBackupsPage } from "./pod-volume-backups-page";
 import { PodVolumeRestoresPage } from "./pod-volume-restores-page";
 import { RepositoriesPage } from "./repositories-page";
+import { RestoresPage } from "./restores-page";
+import { SchedulesPage } from "./schedules-page";
 
 import type { Renderer } from "@freelensapp/extensions";
 
@@ -154,7 +157,7 @@ const location = (name: string, accessMode = "ReadWrite") => ({
 
 function answers(more: Answers = {}): Answers {
   return {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list(location("default")),
     [path("backups")]: list(nightly),
     [path("restores")]: list(monday),
@@ -756,7 +759,16 @@ describe("the families of the pod volume operations, read where they are shown",
       await vi.advanceTimersByTimeAsync(2 * READ_EVERY);
     });
     expect([count(overview.asked, PVB), count(overview.asked, PVR)]).toEqual([0, 0]);
+    // What the Overview reads is what every view reads at every read, the backup repositories among it: each of the
+    // six at each of the three reads, and none of the families read on demand.
+    expect(ALWAYS.map((family) => [family, count(overview.asked, path(family))])).toEqual(
+      ALWAYS.map((family) => [family, 3]),
+    );
+    expect(ON_DEMAND.map((family) => count(overview.asked, path(family)))).toEqual(ON_DEMAND.map(() => 0));
+    // The page open reads by a timer, and the page closed leaves none.
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
     cleanup();
+    expect(vi.getTimerCount()).toBe(0);
     const shown = mount(answers(), (installation) => <PodVolumeBackupsPage installation={installation} />);
 
     await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
@@ -766,7 +778,7 @@ describe("the families of the pod volume operations, read where they are shown",
     expect([count(shown.asked, PVB), count(shown.asked, PVR)]).toEqual([3, 0]);
   });
 
-  it("are not read while a repository is open over its list, and one is while an operation is opened from it", async () => {
+  it("are both read while a repository is open over its list, and kept while an operation is opened from it", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     const { asked, installation } = mount(answers(), (installation) => (
       <RepositoriesPage installation={installation} />
@@ -774,41 +786,69 @@ describe("the families of the pod volume operations, read where they are shown",
 
     await waitFor(() => expect(rows("backup-repository")).toHaveLength(repositories.length));
     expect([count(asked, PVB), count(asked, PVR)]).toEqual([0, 0]);
-    // The view of a repository shows nothing of the operations of the volumes until the band that shows them: it
-    // asks for neither family.
+    // The view of a repository shows what used it: both families are asked at once, alone, and at each read while
+    // it is open.
     act(() => openView({ kind: "backup-repository", name: "shop-default-kopia" }));
     await screen.findByTestId("velero-backup-repository-workspace");
+    await waitFor(() =>
+      expect([installation.read("podVolumeBackups").status, installation.read("podVolumeRestores").status]).toEqual([
+        "ready",
+        "ready",
+      ]),
+    );
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([1, 1]);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(READ_EVERY);
     });
-    expect([count(asked, PVB), count(asked, PVR)]).toEqual([0, 0]);
-    // An operation opened from it is asked at once, and at each read while its view is open.
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([2, 2]);
+    // An operation opened from it keeps what the repository under it reads: the way back finds both read.
     act(() => openView({ kind: "pod-volume-backup", name: "nightly-completed" }));
     await screen.findByTestId("velero-pod-volume-backup-workspace");
-    await waitFor(() => expect(installation.read("podVolumeBackups").status).toBe("ready"));
-    expect([count(asked, PVB), count(asked, PVR)]).toEqual([1, 0]);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(READ_EVERY);
     });
-    expect([count(asked, PVB), count(asked, PVR)]).toEqual([2, 0]);
-    expect(installation.read("podVolumeRestores").status).toBe("idle");
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([3, 3]);
+    expect(installation.read("podVolumeRestores").status).toBe("ready");
     act(() => closeViews());
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2 * READ_EVERY);
     });
-    expect([count(asked, PVB), count(asked, PVR)]).toEqual([2, 0]);
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([3, 3]);
     expect(installation.read("podVolumeBackups")).toEqual({ status: "idle", items: [] });
+    expect(installation.read("podVolumeRestores")).toEqual({ status: "idle", items: [] });
   });
 
-  it("are not asked by a view of a backup, a restore or a schedule, which read the backups and the locations", async () => {
-    const { asked } = mount(answers(), (installation) => <BackupsPage installation={installation} />);
+  it("are asked by a view of a backup and of a restore, each its own, and not by a view of a schedule", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const daily = {
+      metadata: { name: "daily", namespace: A, uid: "schedule-daily" },
+      spec: { schedule: "0 1 * * *", template: {} },
+      status: { phase: "Enabled" },
+    };
 
-    await waitFor(() => expect(rows("backup")).toEqual(["nightly"]));
-    act(() => openView({ kind: "backup", name: "nightly" }));
-    const workspace = await screen.findByTestId("velero-backup-workspace");
+    for (const [kind, name, page, expected] of [
+      ["backup", "nightly", (made: Installation) => <BackupsPage installation={made} />, [1, 0]],
+      ["restore", "monday", (made: Installation) => <RestoresPage installation={made} />, [0, 1]],
+      ["schedule", "daily", (made: Installation) => <SchedulesPage installation={made} />, [0, 0]],
+    ] as const) {
+      const { asked, installation } = mount(answers({ [path("schedules")]: list(daily) }), page);
 
-    expect(within(workspace).getByTestId("velero-backup-name").textContent).toBe("nightly");
-    expect([count(asked, PVB), count(asked, PVR)]).toEqual([0, 0]);
-    expect(asked).toContain(path("backupRepositories"));
+      await waitFor(() => expect(installation.read("backups").status).toBe("ready"));
+      expect([kind, count(asked, PVB), count(asked, PVR)]).toEqual([kind, 0, 0]);
+      act(() => openView({ kind, name }));
+      const workspace = await screen.findByTestId(`velero-${kind}-workspace`);
+
+      expect(within(workspace).getByTestId(`velero-${kind}-name`).textContent).toBe(name);
+      // The family of the view is asked at once, alone, and the other is not.
+      await waitFor(() => expect(installation.reading).toBe(false));
+      expect([kind, count(asked, PVB), count(asked, PVR)]).toEqual([kind, ...expected]);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(READ_EVERY);
+      });
+      expect([kind, count(asked, PVB), count(asked, PVR)]).toEqual([kind, 2 * expected[0], 2 * expected[1]]);
+      expect(asked).toContain(path("backupRepositories"));
+      act(() => closeViews());
+      cleanup();
+    }
   });
 });

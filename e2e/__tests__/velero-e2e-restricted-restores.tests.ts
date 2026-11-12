@@ -4,9 +4,10 @@
  */
 
 // The views for who may read the restores and not the backups: an identity of
-// the test environment that reads the restores, the schedules and the locations
-// of one namespace. The source of a restore and the history of a schedule are
-// backups it cannot read: they are said denied, and are neither absent nor empty.
+// the test environment that reads the restores, the schedules, the locations,
+// the pod volume operations and the backup repositories of one namespace. The
+// source of a restore and the history of a schedule are backups it cannot
+// read: they are said denied, and are neither absent nor empty.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
@@ -80,8 +81,11 @@ describe("restores with restricted access", () => {
     "keeps the restore and says that its source cannot be read, which is not that it is not there",
     async () => {
       await cluster.openWorkspace(frame, MAPPED, RESTORES);
+      // The view of a restore shows the band of its pod volume restores, which this identity reads: the seven of the
+      // mapped restore are in its rows, and only the backups are denied over it.
       const shown = async () => ({
         notices: await cluster.notices(frame, ["backups"]),
+        band: (await cluster.volumeBand(frame, "rows")).state,
         status: (await frame.locator("[data-testid=velero-restore-status]").innerText()).replace(/\s+/g, " "),
         source: await cluster.reference(frame, `velero-reference-Backup-${SCHEDULED}`, "inaccessible"),
         location: await frame.locator("[data-testid=velero-reference-BackupStorageLocation-none]").innerText(),
@@ -92,6 +96,7 @@ describe("restores with restricted access", () => {
 
       expect(Object.keys(first.notices)).toEqual(["backups"]);
       expect(first.notices.backups).toContain("access is denied");
+      expect(first.band).toBe("rows");
       expect(first.status).toContain("Waiting for plugin operations");
       expect(first.source.state).toBe("inaccessible");
       expect(first.source.text).toContain("access is denied");
@@ -221,7 +226,15 @@ describe("restores with restricted access", () => {
 
       expect(shown.read.backups).toEqual({ text: "Backups Access denied", state: "denied" });
       expect(shown.read.restores).toEqual({ text: "Restores 6", state: "read" });
+      // This identity reads the backup repositories of its namespace, which the first reader never does: their cell
+      // says the nine of the views, the line of what was not checked is of the backups alone, and the repository that
+      // is not ready and the one whose newest maintenance failed are items of the storage by name.
+      expect(shown.read.backupRepositories).toEqual({ text: "Backup Repositories 9", state: "read" });
       expect(shown.unchecked).toEqual(["backups"]);
+      expect(shown.items.filter(([rule]) => rule === "A12" || rule === "A13")).toEqual([
+        ["A12", "views-unready-views-available-kopia"],
+        ["A13", "views-workloads-views-available-kopia"],
+      ]);
       // The backups denied, none gives the zone of the server: the adherence of the six schedules of five fields that
       // name no zone is not known, and so is the adherence of the two Velero has not read, counted and said.
       expect(shown.summary).toMatch(
@@ -237,8 +250,16 @@ describe("restores with restricted access", () => {
       expect(attention).toContain(
         "Whether a backup in flight carries a failure, whether one ended with a failure, and how the newest backup of each schedule ended were not checked.",
       );
-      // No item is of a backup or names one, and no schedule is said to have a newest backup that failed.
-      expect(await frame.locator("[data-testid=velero-overview] [data-testid^=velero-open-backup-]").count()).toBe(0);
+      expect(attention).not.toContain("The backup repositories of this installation cannot be read");
+      // No item is of a backup or names one, and no schedule is said to have a newest backup that failed. The ways
+      // of the items of the repositories begin as the ways of a backup do, and are not of one.
+      expect(
+        await frame
+          .locator(
+            "[data-testid=velero-overview] [data-testid^=velero-open-backup-]:not([data-testid^=velero-open-backup-repository-])",
+          )
+          .count(),
+      ).toBe(0);
       expect(shown.items.filter(([rule]) => rule === "A7")).toEqual([]);
       // The newest backup that completed is not known, which is not that none completed.
       expect(shown.completed).toBe("Not known: the backups of this installation cannot be read: access is denied");
@@ -314,6 +335,66 @@ describe("restores with restricted access", () => {
       expect(daily.state).toBe("not-known");
       expect(daily.lines.next).toContain(noOffset);
       expect(daily.lines.next).toContain("access is denied");
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads the backup repositories, the pod volume backups and the pod volume restores of its namespace",
+    async () => {
+      // The identity reads the three kinds of the volumes beside the restores: each list shows the rows of the
+      // fixtures of the views, and no notice says that its family is denied. The backups stay denied.
+      for (const [of, family] of [
+        [cluster.REPOSITORIES, "backupRepositories"],
+        [cluster.POD_VOLUME_BACKUPS, "podVolumeBackups"],
+        [cluster.POD_VOLUME_RESTORES, "podVolumeRestores"],
+      ] as const) {
+        await cluster.openPage(frame, of);
+        await frame.waitForSelector(`[data-testid=velero-${of.id}] [data-${of.kind}-row]`, { timeout: 60_000 });
+        expect([of.id, await frame.locator(`[data-testid=velero-${of.id}-unavailable]`).count()]).toEqual([of.id, 0]);
+        expect([of.id, Object.keys(await cluster.notices(frame)).filter((key) => key === family)]).toEqual([of.id, []]);
+        expect([of.id, await cluster.layoutProblems(frame, of)]).toEqual([of.id, []]);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says of a pod volume restore the restore it belongs to, and of a pod volume backup that its backup cannot be read, which is not that it is not there",
+    async () => {
+      // A pod volume restore of the mapped restore, whose restores this identity reads, and the pod volume backup of
+      // the backup that partially failed, whose backups it does not read: both read by the suite on the cluster with
+      // the kubeconfig of the environment.
+      const [restore] = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "podvolumerestores",
+        "velero.io/restore-name=restore-mapped",
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const [backup] = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "podvolumebackups",
+        "velero.io/backup-name=views-history-4",
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+
+      expect([Boolean(restore), Boolean(backup)]).toEqual([true, true]);
+      await cluster.openPage(frame, cluster.POD_VOLUME_RESTORES);
+      await cluster.waitForList(frame, cluster.POD_VOLUME_RESTORES);
+      await cluster.openWorkspace(frame, restore.metadata.name, cluster.POD_VOLUME_RESTORES);
+      const resolved = frame.locator('[data-testid="velero-reference-Restore-restore-mapped"]');
+
+      await resolved.waitFor({ state: "visible", timeout: 60_000 });
+      expect(await resolved.getAttribute("data-reference")).toBe("resolved");
+      await cluster.closeWorkspace(frame);
+      await cluster.openPage(frame, cluster.POD_VOLUME_BACKUPS);
+      await cluster.waitForList(frame, cluster.POD_VOLUME_BACKUPS);
+      await cluster.openWorkspace(frame, backup.metadata.name, cluster.POD_VOLUME_BACKUPS);
+      const denied = frame.locator('[data-testid="velero-reference-Backup-views-history-4"]');
+
+      await denied.waitFor({ state: "visible", timeout: 60_000 });
+      expect(await denied.getAttribute("data-reference")).toBe("inaccessible");
+      expect(await denied.innerText()).toContain("access is denied");
+      await cluster.captureScreenshot(frame, "dark-restricted-pod-volume-backup-owner-denied");
       await cluster.closeWorkspace(frame);
     },
     TIMEOUT,

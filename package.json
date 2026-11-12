@@ -1,6 +1,6 @@
 {
   "name": "@freelensapp/velero-extension",
-  "version": "0.1.0-alpha.0",
+  "version": "1.0.0",
   "description": "Freelens extension for Velero",
   "repository": {
     "type": "git",
@@ -49,6 +49,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "e2e": "pnpm build && node e2e/scripts/local-demo.mts fixtures --context kind-freelens-velero-dev && node e2e/scripts/local-demo.mts transport-proof --context kind-freelens-velero-dev",
     "e2e:cluster:up": "node e2e/scripts/local-demo.mts up --context kind-freelens-velero-dev",
+    "e2e:cluster:up:definitions": "node e2e/scripts/local-demo.mts up-definitions --context kind-freelens-velero-dev",
     "e2e:cluster:down": "node e2e/scripts/local-demo.mts down --context kind-freelens-velero-dev",
     "demo:up": "pnpm e2e:cluster:up && node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev && node e2e/scripts/local-demo.mts fixtures-live --context kind-freelens-velero-dev",
     "demo:views": "node e2e/scripts/local-demo.mts demo --context kind-freelens-velero-dev",
@@ -81,14 +82,14 @@
     "react-window": "2.3.4"
   },
   "devDependencies": {
-    "@freelensapp/extensions": "2.0.0-0-nightly-2026-10-25",
+    "@freelensapp/extensions": "^2.0.0",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
-    "electron": "43.8.3",
+    "electron": "44.10.0",
     "esbuild": "0.28.2",
     "jsdom": "30.1.3",
     "mobx": "7.0.6",
@@ -111,5 +112,5 @@
     "restore",
     "kubernetes"
   ],
-  "packageManager": "pnpm@12.14.0+sha512.c18ba6d87993d3d164cb5e8948f32b2c06ee854487e06cd8d86781342fb3e5bb4634367034711e86802baa9c37bea906ce1929ad08d70884c97d801df13389a6"
+  "packageManager": "pnpm@12.18.0+sha512.9d7882d5dc82147ecfc4e062aa34834e0ad0296710a1837a1115ae012127d36b7109e321ac1598a1dd0a65597681b1e99917e12ed0d749eae91187943363beb3"
 }

@@ -108,6 +108,23 @@ describe("the view of a backup repository", () => {
     ]);
     expect(view.newestFailed).toBe(false);
   });
+
+  it("takes the later in the list as the newer of two with the same start or with none, as the release appends them", () => {
+    const view = repositoryView(
+      repository("r", {
+        phase: "Ready",
+        recentMaintenance: [
+          { result: "Succeeded", message: "first" },
+          { result: "Failed", message: "second" },
+          { result: "Succeeded", startTimestamp: before(HOUR), message: "third" },
+          { result: "Failed", startTimestamp: before(HOUR), message: "fourth" },
+        ],
+      }),
+    );
+
+    expect(view.maintenances.map((one) => one.message?.value)).toEqual(["fourth", "third", "second", "first"]);
+    expect(view.newestFailed).toBe(true);
+  });
 });
 
 describe("when the next maintenance is due, by the clock of this machine", () => {
@@ -162,6 +179,23 @@ describe("when the next maintenance is due, by the clock of this machine", () =>
     expect(maintenanceDue(old, NOW, false)).toMatchObject({ state: "due" });
     expect(dueText({ state: "access-unknown" })).toBe(
       "Not known: the storage location of the repository is not known, and the server runs no maintenance of a repository of a read-only one.",
+    );
+  });
+
+  it("is not known yet while the storage locations were never answered, and not taken for one that is absent", () => {
+    const old = repositoryView(repository("r", { phase: "Ready", lastMaintenanceTime: before(30 * DAY) } as never));
+
+    expect(maintenanceDue(old, NOW, undefined, false)).toEqual({ state: "locations-being-read" });
+    // A location that was found says what it is, answered or not; one that is not found once they answered is not
+    // known.
+    expect(maintenanceDue(old, NOW, false, false)).toMatchObject({ state: "due" });
+    expect(maintenanceDue(old, NOW, undefined, true)).toEqual({ state: "access-unknown" });
+    // What is not computed for other reasons is said first, as it is when they answered.
+    expect(maintenanceDue(repositoryView(repository("r", { phase: "NotReady" })), NOW, undefined, false)).toEqual({
+      state: "not-ready",
+    });
+    expect(dueText({ state: "locations-being-read" })).toBe(
+      "Not known yet: the storage locations of the installation are being read, and the server runs no maintenance of a repository of a read-only one.",
     );
   });
 

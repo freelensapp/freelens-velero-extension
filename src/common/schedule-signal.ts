@@ -64,7 +64,11 @@ export interface ServerOffset {
   created: number;
   // The newest submission whose backup gives another offset: the zone of the server changed its offset
   // between the two, which a rule of daylight saving time does, and the newest stands.
-  changed?: { minutes: number; schedule: string; backup: string; submission: number };
+  changed?: { minutes: number; schedule: string; backup: string; submission: number; shared?: string };
+  // Another backup of the schedule named as a submission and created within the same minute of it, as a backup asked
+  // by hand then is: the command line names one in UTC, and the offset may be read in the name of that one
+  // (SPEC-0017, the restatement of REQ-162).
+  shared?: string;
 }
 
 // The wall clock that fourteen digits name, yyyymmddhhmmss, read as UTC; nothing when they name none, as a
@@ -93,8 +97,9 @@ function wallOfDigits(digits: string): number | undefined {
 // namespace, its name of fourteen digits and its creation within a minute of the submission (REQ-162). The
 // difference is rounded to the nearest quarter of an hour; a remainder of a minute or more, or an offset no
 // zone in use has, is a name that is not the controller's, and gives nothing. A backup asked by hand is named
-// in UTC by the command line (cli/backup/create.go L374-L375): one created in the same minute as a submission
-// is taken as the controller's, and gives an offset of zero, which the spec accepts.
+// in UTC by the command line (cli/backup/create.go L374-L375), and by Back up now as the command line names it: one
+// created in the same minute as a submission may be taken as the controller's, and give an offset of zero, a risk the
+// offset carries, with the other backup, for the words to name it.
 function offsetOf(schedule: ScheduleResource, backups: BackupResource[]): ServerOffset | undefined {
   const found = submissionBackup(schedule, backups);
 
@@ -116,6 +121,7 @@ function offsetOf(schedule: ScheduleResource, backups: BackupResource[]): Server
     backup: found.backup.metadata.name,
     submission,
     created,
+    ...(found.shared ? { shared: found.shared.metadata.name } : {}),
   };
 }
 
@@ -145,6 +151,7 @@ function derivedOffset(schedules: ScheduleResource[], backups: BackupResource[])
           schedule: other.schedule,
           backup: other.backup,
           submission: other.submission,
+          ...(other.shared ? { shared: other.shared } : {}),
         },
       }
     : newest;
@@ -159,7 +166,9 @@ function sameOffset(one: ServerOffset, other: ServerOffset): boolean {
     one.created === other.created &&
     one.changed?.minutes === other.changed?.minutes &&
     one.changed?.backup === other.changed?.backup &&
-    one.changed?.submission === other.changed?.submission
+    one.changed?.submission === other.changed?.submission &&
+    one.changed?.shared === other.changed?.shared &&
+    one.shared === other.shared
   );
 }
 
@@ -188,6 +197,7 @@ export function keepOffset(previous: ServerOffset | undefined, reads: AdherenceR
           schedule: previous.schedule,
           backup: previous.backup,
           submission: previous.submission,
+          ...(previous.shared ? { shared: previous.shared } : {}),
         },
       };
     } else if (previous.changed) {
@@ -556,6 +566,8 @@ export const SIGNAL_WORDS = {
   otherSchedule: (name: string) => `the schedule ${name}`,
   changed: (offset: string, backup: string, of: string, moment: string) =>
     `The offset was ${offset} when the server submitted the backup ${backup} of ${of}, at ${moment}: it changed between the two submissions, and the newest stands.`,
+  shared: (backup: string, other: string) =>
+    `The backup ${other} of the same schedule was created within the same minute as ${backup}, as a backup asked by hand then is: the command line names one with the time in UTC, so the offset may have been read in the name of the wrong one.`,
   holdNotKnown: (reason: string) =>
     `Whether a backup of the schedule holds the submissions is not known, since ${reason}.`,
   schedulesStale: (ago: string, since: string) => `Computed from the schedules as they were read ${ago} ago: ${since}.`,
@@ -643,7 +655,7 @@ export function agoText(at: number, now: number): string {
 }
 
 // An offset from UTC, as the words write it.
-function offsetText(minutes: number): string {
+export function offsetText(minutes: number): string {
   if (minutes === 0) return "UTC";
   const size = Math.abs(minutes);
 
@@ -651,7 +663,7 @@ function offsetText(minutes: number): string {
 }
 
 // A zone as the words name it: by the name the expression gives it, or by its offset.
-function zoneName(zone: Zone): string {
+export function zoneName(zone: Zone): string {
   return zone.of === "named" ? zone.name : offsetText(zone.minutes);
 }
 
@@ -683,6 +695,13 @@ export function momentText(zone: Zone, instant: number): string {
   return `${wall.date} ${wall.minute}:${pad(wall.second)} ${zoneName(zone)}`;
 }
 
+// A run in a zone with its date, and with its seconds when it has some.
+export function datedRunText(zone: Zone, instant: number): string {
+  const wall = wallClock(zone, instant);
+
+  return `${wall.date} ${wall.minute}${wall.second ? `:${pad(wall.second)}` : ""} ${zoneName(zone)}`;
+}
+
 // A run in a zone: with its seconds when it has some, and with its date when it is not the day of the clock in
 // that zone.
 export function runText(zone: Zone, instant: number, now: number): string {
@@ -690,6 +709,15 @@ export function runText(zone: Zone, instant: number, now: number): string {
   const time = `${wall.minute}${wall.second ? `:${pad(wall.second)}` : ""} ${zoneName(zone)}`;
 
   return wall.date === wallClock(zone, now).date ? time : `${time} on ${wall.date}`;
+}
+
+// A run in a zone the expression names, with its date and the offset of the zone then: a change of daylight saving time
+// shows in the offset, and the two runs of an hour the zone repeats are told apart.
+export function zonedRunText(zone: Zone, instant: number): string {
+  if (zone.of !== "named") return datedRunText(zone, instant);
+  const wall = wallClock(zone, instant);
+
+  return `${datedRunText(zone, instant)} (${offsetText(wall.offset)})`;
 }
 
 // A run in the hour a zone repeats, with the offset that tells the two occurrences apart.
@@ -779,6 +807,7 @@ function derivedNotes(zone: ZoneOf, schedule: string): string[] {
       whose(offset, schedule),
       momentText(zone.zone, offset.submission),
     ),
+    ...(offset.shared ? [SIGNAL_WORDS.shared(offset.backup, offset.shared)] : []),
     ...(changed
       ? [
           SIGNAL_WORDS.changed(
@@ -787,6 +816,8 @@ function derivedNotes(zone: ZoneOf, schedule: string): string[] {
             whose(changed, schedule),
             momentText({ of: "fixed", minutes: changed.minutes }, changed.submission),
           ),
+          // A change read in the name of a backup asked by hand may be no change of the zone at all.
+          ...(changed.shared ? [SIGNAL_WORDS.shared(changed.backup, changed.shared)] : []),
         ]
       : []),
   ];
@@ -980,7 +1011,7 @@ function everyLookWhat(parsed: ParsedExpression): string {
 // The day the zone the expression names repeats an hour, when it is the day of the run and the expression has
 // a run in that hour: the words of the two runs (REQ-162). A change is found in the offsets the computation
 // reads, with two hours of room on each side of the day.
-function repeatedHour(parsed: ParsedExpression, zone: Zone, at: number): string | undefined {
+export function repeatedHour(parsed: ParsedExpression, zone: Zone, at: number): string | undefined {
   if (zone.of !== "named") return undefined;
   const run = wallClock(zone, at);
   const midnight = Date.UTC(Number(run.date.slice(0, 4)), Number(run.date.slice(5, 7)) - 1, Number(run.date.slice(8)));

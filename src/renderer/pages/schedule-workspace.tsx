@@ -1,6 +1,7 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
+import { scheduleRefused } from "../../common/backup-from-schedule";
 import { backupScope } from "../../common/backup-scope";
 import { manyDefaultsText } from "../../common/location-view";
 import { shownWords } from "../../common/operation-line";
@@ -8,7 +9,10 @@ import { durationText, signalText } from "../../common/operation-text";
 import { operationTimeText } from "../../common/operation-time";
 import { isStale } from "../../common/read-state";
 import { scheduleRestores, templateReferences } from "../../common/references";
+import { restoreBackupOf, scheduleCandidates } from "../../common/restore-candidates";
+import { RESTORE_CREATE_VIEW_WORDS } from "../../common/restore-create-words";
 import { countsText, holdsSubmissions, scheduleHistory } from "../../common/schedule-history";
+import { SCHEDULE_PATCH_VIEW_WORDS } from "../../common/schedule-patch-words";
 import { NOTES, ownedText, pausedText, scheduleView, zoneText } from "../../common/schedule-view";
 import { AdherenceBand } from "../components/adherence";
 import { HistoryStrip } from "../components/history-strip";
@@ -26,7 +30,7 @@ import type { BackupResource, ScheduleResource } from "../../common/types";
 import type { Installation } from "../state/installation";
 
 const {
-  Component: { Icon },
+  Component: { Button, Icon },
 } = Renderer;
 
 const VALIDATION_ICONS: Record<Validation, string> = {
@@ -207,6 +211,105 @@ function Template({ references, location }: { references: TemplateReferences; lo
   );
 }
 
+// The commands of a schedule (SPEC-0017, REQ-252), on the line of its name: each opens the workspace of its action over
+// this view, which is as it was when the workspace closes. They are there with writes on or off: the form of an action
+// can be filled with writes off, and its review asks for them. A schedule whose name is longer than a label takes is
+// asked for no backup (REQ-255). Pause is offered of a schedule that is not paused, and Resume of one that is, never
+// both, with the state of the schedule the view read (REQ-274).
+function ScheduleCommands({ installation, schedule }: { installation: Installation; schedule: ScheduleResource }) {
+  const name = schedule.metadata.name;
+  const uid = schedule.metadata.uid;
+  const refused = scheduleRefused(name);
+  const toggle = schedule.spec?.paused === true ? "schedule-resume" : "schedule-pause";
+  const expression =
+    typeof schedule.spec?.schedule === "string" && schedule.spec.schedule ? schedule.spec.schedule : undefined;
+  // A resume tests the expression the view read: a schedule that reports none cannot be resumed from here.
+  const unresumable = toggle === "schedule-resume" && !expression;
+  // A restore is offered of the backups of the schedule that ended well, the newest Completed first (REQ-265, REQ-267).
+  const backups = installation.read("backups");
+  const { chosen } = scheduleCandidates(backups.items as BackupResource[], name);
+  // Why Restore is not offered, as the read of the backups says: none that ended well, or none read.
+  const none = chosen
+    ? undefined
+    : backups.status === "ready" || backups.lastSuccess !== undefined
+      ? RESTORE_CREATE_VIEW_WORDS.noBackup(name)
+      : backups.status === "forbidden"
+        ? RESTORE_CREATE_VIEW_WORDS.backupsForbidden
+        : backups.status === "idle" || backups.status === "loading"
+          ? RESTORE_CREATE_VIEW_WORDS.backupsReading
+          : RESTORE_CREATE_VIEW_WORDS.backupsFailed;
+
+  return (
+    <div className={styles.commands} data-testid="velero-schedule-commands">
+      <Button
+        plain
+        data-testid="velero-schedule-back-up-now"
+        disabled={Boolean(refused) || !uid}
+        aria-describedby={refused ? "velero-schedule-back-up-now-refused" : undefined}
+        onClick={() => {
+          if (!uid) return;
+          installation.backupNow.start({ name, uid });
+          openView({ kind: "backup-now", name });
+        }}
+      >
+        <Icon material="backup" small aria-hidden />
+        Back up now
+      </Button>
+      {refused ? (
+        <span id="velero-schedule-back-up-now-refused" className={styles.factNote}>
+          {refused}
+        </span>
+      ) : null}
+      <Button
+        plain
+        data-testid={toggle === "schedule-pause" ? "velero-schedule-pause" : "velero-schedule-resume"}
+        disabled={!uid || unresumable}
+        aria-describedby={unresumable ? "velero-schedule-resume-refused" : undefined}
+        onClick={() => {
+          if (!uid) return;
+          installation.pauseResume.start(
+            toggle,
+            { name, uid, ...(expression ? { expression } : {}) },
+            schedule.spec?.skipImmediately,
+          );
+          openView({ kind: toggle, name });
+        }}
+      >
+        <Icon material={toggle === "schedule-pause" ? "pause" : "play_arrow"} small aria-hidden />
+        {toggle === "schedule-pause" ? "Pause" : "Resume"}
+      </Button>
+      {unresumable ? (
+        <span
+          id="velero-schedule-resume-refused"
+          className={styles.factNote}
+          data-testid="velero-schedule-resume-refused"
+        >
+          {SCHEDULE_PATCH_VIEW_WORDS.noExpression(name)}
+        </span>
+      ) : null}
+      <Button
+        plain
+        data-testid="velero-schedule-restore"
+        disabled={!chosen}
+        aria-describedby={none ? "velero-schedule-restore-none" : undefined}
+        onClick={() => {
+          if (!chosen) return;
+          installation.restoreCreate.start({ kind: "schedule", name }, restoreBackupOf(chosen));
+          openView({ kind: "restore-schedule", name });
+        }}
+      >
+        <Icon material="restore" small aria-hidden />
+        Restore
+      </Button>
+      {none ? (
+        <span id="velero-schedule-restore-none" className={styles.factNote} data-testid="velero-schedule-restore-none">
+          {none}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export interface ScheduleWorkspaceProps {
   installation: Installation;
   name: string;
@@ -250,7 +353,14 @@ export const ScheduleWorkspace = observer(({ installation, name, now, back, onBa
   const newest = history.state === "listed" ? history.items[0] : undefined;
 
   return (
-    <Workspace kind="schedule" name={view.name} uid={view.uid} back={back} onBack={onBack}>
+    <Workspace
+      kind="schedule"
+      name={view.name}
+      uid={view.uid}
+      back={back}
+      onBack={onBack}
+      commands={<ScheduleCommands installation={installation} schedule={schedule} />}
+    >
       <div className={styles.band} data-testid="velero-schedule-status">
         <Fact name="Validation">
           <ValidationMark state={view.state} />

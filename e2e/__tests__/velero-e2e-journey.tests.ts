@@ -25,12 +25,14 @@ const NOTHING = 1500;
 const MENU = ".Menu .MenuItem";
 const DIALOG = '[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog';
 const STARTED = /\b2026\b/;
-// The eight kinds of Velero with pages of their own, as the API names them: the Custom Resources tree of the host
+// The ten kinds of Velero with pages of their own, as the API names them: the Custom Resources tree of the host
 // leaves them out while the extension is enabled.
 const PAGED = [
   "backuprepositories",
   "backups",
   "backupstoragelocations",
+  "datadownloads",
+  "datauploads",
   "podvolumebackups",
   "podvolumerestores",
   "restores",
@@ -46,8 +48,8 @@ const READ_ALWAYS = [
   "schedules",
   "volumesnapshotlocations",
 ];
-// The two read only while a view that shows them is open.
-const ON_DEMAND = ["podvolumebackups", "podvolumerestores"];
+// The four read only while a view that shows them is open.
+const ON_DEMAND = ["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"];
 // The words of the error the suite makes the section of the details of a backup throw: the one error the
 // application is to have, which is known by them.
 const MADE = "The suite made the section of the details of a backup throw";
@@ -161,6 +163,8 @@ describe("views of the first milestone", () => {
         "velero-backup-repositories": "Backup Repositories",
         "velero-pod-volume-backups": "Pod Volume Backups",
         "velero-pod-volume-restores": "Pod Volume Restores",
+        "velero-data-uploads": "Data Uploads",
+        "velero-data-downloads": "Data Downloads",
       });
       await frame.waitForSelector("[data-testid=velero-state-choose]", { timeout: 60_000 });
       expect((await cluster.target(frame)).cluster).toBe(cluster.E2E_KUBE_CONTEXT);
@@ -270,7 +274,7 @@ describe("views of the first milestone", () => {
 
       expect(later[DISCOVERY]).toBe(earlier[DISCOVERY] + 1);
       // The six families read at every read of the namespace that is shown were read, which the counters see; the
-      // list of the backups shows none of the pod volume operations, which are not asked.
+      // list of the backups shows none of the pod volume operations and of the data movement, which are not asked.
       for (const kind of READ_ALWAYS) {
         const key = `LIST ${kind} namespace`;
 
@@ -346,13 +350,16 @@ describe("views of the first milestone", () => {
         if (JSON.stringify(Object.entries(sent).sort()) === JSON.stringify(Object.entries(asked).sort())) break;
       }
       // Every read went from the frame of the cluster to the proxy of its own address: of a kind of Velero, or
-      // of the group, which says what the cluster serves.
+      // of a version of the group, which says what the cluster serves; under the second version, its discovery and
+      // the two kinds of the data movement alone.
       expect(
         seen.filter(
           (request) =>
             request.method !== "GET" ||
             new URL(request.url).origin !== origin ||
-            !/^\/api-kube\/apis\/velero\.io\/v1(\/|$)/.test(new URL(request.url).pathname) ||
+            !/^\/api-kube\/apis\/velero\.io\/(v1(\/|$)|v2alpha1(\/namespaces\/[a-z0-9-]+\/(datauploads|datadownloads))?$)/.test(
+              new URL(request.url).pathname,
+            ) ||
             new URL(request.frame || "about:blank").origin !== origin,
         ),
       ).toEqual([]);
@@ -393,8 +400,9 @@ describe("views of the first milestone", () => {
         "The status reports 1 error and 0 warnings",
       );
       // The workspace opens at the first of its five tabs, the summary, which only reads: the way to the
-      // location of the backup, beside the way back of the workspace, and no field. What Velero wrote of the
-      // backup is asked for by a command of another tab, and nothing edits or deletes.
+      // location of the backup, beside the way back of the workspace, Restore, which a backup that has not ended
+      // is not offered, and Delete backup, which opens the workspace of the deletion of this backup alone, and no
+      // field. What Velero wrote of the backup is asked for by a command of another tab, and nothing edits.
       const tabs = await artifacts.tabsOf(frame, "backup");
       const buttons = async (selector: string) =>
         (await frame.locator(`${selector} button`).allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
@@ -404,8 +412,12 @@ describe("views of the first milestone", () => {
       expect(await buttons(`[data-testid=${artifacts.PARTS.shown("backup")}]`)).toEqual(["fixture-unavailable"]);
       expect(await buttons("[data-testid=velero-backup-workspace]")).toEqual([
         "arrow_back Backups",
+        "restore Restore",
+        "delete Delete backup",
         "fixture-unavailable",
       ]);
+      expect(await frame.locator("[data-testid=velero-backup-restore]").isDisabled()).toBe(true);
+      expect(await frame.locator("[data-testid=velero-backup-restore-note]").count()).toBe(1);
       expect(
         await frame.locator("[data-testid=velero-backup-workspace]").locator("a, input, select, textarea").count(),
       ).toBe(0);
@@ -515,13 +527,15 @@ describe("views of the first milestone", () => {
       expect(restores.state).toBe("listed");
       expect(restores.text).toContain("restore-of-daily-completed (Completed)");
       expect(restores.text).toContain("restore-of-daily-partiallyfailed (Partially failed)");
-      // The schedule, the locations and each restore are ways to their views.
+      // Restore and Delete backup, then the schedule, the locations and each restore, which are ways to their views.
       expect(
         (await frame.locator("[data-testid=velero-backup-workspace] button").allInnerTexts()).map((text) =>
           text.replace(/\s+/g, " ").trim(),
         ),
       ).toEqual([
         "arrow_back Backups",
+        "restore Restore",
+        "delete Delete backup",
         "views-daily",
         "views-available",
         "views-snapshots",
@@ -790,7 +804,7 @@ describe("views of the first milestone", () => {
   );
 
   it(
-    "gives every page of the group the tabs of the group, and leaves its eight kinds out of the Custom Resources of the host until it is disabled",
+    "gives every page of the group the tabs of the group, and leaves its ten kinds out of the Custom Resources of the host until it is disabled",
     async () => {
       const { velero: _group, ...entries } = await cluster.veleroSidebarEntries(frame);
       const titles = Object.values(entries);
@@ -805,6 +819,8 @@ describe("views of the first milestone", () => {
         cluster.REPOSITORIES,
         cluster.POD_VOLUME_BACKUPS,
         cluster.POD_VOLUME_RESTORES,
+        cluster.DATA_UPLOADS,
+        cluster.DATA_DOWNLOADS,
       ]) {
         await cluster.openPage(frame, of);
         expect([of.id, await cluster.groupTabs(frame)]).toEqual([of.id, { tabs: titles, active: [entries[of.menu]] }]);
@@ -817,7 +833,7 @@ describe("views of the first milestone", () => {
       expect(enabled.filter((kind) => PAGED.includes(kind))).toEqual([]);
       expect(enabled).toContain("downloadrequests");
       await cluster.captureScreenshot(frame, "dark-custom-resources-enabled");
-      // Disabled from the Extensions page, the extension leaves the sidebar, and the tree has the eight again.
+      // Disabled from the Extensions page, the extension leaves the sidebar, and the tree has the ten again.
       await velero.disableExtension(started.app, started.window);
       await velero.captureWindowScreenshot(started.window, "dark-extension-disabled");
       await velero.navigateToCatalog(started.app);

@@ -14,8 +14,13 @@
 // with a signal of its own, and 4 MiB of an answer, counted as the body arrives.
 
 import { X509Certificate } from "node:crypto";
+import { backupNameProblem } from "../common/backup-from-schedule";
+import { BACKUP_NAME_LABEL, BACKUP_UID_LABEL, readDeleteRequest } from "../common/delete-request";
 import { type ArtifactTarget, DIAGNOSTIC_REQUEST_LABEL, isArtifactTarget } from "../common/ipc";
 import { labelOf } from "../common/name-label";
+import { EXISTING_RESOURCE_POLICIES, RESTORE_SPEC_KEYS, restoreNameProblem } from "../common/restore-form";
+import { scheduleNameProblem } from "../common/schedule-form";
+import { readSchedulePatch } from "../common/schedule-patch";
 import { type CatalogEntry, refusalOf, sameEntry } from "./catalog";
 import { DiagnosticError } from "./diagnostic-transport";
 
@@ -39,7 +44,9 @@ export interface HostAnswer {
 // What a request is sent with. Header names are lowercase: the client merges them into its own headers key
 // by key, and a name in capitals would be sent beside its default, not in its place.
 export interface HostRequestInit {
-  method: "GET" | "POST";
+  // In capitals: the fetch of Chromium sends a method other than DELETE, GET, HEAD, OPTIONS, POST and PUT as it is
+  // written, and the API server answers a patch in small letters with 405 (SPEC-0017, the contract).
+  method: "GET" | "POST" | "PATCH";
   headers: Record<string, string>;
   body?: string;
   signal: AbortSignal;
@@ -69,7 +76,9 @@ export const REQUEST_BOUNDS = { timeMs: 10_000, bytes: 4 * 1024 ** 2 } as const;
 const resources = {
   Backup: "backups",
   Restore: "restores",
+  Schedule: "schedules",
   BackupStorageLocation: "backupstoragelocations",
+  VolumeSnapshotLocation: "volumesnapshotlocations",
   DownloadRequest: "downloadrequests",
   ServerStatusRequest: "serverstatusrequests",
   DeleteBackupRequest: "deletebackuprequests",
@@ -80,6 +89,8 @@ const resources = {
 } as const;
 // The label of an endpoint slice that names the Service it is of.
 const SERVICE_NAME_LABEL = "kubernetes.io/service-name";
+// A value of a label, as the API server takes it: a UID read in a selector is one, and adds no other term to it.
+const LABEL_VALUE = /^[A-Za-z0-9](?:[-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$/;
 export type DiagnosticKind = keyof typeof resources;
 
 function name(value: string, maximum = 253): string {
@@ -108,6 +119,9 @@ function statusError(status: number, creation: boolean): DiagnosticError {
   if (status === 403) return new DiagnosticError("forbidden");
   if (status === 404) return new DiagnosticError("not-found");
   if (status === 409) return new DiagnosticError("conflict");
+  // The API server refused the request for its content: nothing was made (SPEC-0017, the way of a write). It is told
+  // from what the adapter refuses to send by itself.
+  if (status === 422) return new DiagnosticError("validation", undefined, "refused");
   return new DiagnosticError(creation && status >= 500 ? "submission-unknown" : "request-failed");
 }
 
@@ -208,7 +222,11 @@ async function bodyOf(
 }
 
 // The adapter is one for each cluster, made for the entry of the catalog writes were turned on with, and
-// asks the cluster for reads and for creations, and for nothing else.
+// asks the cluster for reads, for creations and for the two patches of a schedule, and for nothing else.
+// The keys of an object the actions create, and no other: no status, which the API server would keep for a kind with
+// no subresource of it, and nothing it does not know.
+const OBJECT_KEYS = "apiVersion,kind,metadata,spec";
+
 export class DiagnosticKubernetes {
   // The entry the adapter was made for: its cluster, and the kubeconfig and the context the catalog named.
   readonly binding: Readonly<Omit<CatalogEntry, "status">>;
@@ -263,16 +281,18 @@ export class DiagnosticKubernetes {
   }
 
   private async send(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PATCH",
     path: string,
     signal: AbortSignal,
-    options: { query?: Record<string, string | undefined>; body?: unknown } = {},
+    options: { query?: Record<string, string | undefined>; body?: unknown; text?: string; contentType?: string } = {},
   ): Promise<DiagnosticObject> {
     // Before anything leaves: the cluster is in the catalog, connected, and the one of the adapter.
     this.assertCurrent();
     if (signal.aborted) throw new DiagnosticError("cancelled");
-    const creation = method === "POST";
-    const payload = options.body === undefined ? undefined : JSON.stringify(options.body);
+    // A write, a creation or a patch, whose answer is lost is not known to have been made, and is looked for.
+    const creation = method !== "GET";
+    // A body written once, as the review showed it, is sent as it is: what was read is what is sent.
+    const payload = options.text ?? (options.body === undefined ? undefined : JSON.stringify(options.body));
     const query = queryOf(options.query);
     let client: HostClient;
 
@@ -309,7 +329,7 @@ export class DiagnosticKubernetes {
                 method,
                 headers: {
                   accept: "application/json",
-                  ...(payload === undefined ? {} : { "content-type": "application/json" }),
+                  ...(payload === undefined ? {} : { "content-type": options.contentType ?? "application/json" }),
                 },
                 ...(payload === undefined ? {} : { body: payload }),
                 signal: controller.signal,
@@ -343,8 +363,8 @@ export class DiagnosticKubernetes {
       // The answer of a creation that cannot be read says nothing of the creation.
       if (!bytes) throw new DiagnosticError(creation ? "submission-unknown" : "payload-too-large");
       // The cluster is looked at again once it answered: an answer of a cluster that changed meanwhile is
-      // not used.
-      if (this.refusal()) throw new DiagnosticError("target-changed");
+      // not used. A creation it answered may have been made, which is said apart.
+      if (this.refusal()) throw new DiagnosticError("target-changed", undefined, creation ? "answered" : undefined);
       let result: unknown;
 
       try {
@@ -424,33 +444,170 @@ export class DiagnosticKubernetes {
     });
   }
 
+  // The Backup a schedule was asked for, sent as the text the review showed, byte for byte (SPEC-0017, REQ-246): a
+  // text that is not a Backup of this namespace, with a name the form of the backup takes, is refused before anything
+  // leaves.
+  createBackup(namespace: string, text: string, signal: AbortSignal): Promise<DiagnosticObject> {
+    let body: unknown;
+
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw new DiagnosticError("validation");
+    }
+    if (
+      !isRecord(body) ||
+      Object.keys(body).sort().join() !== OBJECT_KEYS ||
+      body.apiVersion !== "velero.io/v1" ||
+      body.kind !== "Backup" ||
+      !isRecord(body.metadata) ||
+      body.metadata.namespace !== namespace ||
+      typeof body.metadata.name !== "string" ||
+      "generateName" in body.metadata ||
+      !isRecord(body.spec)
+    )
+      throw new DiagnosticError("validation");
+    if (backupNameProblem(body.metadata.name) !== undefined) throw new DiagnosticError("validation");
+    return this.send("POST", this.path("Backup", namespace), signal, { text });
+  }
+
+  // The Schedule of the form, sent as the text the review showed, byte for byte (SPEC-0016, REQ-223, REQ-224): a text
+  // that is not a Schedule of this namespace with its name and its namespace alone, a name every backup of it can
+  // carry in its label, and a spec, is refused before anything leaves.
+  createSchedule(namespace: string, text: string, signal: AbortSignal): Promise<DiagnosticObject> {
+    let body: unknown;
+
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw new DiagnosticError("validation");
+    }
+    if (
+      !isRecord(body) ||
+      Object.keys(body).sort().join() !== OBJECT_KEYS ||
+      body.apiVersion !== "velero.io/v1" ||
+      body.kind !== "Schedule" ||
+      !isRecord(body.metadata) ||
+      Object.keys(body.metadata).sort().join() !== "name,namespace" ||
+      body.metadata.namespace !== namespace ||
+      typeof body.metadata.name !== "string" ||
+      !isRecord(body.spec)
+    )
+      throw new DiagnosticError("validation");
+    if (scheduleNameProblem(body.metadata.name) !== undefined) throw new DiagnosticError("validation");
+    return this.send("POST", this.path("Schedule", namespace), signal, { text });
+  }
+
+  // The Restore of the form, sent as the text the review showed, byte for byte (SPEC-0017, REQ-266, REQ-273): a text
+  // that is not a Restore of this namespace, with its name and its namespace alone and a spec that names a backup, has
+  // only the fields the form offers and a policy for the resources that exist the form offers, is refused before
+  // anything leaves.
+  createRestore(namespace: string, text: string, signal: AbortSignal): Promise<DiagnosticObject> {
+    let body: unknown;
+
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw new DiagnosticError("validation");
+    }
+    if (
+      !isRecord(body) ||
+      Object.keys(body).sort().join() !== OBJECT_KEYS ||
+      body.apiVersion !== "velero.io/v1" ||
+      body.kind !== "Restore" ||
+      !isRecord(body.metadata) ||
+      Object.keys(body.metadata).sort().join() !== "name,namespace" ||
+      body.metadata.namespace !== namespace ||
+      typeof body.metadata.name !== "string" ||
+      !isRecord(body.spec) ||
+      typeof body.spec.backupName !== "string" ||
+      body.spec.backupName === "" ||
+      !Object.keys(body.spec).every((key) => (RESTORE_SPEC_KEYS as readonly string[]).includes(key)) ||
+      !(EXISTING_RESOURCE_POLICIES as readonly unknown[]).includes(body.spec.existingResourcePolicy)
+    )
+      throw new DiagnosticError("validation");
+    if (restoreNameProblem(body.metadata.name) !== undefined) throw new DiagnosticError("validation");
+    return this.send("POST", this.path("Restore", namespace), signal, { text });
+  }
+
+  // The pause or the resume of a schedule, sent as the text the review showed, byte for byte, with the method in
+  // capitals and the media type of a JSON patch (SPEC-0017, REQ-275): a text that is not exactly the patch of a pause or
+  // of a resume of a schedule is refused before anything leaves.
+  patchSchedule(namespace: string, scheduleName: string, text: string, signal: AbortSignal): Promise<DiagnosticObject> {
+    if (!readSchedulePatch(text) || typeof scheduleName !== "string" || scheduleName === "")
+      throw new DiagnosticError("validation");
+    return this.send("PATCH", this.path("Schedule", namespace, scheduleName), signal, {
+      text,
+      contentType: "application/json-patch+json",
+    });
+  }
+
+  // The ServerStatusRequest of the view of the server (SPEC-0012), with the name the API server generates from the
+  // prefix.
   createGenerated(
-    kind: "ServerStatusRequest" | "DeleteBackupRequest",
+    kind: "ServerStatusRequest",
     namespace: string,
     prefix: string,
     signal: AbortSignal,
-    backup?: { name: string; uid: string },
   ): Promise<DiagnosticObject> {
-    if (!["ServerStatusRequest", "DeleteBackupRequest"].includes(kind) || !prefix.endsWith("-"))
-      throw new DiagnosticError("validation");
+    if (kind !== "ServerStatusRequest" || !prefix.endsWith("-")) throw new DiagnosticError("validation");
     name(prefix.slice(0, -1), 210);
-    if (kind === "DeleteBackupRequest" && (!backup?.uid || !backup.name)) throw new DiagnosticError("validation");
     return this.send("POST", this.path(kind, namespace), signal, {
       body: {
         apiVersion: "velero.io/v1",
         kind,
-        metadata: {
-          namespace: name(namespace, 63),
-          generateName: prefix,
-          labels: {
-            ...this.requestLabels,
-            ...(backup
-              ? { "velero.io/backup-name": labelOf(name(backup.name)), "velero.io/backup-uid": backup.uid }
-              : {}),
-          },
-        },
-        spec: kind === "DeleteBackupRequest" ? { backupName: backup?.name } : {},
+        metadata: { namespace: name(namespace, 63), generateName: prefix, labels: { ...this.requestLabels } },
+        spec: {},
       },
+    });
+  }
+
+  // The DeleteBackupRequest of one backup, sent as the text the review showed, byte for byte (SPEC-0017, REQ-279): a
+  // text that is not exactly the request of a backup of this namespace, as `velero backup delete` makes it, is refused
+  // before anything leaves. The adapter deletes nothing itself (REQ-284).
+  createDeleteBackupRequest(namespace: string, text: string, signal: AbortSignal): Promise<DiagnosticObject> {
+    const read = readDeleteRequest(text);
+
+    if (!read || read.namespace !== namespace) throw new DiagnosticError("validation");
+    name(read.backup.name);
+    return this.send("POST", this.path("DeleteBackupRequest", namespace), signal, { text });
+  }
+
+  // The DeleteBackupRequests of one backup, by the labels that name it and its UID (SPEC-0017, REQ-250, REQ-282); or,
+  // without its UID, every request of a backup of its name, by that label alone, which the deletion controller deletes
+  // the others of a request by (REQ-283, backup_deletion_controller.go L500-L522): what the cluster answers is taken
+  // only when every request is of that namespace and carries the labels asked for.
+  deleteRequestsOf(
+    namespace: string,
+    backup: { name: string; uid?: string },
+    signal: AbortSignal,
+  ): Promise<DiagnosticObject[]> {
+    const label = labelOf(name(backup.name));
+
+    if (backup.uid !== undefined && (typeof backup.uid !== "string" || !LABEL_VALUE.test(backup.uid)))
+      throw new DiagnosticError("validation");
+    const selector =
+      backup.uid === undefined
+        ? `${BACKUP_NAME_LABEL}=${label}`
+        : `${BACKUP_NAME_LABEL}=${label},${BACKUP_UID_LABEL}=${backup.uid}`;
+
+    return this.send("GET", this.path("DeleteBackupRequest", namespace), signal, {
+      query: { labelSelector: selector },
+    }).then((result) => {
+      const items = (result as { items?: unknown }).items;
+
+      if (
+        !Array.isArray(items) ||
+        !items.every(
+          (item: DiagnosticObject | undefined) =>
+            typeof item?.metadata?.name === "string" &&
+            item.metadata.namespace === namespace &&
+            item.metadata.labels?.[BACKUP_NAME_LABEL] === label &&
+            (backup.uid === undefined || item.metadata.labels?.[BACKUP_UID_LABEL] === backup.uid),
+        )
+      )
+        throw new DiagnosticError("request-failed");
+      return items as DiagnosticObject[];
     });
   }
 

@@ -44,9 +44,9 @@ replaced. Changing it clears write confirmation and isolates all subsequent data
 
 | Surface | Proposed presentation | Reason |
 | --- | --- | --- |
-| Backup/Restore lists | Native sortable, searchable, virtualized tables | Fast scanning and familiar selection/navigation |
-| Backup/Restore operation | Dedicated full-width workspace with summary and diagnostic tabs | Enough room for scope, progress, structured failures and logs |
-| Schedule/BSL/VSL | Native table and a read-only workspace of the extension, shorter than the one of an operation | The details of the host carry the edit and the delete of the host; one way in and one way back for every kind |
+| Backup/Restore lists | Native sortable, searchable, virtualized tables; the list of the Backups has Create backup in its header, which opens the workspace of the backup of the form over the list | Fast scanning and familiar selection/navigation; an action is reviewed where it is asked |
+| Backup/Restore operation | Dedicated full-width workspace with summary and diagnostic tabs; the workspace of a backup offers Restore and Delete backup on the line of its name, where they take no room from the tabs and their lists, as the workspace of a schedule offers Restore for its backups, each opening the workspace of its action over the view; no row of a list offers a deletion | Enough room for scope, progress, structured failures and logs; an action is reviewed where it is asked |
+| Schedule/BSL/VSL | Native table and a workspace of the extension, shorter than the one of an operation; the list of the Schedules has Create schedule in its header, which opens the workspace of the schedule of the form over the list; the workspace of a schedule offers the commands of SPEC-0017 on the line of its name, Back up now first, then Pause or Resume, as the schedule is paused or not, and Restore, each opening the workspace of its action over the view | The details of the host carry the edit and the delete of the host; one way in and one way back for every kind; an action is reviewed where it is asked |
 | Overview | Unframed summary bands and compact recent-operation history | Show attention items and ongoing work without a decorative dashboard; the panels of the backup coverage are deferred after v1.0.0 |
 | Recovery form | Guided source -> scope -> policy -> review flow | Keep consequential choices explicit and reviewable |
 
@@ -92,7 +92,16 @@ file the operator chooses in the dialog of the host.
 - Preserve unknown phases as unknown and retain their text. Missing progress is
   indeterminate, not zero or complete. Invalid or reversed timestamps are unavailable.
 - Show errors/warnings and validation messages near the status. Text and icons must
-  carry the meaning without color. Use host semantic tokens in both themes.
+  carry the meaning without color. Use host semantic tokens in both themes, with
+  their words at the contrast of AA, 4.5 to 1, on every background of the views, the
+  row of a list the pointer is on or that is selected among them: a token that does
+  not reach it there, the primary, the success and the failure of both themes and
+  the warning of the light theme, is mixed with the strongest words of the theme,
+  `--textColorAccent`, by the least share that reaches it, which keeps its hue. The
+  words of a link, a success, a warning and a failure are defined once, on the body,
+  which the pages, the sections of the details of the host and the error page are
+  all under, and a unit test reads them against the themes of the host
+  ([SPEC-0018](../specs/SPEC-0018-release-readiness.md), T6.2).
 - BSL availability and access mode are separate fields. VSL status can be absent;
   show that limitation instead of assuming a healthy provider.
 - Overview health includes the last-success time. The panels of the backup coverage,
@@ -122,16 +131,22 @@ room, in this order: the installation namespace in a list narrower than 1,200
 pixels, the age under 1,000, the storage, the source and the duration under 760,
 the start under 640. Of the locations, the provider and the last sync go under
 760 and the last validation under 640: availability, access mode and default
-stay. Of the schedules, the last submission and the newest backup go under 760 and
-the expression under 640, since the view of a schedule has all three, the band of
-its status the expression and the last submission, its history the newest backup:
-the name, paused, the next run, the adherence and the validation stay. Paused, the
-next run, the word of the adherence with its mark and the last submission have the
-room of their words in a list of 1,000 pixels or more, as measured in the packaged
-application at each edge and in a window of 1440 by 900; in a narrower one they are
-cut at the end of their room, and read whole in their tip. The name, the expression,
-the newest backup and the validation share what is left: of the newest backup the
-name is cut first, and then how it ended, with its tip. In every list the age, shown
+stay. Of the schedules, the last submission and the newest backup go under 1,200,
+with the installation, and the expression under 640, since the view of a schedule
+has all three, the band of its status the expression and the last submission, its
+history the newest backup: the name, paused, the next run, the adherence and the
+validation stay. The border of the two times is 1,200 pixels and not 760, decided by
+the lead maintainer on 2026-10-26, so that the name and the validation are read
+whole in a window of 1440 by 900: with the two times its name, expression, newest
+backup and validation were cut there, and from 1,001 to 1,199 pixels the newest
+backup was cut in every row. An expression longer than its share still keeps its tip
+there. Paused, the next run and the word of the adherence with its mark have the room
+of their words in a list of 1,000 pixels or more, and the last submission where it
+is shown, from 1,201, as measured in the packaged application at each edge and in a
+window of 1440 by 900; in a narrower one they are cut at the end of their room, and
+read whole in their tip. The name, the expression, the newest backup and the
+validation share what is left: of the newest backup the name is cut first, and then
+how it ended, with its tip. In every list the age, shown
 from 1,000 pixels, holds there whole every age the host writes, up to 2y364d; its
 tip is the time of the creation. The installation is the first to go because it is
 the same in every row and the target bar says it.
@@ -186,7 +201,9 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   grace in words, with the marks of the states each beside its word.
 - The Overview is bands without frames, in the order an operator would look: what
   was read, what needs attention beside the newest completed backup and what is in
-  flight, the recent operations, the schedules and the storage. At 1,000 pixels
+  flight, the recent operations, the schedules and the storage. What was read is
+  six cells, one for each family, the backup repositories the sixth, each with its
+  number or its state. At 1,000 pixels
   or more the bands of a row are side by side, under that one is under the other;
   the schedules and the storage are side by side only where the lines of both have
   the room of their columns, and in a window of 1440 by 900 the storage is under
@@ -200,8 +217,9 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   ten items and the way to the ones after them. Every cell, item, mark and line
   is a way to an object or to a list. What needs attention is in four groups,
   in this order: what is in flight, the storage, the schedules, what ended. The
-  storage is by name, and the others from the newest: the order does not change
-  while the operator reads. Before the items are what the rules did not look at
+  storage, the items of the storage locations and of the backup repositories, is
+  by name, and the others from the newest: the order does not change while the
+  operator reads. Before the items are what the rules did not look at
   and then the schedules whose adherence is not known, how many for each reason,
   with the way to their list: none of them is an item, the line says that this is
   not that they need nothing, and the summary over the items says how many they
@@ -213,6 +231,31 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   operations have the page, and are a table.
 - A compact relationship path can connect schedule, backup, storage and restore.
   It is not a freeform graph editor; missing references keep their explanation.
+- The summary of a backup and of a restore has a band of its volume operations,
+  titled Volumes, after its status: one sentence of what the release does with them
+  by the phase of the backup or the restore, then a half for each kind of them, each
+  under its title and with the state of its own read: its pod volume backups or pod
+  volume restores, then its data uploads or data downloads, counted by phase, in the
+  groups and the order of `backup describe` or of `restore describe`, which the data
+  movement of each follows too, with the mark and the label of each phase, and their
+  rows from the newest, ten at a time with a
+  command that shows ten more and gives the focus to the first it added. A row of a
+  pod volume operation is the volume, a way to the view of the operation that
+  returns to the backup or the restore, the pod and the node as the links of the
+  host, the phase with its mark and the message of Velero in its tip, and the bytes
+  done of the total; a row of a data movement is its claim, the way, with no pod. The
+  band says nothing of the items of the operation, whose progress keeps its fact and
+  its note. What was not read is not
+  known and is never none: the band says once that the family is being read, that
+  it cannot be read with no count, that the cluster does not serve it, or that its
+  rows were read before, and when; it says that the backup has none among the ones
+  the installation holds only when the family was read. The view of a repository
+  ends with what used it, by kind: the operations of each kind counted by phase, the
+  newest of them and the backups or the restores they belong to, ten at a time, each
+  a way when it is found; a kind not read is named, with why, a kind of an earlier
+  read says so in place, with its rows or with none, and that no operation of the
+  installation used it is said only when every kind was read now and none names it,
+  the four kinds of the pod volume operations and of the data movement.
 - Logs use bounded rendering, search and clear loading/error/cancel states. Results
   group warnings/errors without losing namespace/resource context. Resource and
   volume views show completeness and filters rather than unbounded JSON blobs.
@@ -229,7 +272,9 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   Velero, cluster and namespace, with their counts, and with the counter of the
   status beside them when it differs. The resources are one list with a filter,
   and for a restore what was done with each item. The volumes are a table, with
-  the details of a row under it. A text that is not of the shape its viewer was
+  the details of a row under it; the details of a row backed up or restored by a pod
+  volume operation lead to that operation when the installation holds it, and say
+  nothing of one it does not. A text that is not of the shape its viewer was
   written for is shown as its lines, with a note.
 - The restore flow reviews a concrete source by default, deliberate namespace
   mappings, existing-resource policy none, and an explicit choice for cluster scope.
@@ -269,7 +314,8 @@ complete feature for ornamental work.
   refresh or reorder the user's selection under their cursor.
 - Escape in a text field of a view belongs to the field: it clears what was typed
   and goes no further, as in the search field of the host, and a view of one
-  object is never left from inside a field. Inside the confirmation of a request
+  object is never left from inside a field. A field that holds a proposal, as the
+  name of a backup asked from a schedule or of a restore, is given back its proposal. Inside the confirmation of a request
   Escape leaves the confirmation, and the view stays. Anywhere else in the view
   Escape is the way back. The two exceptions depart from what the Restores ask of
   Escape: they are a

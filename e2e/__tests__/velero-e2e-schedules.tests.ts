@@ -116,6 +116,8 @@ describe("views of the schedules", () => {
         "velero-backup-repositories",
         "velero-pod-volume-backups",
         "velero-pod-volume-restores",
+        "velero-data-uploads",
+        "velero-data-downloads",
       ]);
       await frame.waitForSelector("[data-testid=velero-state-choose]", { timeout: 60_000 });
       await frame.click(`[data-testid="velero-choice-${cluster.E2E_STATIC_NAMESPACE}"]`);
@@ -179,6 +181,8 @@ describe("views of the schedules", () => {
         "Backup Repositories",
         "Pod Volume Backups",
         "Pod Volume Restores",
+        "Data Uploads",
+        "Data Downloads",
       ]);
       expect(await frame.locator(".TabLayout .TabLayout").count()).toBe(0);
       expect(await cluster.notices(frame, [])).toEqual({});
@@ -293,21 +297,42 @@ describe("views of the schedules", () => {
   it(
     "shows the last submission and the newest backup as two values, and the newest is the one that never started",
     async () => {
-      await cluster.expectRowOf(
-        SCHEDULES,
-        frame,
-        "views-history",
-        "0 1 * * *",
-        "Not paused",
-        "views-history-0",
-        "1 validation error",
-        "Enabled",
-      );
-      await cluster.expectRowOf(SCHEDULES, frame, "views-daily", "views-daily-20260901030000", "2 warnings");
-      await cluster.expectRowOf(SCHEDULES, frame, "views-zoned", "CRON_TZ=Europe/Rome 30 2 * * *", "None that exists");
-      expect(await cluster.mounted(frame, SCHEDULES)).toHaveLength(12);
-      expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
-      await cluster.captureScreenshot(frame, "dark-schedules-with-history");
+      // The two times give their room under 1,200 pixels of the list (REQ-168), which the list of a window of 1440 by
+      // 900 is: they are read in a window of 1680 by 900, on the screen of 1920 by 1200 of the runs, and the window of
+      // 1440 by 900 is given back whatever happens.
+      await velero.setWindowSize(started.app, 1680, 900);
+      try {
+        await frame.waitForSelector("[data-testid=velero-schedules] .TableHead .TableCell.newest", {
+          state: "visible",
+          timeout: 60_000,
+        });
+        await cluster.expectRowOf(
+          SCHEDULES,
+          frame,
+          "views-history",
+          "0 1 * * *",
+          "Not paused",
+          "views-history-0",
+          "1 validation error",
+          "Enabled",
+        );
+        await cluster.expectRowOf(SCHEDULES, frame, "views-daily", "views-daily-20260901030000", "2 warnings");
+        await cluster.expectRowOf(
+          SCHEDULES,
+          frame,
+          "views-zoned",
+          "CRON_TZ=Europe/Rome 30 2 * * *",
+          "None that exists",
+        );
+        expect(await cluster.mounted(frame, SCHEDULES)).toHaveLength(12);
+        expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
+        await cluster.captureScreenshot(frame, "dark-schedules-with-history");
+      } finally {
+        const wide = await frame.evaluate(() => window.innerWidth);
+
+        await velero.setWindowSize(started.app, 1440, 900);
+        await frame.waitForFunction((before) => window.innerWidth < before, wide, { timeout: 60_000 });
+      }
     },
     TIMEOUT,
   );
@@ -823,14 +848,23 @@ describe("views of the schedules", () => {
       // ellipsis and no tip, and the words that leave the line of their row.
       const read: Record<number, { cut: string[]; clipped: string[]; misaligned: string[] }> = {};
 
+      // The work area of the screen, in the report of the case.
+      let screen: unknown;
+      // The words of a schedule in every language, read at 1,201 pixels, where every column that holds them is shown.
+      let wordsWhereShown = ["not read"];
+
       // The window and the zoom are given back whatever happens: every later case reads the window of 1440 by 900.
+      // The edges are the widths where a column gives its room: the installation, the last submission and the newest
+      // backup at 1,200, decided by the lead maintainer on 2026-10-26 (REQ-168), the age at 1,000 and the expression
+      // at 640. At 760 this list gives nothing, which the test of the stylesheet holds.
       try {
-        for (const edge of [1200, 1000, 760, 640]) {
+        for (const edge of [1200, 1000, 640]) {
           for (const room of [edge + 1, edge]) {
             await roomOf(room);
             const columns = await cluster.columnsOf(SCHEDULES, frame);
 
             shown[room] = columns.shown;
+            if (room === 1201) wordsWhereShown = await cluster.tooWide(SCHEDULES, frame, cluster.WORDS_OF_A_SCHEDULE);
             read[room] = {
               cut: room >= 1000 ? columns.cut.filter((column) => whole.includes(column)) : [],
               clipped: columns.clipped,
@@ -844,34 +878,45 @@ describe("views of the schedules", () => {
         expect(read).toEqual(
           Object.fromEntries(Object.keys(read).map((room) => [room, { cut: [], clipped: [], misaligned: [] }])),
         );
+        expect(wordsWhereShown).toEqual([]);
         expect(shown).toEqual({
           1201: without(),
-          1200: without("installation"),
-          1001: without("installation"),
-          1000: without("installation", "age"),
-          761: without("installation", "age"),
-          760: without("installation", "submitted", "newest", "age"),
+          1200: without("installation", "submitted", "newest"),
+          1001: without("installation", "submitted", "newest"),
+          1000: without("installation", "submitted", "newest", "age"),
           641: without("installation", "submitted", "newest", "age"),
           640: without("installation", "schedule", "submitted", "newest", "age"),
         });
         expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
       } finally {
         // The report is written whatever happens: it says how far the rooms were reached when one was not.
-        const screen = await started.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workAreaSize);
+        screen = await started.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workAreaSize);
 
         await cluster.writeReport("schedules-rooms", { screen, reached, shown, read });
         await velero.setZoom(started.app, 1);
         await velero.setWindowSize(started.app, 1440, 900);
         await frame.waitForFunction(() => window.innerWidth > 1000, undefined, { timeout: 60_000 });
       }
-      // In a window of 1440 paused, the next run, the adherence, the last submission and the age are read whole, in
-      // any language and at any age the host writes, nothing is clipped and every word is on the line of its row.
-      const wide = await cluster.columnsOf(SCHEDULES, frame);
+      // In a window of 1440 the room of the list is under 1,200 pixels: the installation, the last submission and the
+      // newest backup are not shown, and the name and the validation, which they cut there, are read whole, which is
+      // why the two times give their room under 1,200 (REQ-168); so are paused, the next run, the adherence and the
+      // age, in any language and at any age the host writes. An expression longer than its share, as the zoned one
+      // of the views, keeps its tip. Nothing is clipped and every word is on the line of its row. The report keeps
+      // the room and what was measured in it beside the edges.
+      const wide = { room: await cluster.listRoom(frame, SCHEDULES), ...(await cluster.columnsOf(SCHEDULES, frame)) };
 
-      expect(wide.cut.filter((column) => whole.includes(column))).toEqual([]);
+      await cluster.writeReport("schedules-rooms", { screen, reached, shown, read, wide });
+      expect(wide.shown).toEqual(without("installation", "submitted", "newest"));
+      expect(wide.cut.filter((column) => column !== "schedule")).toEqual([]);
       expect(wide.clipped).toEqual([]);
       expect(await cluster.misalignedWords(SCHEDULES, frame)).toEqual([]);
-      expect(await cluster.tooWide(SCHEDULES, frame, cluster.WORDS_OF_A_SCHEDULE)).toEqual([]);
+      // The words of the columns the list shows there: the last submission is not shown under 1,200 pixels.
+      const wordsShown = Object.fromEntries(
+        Object.entries(cluster.WORDS_OF_A_SCHEDULE).filter(([column]) => wide.shown.includes(column)),
+      );
+
+      expect(Object.keys(wordsShown)).toEqual(["paused", "next", "adherence", "age"]);
+      expect(await cluster.tooWide(SCHEDULES, frame, wordsShown)).toEqual([]);
     },
     TIMEOUT,
   );
@@ -918,7 +963,7 @@ describe("views of the schedules", () => {
   );
 
   it(
-    "offers no way to select, edit, delete, pause or run a schedule, by pointer or by keyboard",
+    "offers no way to select, edit, delete or run a schedule, by pointer or by keyboard, and Back up now and Pause write nothing by themselves",
     async () => {
       const list = frame.locator("[data-testid=velero-schedules]");
 
@@ -971,13 +1016,29 @@ describe("views of the schedules", () => {
           ),
         );
 
-      // The way back, the ways to the other views and the marks of the line: nothing that writes.
+      // The way back, Back up now, Pause, which a schedule that is not paused is offered, Restore, the ways to the
+      // other views and the marks of the line: nothing that writes by itself (SCHED-11 as SPEC-0017 restates it).
       expect(controls.filter((control) => control !== "mark" && !control.startsWith("velero-open-"))).toEqual([
         "velero-back",
+        "velero-schedule-back-up-now",
+        "velero-schedule-pause",
+        "velero-schedule-restore",
       ]);
       expect(await frame.locator("[data-testid=velero-schedule-workspace]").innerText()).not.toMatch(
         /\b(delete|edit|pause now|resume|run now|trigger)\b/i,
       );
+      // Back up now opens its workspace over the view, and writes nothing: its form, and no review without writes on.
+      await frame.click("[data-testid=velero-schedule-back-up-now]");
+      await frame.waitForSelector("[data-testid=velero-backup-now-workspace]", { timeout: 30_000 });
+      expect(await frame.locator("[data-testid=velero-backup-now-review]").count()).toBe(0);
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { timeout: 30_000 });
+      // Pause opens its workspace over the view, and writes nothing: no review without writes on.
+      await frame.click("[data-testid=velero-schedule-pause]");
+      await frame.waitForSelector("[data-testid=velero-schedule-pause-workspace]", { timeout: 30_000 });
+      expect(await frame.locator("[data-testid=velero-schedule-patch-review]").count()).toBe(0);
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { timeout: 30_000 });
       await cluster.closeWorkspace(frame);
     },
     TIMEOUT,

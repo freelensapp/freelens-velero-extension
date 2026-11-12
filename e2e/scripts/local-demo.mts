@@ -1,4 +1,4 @@
-import { execFile, execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   appendFileSync,
@@ -26,14 +26,22 @@ import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
 import { tabArtifacts, tabExpectations } from "./local-artifacts.mts";
+import { runBackupCreateProof, runBackupNowProof } from "./local-backup-now-proof.mts";
+import { runDeleteBackupProof } from "./local-delete-proof.mts";
 import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResources } from "./local-download-proof.mts";
 import {
+  accountPath,
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
+  assertMaintenanceAhead,
+  awaitRealSchedule,
   awaitRequestsBeforeCleanup,
   awaitRequestsRemoved,
+  awaitVolumeOperationsRemoved,
   clearTabFixtures,
+  createInstallationFixtures,
   createStaticFixtures,
+  createViewFixtures,
   type ExecPluginFiles,
   execPluginKubeconfig,
   FIXTURE_LABEL,
@@ -42,25 +50,33 @@ import {
   fixtureNames,
   fixtureNamespaces,
   liveBackup,
+  placeAdherenceFixtures,
   placementWords,
+  placeRealSchedule,
   placeRefusedFixtures,
   placeViewAndTabFixtures,
   proofIdentities,
   REAL_ARTIFACT_BOUND,
+  REPOSITORY_LABELS,
   readerKubeconfig,
   readFixture,
+  readmeIdentity,
   recordSyncedBackups,
   removeFixtureBackup,
   removeRealSchedule,
+  removeRunRepository,
   restrictedFixtures,
   runLiveFixtures,
+  type ServerVersion,
   tabFixtureFacts,
   tabRemovalWords,
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
+  validateTheLocation,
   verifyStaticFixtures,
   viewIdentityOfAnExecPlugin,
   viewIdentityWithoutPortForward,
+  WITHOUT_A_CONTROLLER,
 } from "./local-fixtures.mts";
 import {
   assertEgressRules,
@@ -91,10 +107,13 @@ import {
   subnetsOverlap,
 } from "./local-kind.mts";
 import {
+  assertFixtureFreeInstallation,
+  assertMaintainFrequency,
   BUCKET,
   type Credentials,
   DATA_DIRECTORY,
   DIRECT_PROOF_IMAGE,
+  FIXTURE_FREE_KINDS,
   IMAGES,
   KIND_HOSTS,
   type KubeResource,
@@ -103,8 +122,12 @@ import {
   prepareVeleroResources,
   STORAGE_ENDPOINT,
   storageManifests,
+  veleroDefinitionsArguments,
+  veleroInstallArguments,
 } from "./local-manifests.mts";
 import {
+  ASKED_AGAIN_AFTER,
+  askAgain,
   assertBinary,
   assertLogWithholds,
   BINARIES,
@@ -125,8 +148,11 @@ import {
   occupiedSubnets,
   platformManifest,
   withhold,
+  worthAskingAgain,
 } from "./local-platform.mts";
+import { runRestoreCreateProof } from "./local-restore-proof.mts";
 import { type RunJournal, type StoreReach, storeRequest, tabRecord } from "./local-runtime.mts";
+import { runScheduleCreateProof, runSchedulePatchProof } from "./local-schedule-proof.mts";
 import { assertOfficialImages } from "./local-security.mts";
 
 import type { ProofShell } from "./local-host.mts";
@@ -192,12 +218,20 @@ interface Journal {
   images?: Record<string, string>;
   resources: ResourceIdentity[];
   phase: string;
+  // Set by `up-definitions`: the cluster holds the CRDs of the release and no installer, server or store ran on it,
+  // so its fixtures are static and its views read no controller.
+  mode?: "definitions";
   retiredNodeIds?: string[];
   bucket?: { name: string; created: boolean };
   temporaryChecks?: (ResourceIdentity & { owner: string })[];
   // `tabs` is what the placement of the fixtures of the tabs has reached, recorded before the store is
   // given anything: the metadata it stored is in a file of its own.
-  fixtureRun?: { id: string; started: string; phase: string } & NonNullable<RunJournal["fixtureRun"]>;
+  fixtureRun?: {
+    id: string;
+    started: string;
+    phase: string;
+    repository?: { name: string; uid: string; labels: Record<string, string> };
+  } & NonNullable<RunJournal["fixtureRun"]>;
 }
 
 let journal: Journal;
@@ -449,10 +483,28 @@ async function installTools(): Promise<void> {
         unlinkSync(file);
       }
     }
-    const response = await fetch(binaryUrl(name, target), { redirect: "follow", signal: AbortSignal.timeout(300_000) });
+    // The release is asked again when it does not answer, or answers what a wait may change; its body is read in
+    // the same asking, so a body cut halfway is asked again too. What comes back is checked against its checksum.
+    const answer = await askAgain(
+      async () => {
+        const response = await fetch(binaryUrl(name, target), {
+          redirect: "follow",
+          signal: AbortSignal.timeout(300_000),
+        });
 
-    requireCondition(response.ok, `The official release of ${name} did not answer`);
-    const content = new Uint8Array(await response.arrayBuffer());
+        if (!response.ok) {
+          await response.body?.cancel();
+          return { status: response.status, content: undefined };
+        }
+        return { status: response.status, content: new Uint8Array(await response.arrayBuffer()) };
+      },
+      (got) => worthAskingAgain(got.status),
+      ASKED_AGAIN_AFTER,
+      (milliseconds) => delay(milliseconds),
+    );
+
+    requireCondition(answer.content, `The official release of ${name} did not answer: ${answer.status}`);
+    const content = answer.content;
 
     assertBinary(name, target, content);
     writeFileSync(`${file}.next`, content, { mode: 0o700 });
@@ -1079,20 +1131,7 @@ function installVelero(): void {
       `type=bind,src=${CONFIG},dst=/local-kubeconfig,readonly`,
       "--entrypoint=/velero",
       IMAGES.velero,
-      "install",
-      "--dry-run",
-      "--output=json",
-      "--kubeconfig=/local-kubeconfig",
-      `--kubecontext=${DEMO_CONTEXT}`,
-      `--namespace=${DEMO_NAMESPACE}`,
-      "--provider=aws",
-      `--bucket=${BUCKET}`,
-      "--secret-file=/local-credentials",
-      `--image=${preloadedImage(IMAGES.velero)}`,
-      `--plugins=${preloadedImage(IMAGES.plugin)}`,
-      "--use-volume-snapshots=false",
-      "--use-node-agent",
-      `--backup-location-config=region=us-east-1,s3ForcePathStyle=true,s3Url=${STORAGE_ENDPOINT}`,
+      ...veleroInstallArguments(),
     ]),
   ) as { items: KubeResource[] };
   const resources = prepareVeleroResources(journal.owner, generated);
@@ -1139,6 +1178,103 @@ function installVelero(): void {
   save();
   console.log(
     "PASS: official Velero server, node-agent and 13 CRDs installed; the local BackupStorageLocation is Available. No backup or restore was created.",
+  );
+}
+
+// The CRDs of the pinned release alone, from its installer, for the integration test: each of its sessions places an
+// object of its own that no controller reads, so neither the server, the node agent nor the store is installed. Without
+// a controller the sessions cannot depend on what one would do, and a run does not wait for it.
+function installVeleroDefinitions(): void {
+  verifyPreloadedImages();
+  const user = process.getuid?.();
+  const group = process.getgid?.();
+
+  requireCondition(typeof user === "number" && typeof group === "number", "Local Unix identity is required");
+  const generated = JSON.parse(
+    docker([
+      "run",
+      "--rm",
+      "--pull=never",
+      "--network=none",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      `--user=${user}:${group}`,
+      "--entrypoint=/velero",
+      IMAGES.velero,
+      ...veleroDefinitionsArguments(),
+    ]),
+  ) as { items: KubeResource[] };
+  const definitions = prepareVeleroResources(journal.owner, generated);
+
+  requireCondition(
+    definitions.length === 13 && definitions.every((resource) => resource.kind === "CustomResourceDefinition"),
+    "Expected the 13 reviewed Velero CRDs and nothing else",
+  );
+  for (const definition of definitions) applyOwned(definition);
+  kubectl(
+    [
+      "wait",
+      "--for=condition=Established",
+      "customresourcedefinitions",
+      "--selector",
+      `${OWNER_LABEL}=${journal.owner}`,
+      "--timeout=60s",
+    ],
+    undefined,
+    90_000,
+  );
+  journal.phase = "definitions-ready";
+  save();
+  console.log("PASS: the 13 CRDs of the pinned Velero release installed alone: no server, node agent or store.");
+}
+
+// The environment is ready for the sessions once the API server serves every kind of the release as it does where
+// Velero runs. It publishes the discovery and the OpenAPI of new CRDs a moment after they are Established, and it
+// starts serving a kind, with the watch cache of its storage, at the first request for it: from Kubernetes 1.31 it
+// answers 429 Too Many Requests to the watches and the reads that need that cache while it is filled, and a session
+// that read a kind first got those answers in its console. Where Velero runs its server has read every kind; here,
+// once the discovery names the 13 kinds and the OpenAPI their two versions, one list of the kinds starts each of them
+// before a session reads one.
+async function waitForServedDefinitions(): Promise<void> {
+  const started = Date.now();
+  const versions = ["velero.io/v1", "velero.io/v2alpha1"];
+  // Each command is given a short time, so that the wait ends near its two minutes.
+  const read = (args: string[]) => kubectl(args, undefined, 20_000);
+  // What the API server answered to the last command that failed, kept for the end of the wait.
+  let reason: string[] = [];
+
+  for (;;) {
+    let listed = false;
+
+    try {
+      const kinds = read(["api-resources", "--api-group=velero.io", "-o", "name"]).trim().split("\n").filter(Boolean);
+      const paths = Object.keys(
+        (JSON.parse(read(["get", "--raw", "/openapi/v3"])) as { paths?: Record<string, unknown> }).paths ?? {},
+      );
+
+      if (kinds.length === 13 && versions.every((version) => paths.includes(`apis/${version}`))) {
+        read(["get", kinds.join(","), "--all-namespaces", "-o", "name"]);
+        listed = true;
+      }
+    } catch (error) {
+      // Not served yet: the API server may refuse a read while it publishes the CRDs or starts a kind. Anything else,
+      // as a target that is not the one of the journal, is said at once.
+      if (!(error instanceof Error && "reason" in error)) throw error;
+      reason = (error as { reason?: string[] }).reason ?? [];
+    }
+    if (listed) break;
+    if (Date.now() - started >= 120_000) {
+      throw new Error(
+        ["The API server did not serve the 13 Velero CRDs in two minutes", ...reason.map((line) => `  ${line}`)].join(
+          "\n",
+        ),
+      );
+    }
+    await delay(2_000);
+  }
+  console.log(
+    `PASS: the API server serves the 13 CRDs, published and listed once each, ${Date.now() - started} ms after they were Established.`,
   );
 }
 
@@ -1286,23 +1422,19 @@ async function verifyEnvironment(): Promise<void> {
   for (const workload of ["deployment/seaweedfs", "deployment/velero", "daemonset/node-agent"]) {
     kubectl(["rollout", "status", workload, "--namespace", DEMO_NAMESPACE, "--timeout=60s"], undefined, 90_000);
   }
+  assertMaintainFrequency(
+    JSON.parse(kubectl(["get", "deployment/velero", "--namespace", DEMO_NAMESPACE, "-o", "json"])) as KubeResource,
+  );
   const location = JSON.parse(
     kubectl(["get", "backupstoragelocation/default", "--namespace", DEMO_NAMESPACE, "-o", "json"]),
   ) as { status?: { phase?: string } };
 
   requireCondition(location.status?.phase === "Available", "The local BackupStorageLocation is not Available");
   const operations = JSON.parse(
-    kubectl([
-      "get",
-      "backups.velero.io,restores.velero.io,schedules.velero.io,downloadrequests.velero.io,serverstatusrequests.velero.io",
-      "--namespace",
-      DEMO_NAMESPACE,
-      "-o",
-      "json",
-    ]),
-  ) as { items: unknown[] };
+    kubectl(["get", FIXTURE_FREE_KINDS.join(","), "--namespace", DEMO_NAMESPACE, "-o", "json"]),
+  ) as { items: KubeResource[] };
 
-  requireCondition(operations.items.length === 0, "T0.4 readiness requires a fixture-free installation");
+  assertFixtureFreeInstallation(operations.items);
   const pods = JSON.parse(
     kubectl([
       "get",
@@ -1599,13 +1731,36 @@ function prepareFixtures(): void {
     journal.fixtureRun.phase === "preparing",
     "Fixture run already prepared; do not replace its evidence",
   );
-  const snapshots = createStaticFixtures({ owner: journal.owner, kubectl, apply: applyOwned }, journal.fixtureRun.id);
+  const runtime = { owner: journal.owner, kubectl, apply: applyOwned };
+  const controlled = journal.mode !== "definitions";
+
+  // The installation of the CRDs alone is static only where no server of Velero was installed.
+  requireCondition(
+    controlled ||
+      !kubectl(["get", "deployments", "--namespace", DEMO_NAMESPACE, "--ignore-not-found", "-o", "name"]).includes(
+        "deployment.apps/velero",
+      ),
+    "The environment of the CRDs alone holds a server of Velero: run pnpm e2e:cluster:down",
+  );
+  const snapshots = createStaticFixtures(runtime, journal.fixtureRun.id, controlled);
+  // Without an installer, the installation the views find is static too, validated when the run was started, with the
+  // counterparts of what its controllers would have left in it, made for the cluster they would have run in.
+  const installation = controlled
+    ? []
+    : createInstallationFixtures(
+        runtime,
+        journal.fixtureRun.id,
+        Date.parse(journal.fixtureRun.started),
+        serverVersion(),
+      );
 
   writeFileSync(join(STATE, "fixture-static-snapshots.json"), JSON.stringify(snapshots), { mode: 0o600 });
   journal.fixtureRun.phase = "static-ready";
   save();
   console.log(
-    `PASS: ${snapshots.length} labelled synthetic objects accepted with exact status readback; controller-isolation evidence will be checked after live operations.`,
+    controlled
+      ? `PASS: ${snapshots.length} labelled synthetic objects accepted with exact status readback; controller-isolation evidence will be checked after live operations.`
+      : `PASS: ${snapshots.length} labelled synthetic objects and an installation of ${installation.length}, the CRDs alone and no controller, accepted with exact status readback.`,
   );
 }
 
@@ -1615,7 +1770,9 @@ async function executeLiveFixtures(): Promise<void> {
     journal.fixtureRun?.phase === "static-ready",
     "Static fixtures must be prepared before live verification",
   );
-  const runtime = { owner: journal.owner, kubectl, apply: applyOwned };
+  // The runtime with the clock, which the waits of the volume are bounded by, and the journal, which learns the pod,
+  // the backup and the restore of the volume as they are applied.
+  const runtime = fixtureRuntime();
   const result = await runLiveFixtures(runtime, journal.fixtureRun.id);
   const snapshots = JSON.parse(readFileSync(join(STATE, "fixture-static-snapshots.json"), "utf8")) as KubeResource[];
 
@@ -1626,7 +1783,7 @@ async function executeLiveFixtures(): Promise<void> {
   journal.fixtureRun.phase = "live-verified";
   save();
   console.log(
-    `PASS: live Backup and Restore Completed; ${result.configMaps} ConfigMaps and ${result.payloadBytes} payload bytes match, and ${snapshots.length} synthetic object versions/statuses are unchanged.`,
+    `PASS: live Backup and Restore Completed; ${result.configMaps} ConfigMaps and ${result.payloadBytes} payload bytes match, and ${snapshots.length} synthetic object versions/statuses are unchanged. The volume of the run backed up and restored by the node agent: ${result.volume.bytes} bytes match, the repository ${result.volume.repository.name} is Ready and maintained every ${result.volume.repository.maintenanceFrequency}.`,
   );
 }
 
@@ -1839,9 +1996,15 @@ async function cleanupFixtures(): Promise<void> {
     console.log(tabRemovalWords(clearTabFixtures(runtime, run)));
   }
   // A backup the scripts created is deleted by the controller, through a request of its own: the real one
-  // with the restores that name it, and the one that failed its validation, of which the store holds nothing.
-  // One a cleanup that was interrupted left while it was deleted is taken up from the request that is there.
-  for (const name of [names.backup, names.invalidBackup]) removeFixtureBackup(runtime, run, name);
+  // with the restores that name it, the one that failed its validation, of which the store holds nothing, and
+  // the one of the volume with its restore. One a cleanup that was interrupted left while it was deleted is taken
+  // up from the request that is there.
+  for (const name of [names.backup, names.invalidBackup, names.volumeBackup]) removeFixtureBackup(runtime, run, name);
+  // The pod volume backup and restore of the volume go with their owners, and are waited for with a bound of their
+  // own; then the repository the server made for the volume, by the identity the run recorded. Its data stays in
+  // the bucket until the environment is taken down.
+  const operationsOfTheVolume = awaitVolumeOperationsRemoved(runtime, run);
+  const repository = removeRunRepository(runtime, run);
   // The restore without a backup is of no backup the controller deletes: it is removed by its identity,
   // the one the cluster gives of the object that was just read as owned by this run. An apply that was
   // interrupted recorded the object without it.
@@ -1913,6 +2076,8 @@ async function cleanupFixtures(): Promise<void> {
       run,
       controllerDeletion: true,
       scheduleRemoved: yearly.removed,
+      volumeOperationsWaited: operationsOfTheVolume.waited,
+      repositoryRemoved: repository.removed,
       expectedArtifactsAbsent: keys,
       namespacesRemoved: removed,
       unrelatedResourcesPreserved: true,
@@ -1920,7 +2085,7 @@ async function cleanupFixtures(): Promise<void> {
     { mode: 0o600 },
   );
   console.log(
-    `PASS: real backup, associated restore and stored artifacts removed by the controller; ${yearly.removed ? `the schedule ${names.realSchedule} the controller validated removed with a UID check; ` : ""}${removed} owned fixture namespaces removed with UID checks. Demo infrastructure retained.`,
+    `PASS: real backup, associated restore and stored artifacts removed by the controller; the backup of the volume, its restore and their pod volume operations removed with them${repository.removed ? ", and the repository of the volume with a UID check" : ""}; ${yearly.removed ? `the schedule ${names.realSchedule} the controller validated removed with a UID check; ` : ""}${removed} owned fixture namespaces removed with UID checks. Demo infrastructure retained; the data of the repository of the volume stays in the bucket until pnpm demo:down.`,
   );
 }
 
@@ -2022,16 +2187,16 @@ function runDirectProof(input: {
   }
 }
 
-// Removes accounts of the namespace of the installation that were applied for a run, with their roles and their
-// bindings, by the identity the cluster gives of each, read as owned by that run: the binding first, then the
-// role and the account. One that is not in the journal, or not in the cluster any more, is passed over.
+// Removes accounts that were applied for a run, with their roles and their bindings, of a namespace or of the whole
+// cluster, by the identity the cluster gives of each, read as owned by that run: the bindings first, then the roles
+// and the account, as they are given in the other order. One that is not in the journal, or not in the cluster any
+// more, is passed over.
 function removeAccounts(accounts: KubeResource[]): void {
   for (const account of [...accounts].reverse()) {
+    const namespace = account.metadata.namespace;
     const entry = journal.resources.find(
       (resource) =>
-        resource.kind === account.kind &&
-        resource.name === account.metadata.name &&
-        resource.namespace === DEMO_NAMESPACE,
+        resource.kind === account.kind && resource.name === account.metadata.name && resource.namespace === namespace,
     );
 
     if (!entry) continue;
@@ -2046,15 +2211,7 @@ function removeAccounts(accounts: KubeResource[]): void {
         "An identity of a run belongs to a different fixture run",
       );
       kubectl(
-        [
-          "delete",
-          "--raw",
-          account.kind === "ServiceAccount"
-            ? `/api/v1/namespaces/${DEMO_NAMESPACE}/serviceaccounts/${entry.name}`
-            : `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/${account.kind === "Role" ? "roles" : "rolebindings"}/${entry.name}`,
-          "-f",
-          "-",
-        ],
+        ["delete", "--raw", accountPath(account.kind, entry.name, namespace), "-f", "-"],
         JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: found.metadata.uid } }),
         undefined,
         false,
@@ -2077,6 +2234,10 @@ async function runTransportProof(): Promise<void> {
   const originals: KubeResource[] = [];
   const secrets: KubeResource[] = [];
   const accounts: KubeResource[] = [];
+  // The kubeconfig of the operator of the README, in the private state while the proofs run.
+  let operatorFile: string | undefined;
+  // Why the identities of the proof were not all removed, when they were not: thrown once the rest of the cleanup ran.
+  let identitiesLeft: unknown;
   let certificates: Awaited<ReturnType<typeof createTlsFixture>> | undefined;
   let requestCleanupFailed = false;
   const report: Record<string, unknown> = { date: new Date().toISOString(), result: "running", cleanup: "pending" };
@@ -2114,10 +2275,25 @@ async function runTransportProof(): Promise<void> {
     ) as { items: KubeResource[] };
 
     requireCondition(pods.items.length === 1 && pods.items[0].metadata.uid, "Expected one owned storage pod");
+    // The operator of the README, which holds the role of the actions (REQ-288 of SPEC-0018). The session of the
+    // extension runs with its kubeconfig in the proof of the download through the cluster, with its request of the
+    // version of the server, and in the proofs of the actions; what those proofs place, read and remove beside the
+    // session, which that role does not allow, they do with the kubeconfig of the environment. Of this run, with a
+    // credential that lasts as long as the proofs may, and gone with the run.
+    const operator = readmeIdentity("operator", journal.owner, active.id, DEMO_NAMESPACE);
+    const operatorKubeconfig = join(STATE, `readme-operator-${active.id}.json`);
+
+    for (const resource of operator) {
+      accounts.push(resource);
+      applyOwned(resource);
+    }
+    operatorFile = operatorKubeconfig;
+    writeReaderKubeconfig(operatorKubeconfig, DEMO_NAMESPACE, "2h", operator[0].metadata.name);
     const proofContext = {
       owner: journal.owner,
       run: active.id,
-      kubeconfig: CONFIG,
+      kubeconfig: operatorKubeconfig,
+      environment: CONFIG,
       shell: proofShell(),
       pod: { name: pods.items[0].metadata.name, uid: pods.items[0].metadata.uid },
       assertCurrent: verifyTarget,
@@ -2136,6 +2312,36 @@ async function runTransportProof(): Promise<void> {
     // Asked once, through the tunnel over HTTP: what the store and the server answer does not depend on
     // the way the bytes would have come by.
     const http = await runDownloadProof({ ...proofContext, refused });
+    // Back up now, end to end, with the server of the release: the backup of the real schedule of the run ends
+    // Completed and is deleted through a DeleteBackupRequest the server processes (SPEC-0017, ACT-11). The schedule is
+    // placed for this run, once the controller validated it, and goes with the run.
+    const runtime = fixtureRuntime();
+
+    placeRealSchedule(runtime, active.id);
+    awaitRealSchedule(runtime, active.id);
+    const backupNow = await runBackupNowProof(proofContext);
+
+    report.backupNow = backupNow;
+    // Create backup, end to end: a backup of the form of the ConfigMaps of the run Completes, carries the fields of its
+    // text that Velero keeps as sent, and is deleted the same way (SPEC-0017, ACT-11).
+    report.backupCreate = await runBackupCreateProof(proofContext);
+    // Create schedule, end to end, with the controller of the release (SPEC-0016, REQ-242): a schedule of every two
+    // minutes Enabled with its one backup, one the controller refuses with the words of the views, and one paused that
+    // it does not read, each removed with the backup of the first (CRSCH-22).
+    report.scheduleCreate = await runScheduleCreateProof(proofContext);
+    // Restore, end to end (SPEC-0017, ACT-11, RESTORE-08): the backup of the fixtures restored into the namespace of its
+    // mapping through the procedures of the compiled main process, with the name of the backup typed, Completed with
+    // every ConfigMap of the run, and removed with that namespace.
+    report.restoreCreate = await runRestoreCreateProof(proofContext);
+    // Pause and resume, end to end, with the controller of the release (SPEC-0017, PAUSE-04): two schedules paused
+    // through an instant submit nothing; resumed, one submits its backup at once and the other skips it with the time
+    // Velero writes; a resume whose schedule changed since its review is refused by the API server with 422, which its
+    // metrics count, as a conflict. Each is removed with the backup of the first.
+    report.schedulePatch = await runSchedulePatchProof(proofContext);
+    // The deletion of a backup, end to end (SPEC-0017, DELETE-05): a backup of the run deleted through the procedures of
+    // the compiled main process, with its name typed, gone with its request; and a backup of a storage location that is
+    // not there, whose request the server refuses with the one error of a refusal, the backup in its phase.
+    report.deleteBackup = await runDeleteBackupProof(proofContext);
 
     requireCondition(
       http.missingArtifacts === 2 && http.refusedBeforeCreation,
@@ -2195,7 +2401,11 @@ async function runTransportProof(): Promise<void> {
     certificates = await createTlsFixture(new URL(STORAGE_ENDPOINT).hostname, [new URL(DIRECT_PROOF_ORIGIN).hostname]);
     const tls = tlsProofResources(journal.owner, active.id, originals, certificates);
 
-    for (const resource of tls) {
+    // The storage location changes once the store serves again: the server makes every repository of the
+    // location NotReady when it changes and checks each again at once
+    // (`pkg/controller/backup_repository_controller.go:114-160` of the source of Velero v1.18.4); a check while
+    // the store restarts fails, and the next comes with the sync, five minutes later (`repoSyncPeriod`, 54).
+    for (const resource of tls.filter((item) => item.kind !== "BackupStorageLocation")) {
       if (resource.kind === "Secret") secrets.push(resource);
       applyOwned(resource);
     }
@@ -2204,6 +2414,7 @@ async function runTransportProof(): Promise<void> {
       undefined,
       150_000,
     );
+    for (const resource of tls.filter((item) => item.kind === "BackupStorageLocation")) applyOwned(resource);
     const readyPods = JSON.parse(
       kubectl([
         "get",
@@ -2221,8 +2432,11 @@ async function runTransportProof(): Promise<void> {
       readyPods.items.length === 1 && readyPods.items[0].metadata.uid,
       "TLS storage pod identity is ambiguous",
     );
+    // The modes over TLS run with the kubeconfig of the environment, as before the operator: the authority of the
+    // second is read from a Secret, of which the role of the actions grants no read.
     const tlsContext = {
       ...proofContext,
+      kubeconfig: CONFIG,
       pod: { name: readyPods.items[0].metadata.name, uid: readyPods.items[0].metadata.uid },
       origin: STORAGE_ENDPOINT.replace("http:", "https:").replace(":8333", ":8443"),
       port: 8443,
@@ -2260,21 +2474,112 @@ async function runTransportProof(): Promise<void> {
       referencedCa,
       direct,
       identities: { ...refusedIdentities, certificate },
+      // The identity of the session of the proof over HTTP and of the proofs of the actions.
+      session: "operator",
       directRuntime: DIRECT_PROOF_IMAGE,
       result: "artifacts-passed",
     });
     writeFileSync(join(STATE, "transport-proof.json"), JSON.stringify(report), { mode: 0o600 });
     console.log(
-      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded.",
+      "PASS: the operator of the README, with the role of the actions alone, ran the session of the extension in the proof over HTTP, with its request of the version of the server, and in every proof of an action; compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest, and so was a backup of the form, Completed with the fields of its text the server keeps as sent; a schedule of the form of every two minutes was Enabled at its creation with no backup, and had exactly one after its first instant, Completed with the template of the schedule, which the server deleted, one the controller refused was FailedValidation with the words the views say, and one paused was left unread by the controller, with no backup of the three left; a restore of the backup of the run, asked with the name of the backup typed, Completed into the namespace of its mapping with every ConfigMap of the run, what each holds and the labels of the restore, and was removed with that namespace; two schedules paused through an instant submitted no backup, and resumed, the one with skip immediately false submitted its backup at once and the other none, with the skip Velero writes, and a resume whose schedule changed since its review was refused with a 422 the metrics of the API server counted once, said as a conflict; a backup of the run was deleted through the DeleteBackupRequest of its review, with its name typed, and was gone with its request, and the request to delete a backup of a storage location that is not there was refused with the one error of a refusal, the backup FailedValidation as it was.",
     );
+  } catch (error) {
+    // A failure of a proof is said before the cleanup below, whose own failure would otherwise be the one thrown.
+    console.error(
+      `The transport proof failed, before its cleanup: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    // How the store stood: a store that restarted, and whose master chose its leader again, answers writes with 500.
+    try {
+      const pods = (
+        JSON.parse(kubectl(["get", "pods", "--namespace", DEMO_NAMESPACE, "-o", "json"], undefined, 30_000, false)) as {
+          items: {
+            metadata: { name: string };
+            status?: {
+              containerStatuses?: {
+                restartCount?: number;
+                lastState?: { terminated?: { reason?: string; finishedAt?: string } };
+              }[];
+            };
+          }[];
+        }
+      ).items.filter((pod) => pod.metadata.name.startsWith("seaweedfs"));
+
+      for (const pod of pods)
+        for (const container of pod.status?.containerStatuses ?? [])
+          console.error(
+            `The store ${pod.metadata.name}: ${container.restartCount ?? 0} restarts` +
+              (container.lastState?.terminated
+                ? `, the last ended ${container.lastState.terminated.reason ?? "with no reason"} at ${container.lastState.terminated.finishedAt ?? "a time not known"}`
+                : ""),
+          );
+      // Its volumes, without their contents: how many are writable, and how much of each was deleted.
+      const volumes = kubectl(
+        [
+          "exec",
+          "--namespace",
+          DEMO_NAMESPACE,
+          "deploy/seaweedfs",
+          "--",
+          "sh",
+          "-c",
+          "echo volume.list | weed shell -master=localhost:9333",
+        ],
+        undefined,
+        60_000,
+        false,
+      );
+
+      for (const line of volumes.split("\n").filter((line) => /Topology|volume Id:/.test(line)))
+        console.error(
+          `The store: ${line
+            .trim()
+            .replace(/, (Version|Ttl|ReplicaPlacement|ModifiedAtSecond):[^,]*/g, "")
+            .slice(0, 200)}`,
+        );
+      // What the store said of its volumes, the lines of space, of compaction and of writes it could not place.
+      const said = kubectl(
+        ["logs", "--namespace", DEMO_NAMESPACE, "deploy/seaweedfs", "--tail=5000"],
+        undefined,
+        60_000,
+        false,
+      )
+        .split("\n")
+        .filter((line) => /vacuum|compact|read.?only|no free|no writable|disk|space|leader|grow/i.test(line))
+        .map((line) =>
+          line
+            .replace(/(X-Amz-[A-Za-z-]+=)[^&\s"]+/g, "$1REDACTED")
+            .replace(/((?:access|secret)[_ -]?key|credential|token|password)(\W{1,3})\S+/gi, "$1$2REDACTED")
+            .slice(0, 240),
+        )
+        .slice(-30);
+
+      for (const line of said) console.error(`The store said: ${line}`);
+    } catch {
+      console.error("The state of the store could not be read.");
+    }
+    throw error;
   } finally {
-    for (const resource of originals) applyOwned(resource);
+    // The identities of the proof go first, since they depend on nothing of the store, whatever becomes of it after:
+    // each by the identity the cluster gives of it, read as owned by this run, the operator of the README among them,
+    // and its kubeconfig with them. A removal that fails is said at once, and stops nothing of the rest of the cleanup.
+    try {
+      if (operatorFile) rmSync(operatorFile, { force: true });
+      removeAccounts(accounts);
+    } catch (error) {
+      identitiesLeft = error;
+      console.error(
+        `The identities of the proof were not all removed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    // The location goes back once the store serves again, as above.
+    for (const resource of originals.filter((item) => item.kind !== "BackupStorageLocation")) applyOwned(resource);
     if (originals.length) {
       kubectl(
         ["rollout", "status", "deployment/seaweedfs", "--namespace", DEMO_NAMESPACE, "--timeout=120s"],
         undefined,
         150_000,
       );
+      for (const resource of originals.filter((item) => item.kind === "BackupStorageLocation")) applyOwned(resource);
       kubectl(
         [
           "wait",
@@ -2304,8 +2609,6 @@ async function runTransportProof(): Promise<void> {
       journal.resources = journal.resources.filter((resource) => resource !== entry);
       save();
     }
-    // The identities of the proof go by the identity the cluster gives of each, read as owned by this run.
-    removeAccounts(accounts);
     await certificates?.dispose();
 
     if (journal.fixtureRun) {
@@ -2383,6 +2686,8 @@ async function runTransportProof(): Promise<void> {
     }
     if (journal.fixtureRun) await cleanupFixtures();
   }
+  // Reached when every proof passed: an identity left in the cluster fails the run once the rest was cleaned.
+  if (identitiesLeft !== undefined) throw identitiesLeft;
   requireCondition(
     !requestCleanupFailed,
     "Diagnostic request cleanup was incomplete; private request identities retained",
@@ -2516,6 +2821,15 @@ function stopCluster(): void {
 }
 
 async function bringUp(): Promise<void> {
+  requireCondition(
+    journal.mode !== "definitions" || !journal.fixtureRun,
+    "The environment of the CRDs alone holds its static fixtures: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up",
+  );
+  // From here the environment is on its way to the full installation, whatever stops it on the way.
+  if (journal.mode) {
+    delete journal.mode;
+    save();
+  }
   await installTools();
   execFileSync(process.execPath, [fileURLToPath(new URL("./local-images.mts", import.meta.url)), "pull"], {
     env: childEnvironment(process.env, { HOME: homedir() }),
@@ -2534,6 +2848,33 @@ async function bringUp(): Promise<void> {
     return;
   }
   await verifyEnvironment();
+}
+
+// The environment of the integration test and of the views that read no controller: the cluster and the CRDs of the
+// release, without the server, the node agent and the store of `up`. An environment that holds more, brought up with
+// `up` or `demo:up`, is refused: it would keep its server, its store and its fixtures. One brought up by this action
+// may hold its static fixtures, and is brought up again as it is.
+async function bringUpDefinitions(): Promise<void> {
+  requireCondition(
+    !journal.bucket &&
+      (journal.mode === "definitions" ||
+        (!journal.fixtureRun && journal.resources.every((entry) => entry.kind === "CustomResourceDefinition"))),
+    "The environment holds more than the CRDs of the release: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up:definitions",
+  );
+  await installTools();
+  execFileSync(process.execPath, [fileURLToPath(new URL("./local-images.mts", import.meta.url)), "pull"], {
+    env: childEnvironment(process.env, { HOME: homedir() }),
+    stdio: "inherit",
+    timeout: 1_800_000,
+  });
+  const [existing] = journal.nodeId ? nodes() : [];
+
+  if (existing && !existing.State.Running) await startCluster();
+  else await setupCluster();
+  installVeleroDefinitions();
+  await waitForServedDefinitions();
+  journal.mode = "definitions";
+  save();
 }
 
 // What was generated for this environment stays in its files. The log is read in pieces, it grows with every run.
@@ -2668,6 +3009,22 @@ function fixtureRuntime(): FixtureRuntime {
       save,
     },
     tabs: tabRecord(journal, TABS, save),
+    // The repository the server made for the volume of the run carries no label of the demo: it is not among the
+    // resources of the journal, whose owner every check asks of each, and the record of the run keeps its
+    // identity, by which the cleanup removes it.
+    repository: {
+      read: () => journal.fixtureRun?.repository,
+      keep: (found) => {
+        requireCondition(journal.fixtureRun, "No fixture run is recorded");
+        journal.fixtureRun.repository = found;
+        save();
+      },
+      forget: () => {
+        if (!journal.fixtureRun?.repository) return;
+        delete journal.fixtureRun.repository;
+        save();
+      },
+    },
   };
 }
 
@@ -2690,6 +3047,27 @@ function placeViewsAndTabs(): {
   );
   const run = journal.fixtureRun.id;
   const names = fixtureNames(run);
+
+  // The repository of the volume of the run is maintained once a week: no placement is made less than a day before
+  // its next maintenance, which would run while the suites that follow it run.
+  assertMaintenanceAhead(
+    (
+      JSON.parse(
+        kubectl([
+          "get",
+          "backuprepositories.velero.io",
+          "--namespace",
+          DEMO_NAMESPACE,
+          "--selector",
+          `${REPOSITORY_LABELS.volumeNamespace}=${names.source},${REPOSITORY_LABELS.location}=default,${REPOSITORY_LABELS.type}=kopia`,
+          "-o",
+          "json",
+        ]),
+      ) as { items: KubeResource[] }
+    ).items,
+    run,
+    Date.now(),
+  );
   // The times of the fixtures are taken from when the run was started: a second call asks for the same objects.
   const started = Date.parse(journal.fixtureRun.started);
   const runtime = fixtureRuntime();
@@ -2707,6 +3085,88 @@ function placeViewsAndTabs(): {
   save();
   for (const line of placementWords(names, placed, recreated)) console.log(line);
   return { names, runtime, told: tabExpectations(artifacts) };
+}
+
+// The version of the API server of the environment, as `kubectl version` reports it: the server of the release writes
+// it into every backup it takes, and the counterparts of its backups carry the one of the cluster they are placed in.
+function serverVersion(): ServerVersion {
+  const { serverVersion: version } = JSON.parse(kubectl(["version", "-o", "json"])) as {
+    serverVersion?: { gitVersion?: string; major?: string; minor?: string };
+  };
+
+  requireCondition(
+    typeof version?.gitVersion === "string" && typeof version.major === "string" && typeof version.minor === "string",
+    "The version of the API server could not be read",
+  );
+  return { gitVersion: version.gitVersion, major: version.major, minor: version.minor };
+}
+
+// On the environment of the CRDs alone no server validates the location of the installation once a minute: the runner
+// writes into it what the server would, before the suites start and once a minute while they run, and stops when they
+// end. A write that fails is said and tried again at the next minute: the suite that reads the location says what it
+// found.
+function standInForTheServer(runtime: FixtureRuntime): { stop(): void } {
+  const validate = () => {
+    try {
+      validateTheLocation(runtime, Date.now());
+    } catch (error) {
+      console.warn(`The location of the installation could not be validated: ${(error as Error).message}`);
+    }
+  };
+
+  validate();
+  const minute = setInterval(validate, 60_000);
+
+  return { stop: () => clearInterval(minute) };
+}
+
+// The suites, in the application, with their environment, given two hours: as long as the identities made for the run
+// last, so the suites that run last must still find them. What the process of the suites ended with, or nothing when
+// it was stopped at the bound.
+function runSuites(headless: boolean, suites: string[], environment: NodeJS.ProcessEnv): Promise<number | null> {
+  return new Promise((settle, fail) => {
+    const child = spawn(
+      headless ? "xvfb-run" : "corepack",
+      // Without a display the application gets one that has room for its largest window.
+      [
+        ...(headless ? ["-a", "--server-args=-screen 0 1920x1200x24", "corepack"] : []),
+        "pnpm",
+        "test:integration",
+        ...suites,
+      ],
+      { cwd: process.cwd(), env: environment, stdio: "inherit" },
+    );
+    const bound = setTimeout(() => child.kill("SIGTERM"), 7_200_000);
+
+    child.once("error", (error) => {
+      clearTimeout(bound);
+      fail(error);
+    });
+    child.once("exit", (code, signal) => {
+      clearTimeout(bound);
+      settle(signal ? null : code);
+    });
+  });
+}
+
+// The fixtures of the views and of the adherence on the environment of the CRDs alone, beside its static fixtures
+// and its installation: no store, no server, and nothing the server makes or removes is waited for.
+function placeStaticViews(): { names: ReturnType<typeof fixtureNames> } {
+  verifyTarget();
+  requireCondition(
+    journal.fixtureRun?.phase === "static-ready",
+    `The static fixtures are not in place: run node e2e/scripts/local-demo.mts fixtures-static --context ${DEMO_CONTEXT} on the environment of the CRDs alone`,
+  );
+  const run = journal.fixtureRun.id;
+  const runtime = fixtureRuntime();
+  const views = createViewFixtures(runtime, run, Date.parse(journal.fixtureRun.started), Date.now());
+  const adherence = placeAdherenceFixtures(runtime, run);
+
+  save();
+  console.log(
+    `PASS: the fixtures of the views (${views.views} objects, ${views.operations} operations, ${views.scale} backups of the long lists) and of the adherence (${adherence.states} states) placed, with no controller.`,
+  );
+  return { names: fixtureNames(run) };
 }
 
 // The kubeconfig of the identity that reads a part of one namespace, with a credential that lasts as long
@@ -2772,7 +3232,7 @@ function prepareDemo(): void {
       "The demo is ready to be looked at in Freelens. The kubeconfigs name this cluster alone:",
       `  all the namespaces:     ${CONFIG}`,
       `  the reader of a part:   ${reader} (backups, schedules, storage locations; its credential lasts eight hours)`,
-      `  the second reader:      ${second} (restores, schedules, locations and no backup; eight hours)`,
+      `  the second reader:      ${second} (restores, schedules, locations, pod volume operations, repositories and no backup; eight hours)`,
       `The namespaces of Velero: ${DEMO_NAMESPACE}, ${names.static}, ${names.views}, ${names.defaults}, ${names.overview}; to be named: ${names.scale}, ${names.adherence}, ${names.adherenceSplit}, ${names.adherenceScale}.`,
       `What each artifact of the tabs holds, counted outside the extension: ${TABS.facts}`,
     ].join("\n"),
@@ -2780,10 +3240,11 @@ function prepareDemo(): void {
 }
 
 // The suites run from this repository, under its Vitest, and start the Freelens that FREELENS_APP names:
-// the nightly of the validation target on a machine of a developer, a build of the host from source in CI.
+// the package of the validation target on a machine of a developer, a build of the host from source in CI.
 // E2E_TEST_PATTERN names what is run: one name, or several separated by spaces, each a part of the names
-// of the files, as Vitest takes it. CI names every suite of the views and FND-10, in one run.
-function runViews(): void {
+// of the files, as Vitest takes it. CI runs the suites of the views and FND-10 in parts side by side, each
+// with an environment of its own and one run of this runner (.github/workflows/views-tests.yaml).
+async function runViews(): Promise<void> {
   const suites = (process.env.E2E_TEST_PATTERN ?? "velero-e2e").split(/\s+/).filter(Boolean);
   const pattern = suites.join("+");
   const named = `${suites.length === 1 ? "suite" : "suites"} ${suites.join(", ")}`;
@@ -2794,6 +3255,12 @@ function runViews(): void {
     suites.length > 0 && suites.every((suite) => /^[a-z0-9-]+$/.test(suite)),
     "The pattern of the suites is a list of names, not of paths",
   );
+  // The names make the directory of the reports, whose name a file system takes up to 255 bytes long: said before
+  // the fixtures are placed, not after.
+  requireCondition(
+    pattern.length <= 255,
+    "The names of the suites make the name of the directory of their reports too long: name fewer suites",
+  );
   requireCondition(
     application !== "" && existsSync(application),
     "FREELENS_APP names no application: the suites start the Freelens it names, see docs/development/TESTING.md",
@@ -2803,19 +3270,36 @@ function runViews(): void {
     "FREELENS_APP names an application installed in /Applications: the suites start a build made for them",
   );
   requireCondition(tarballs.length === 1, "One packed extension is expected in the repository: run pnpm pack");
+  // On the environment of the CRDs alone no controller runs: the suites that read what the fixtures wrote, the
+  // counterparts of what the controllers leave among them, run on it. A part of the hosted job names the environment
+  // it brought up, and runs on no other.
+  const withoutController = journal.mode === "definitions";
+  const expected = process.env.E2E_ENVIRONMENT ?? "";
+
+  requireCondition(
+    expected === "" || expected === (withoutController ? "definitions" : "demo"),
+    `The part runs on the environment ${expected}, and this one is ${withoutController ? "definitions" : "demo"}`,
+  );
+
+  requireCondition(
+    !withoutController || suites.every((suite) => WITHOUT_A_CONTROLLER.includes(suite)),
+    `On the environment of the CRDs alone the suites that read no controller run: ${WITHOUT_A_CONTROLLER.join(", ")}`,
+  );
   const artifacts = join(process.cwd(), "e2e-artifacts", pattern);
   const headless = process.platform === "linux" && !process.env.DISPLAY;
-  const placed = placeViewsAndTabs();
-  const { names } = placed;
+  const tabs = withoutController ? undefined : placeViewsAndTabs();
+  const { names } = tabs ?? placeStaticViews();
   const run = journal.fixtureRun?.id ?? "";
 
   rmSync(artifacts, { recursive: true, force: true });
   mkdirSync(artifacts, { recursive: true });
-  // Every suite expects no request to Velero when it starts: the ones the server removes are waited for.
-  awaitRequestsRemoved(placed.runtime, run, (line) => console.log(line));
-  // What the suites of the tabs expect of each artifact they load is told by the runner, and not copied
-  // from the extension: they find it beside their reports.
-  writeFileSync(join(artifacts, "tab-fixtures.json"), `${JSON.stringify(tabFacts(placed), null, 2)}\n`);
+  if (tabs) {
+    // Every suite expects no request to Velero when it starts: the ones the server removes are waited for.
+    awaitRequestsRemoved(tabs.runtime, run, (line) => console.log(line));
+    // What the suites of the tabs expect of each artifact they load is told by the runner, and not copied
+    // from the extension: they find it beside their reports.
+    writeFileSync(join(artifacts, "tab-fixtures.json"), `${JSON.stringify(tabFacts(tabs), null, 2)}\n`);
+  }
   // The identity that reads a part of the views lasts as long as the run may: its kubeconfig is in the private
   // state, and goes when the run ends. So do the identity that may not port-forward and the one whose token an
   // `exec` plugin gives, each made for the run, an account of the namespace of the installation with its role,
@@ -2832,6 +3316,11 @@ function runViews(): void {
     runs: join(STATE, `views-exec-plugin-${run}.runs`),
   };
   const ofThePlugin = viewIdentityOfAnExecPlugin(journal.owner, run);
+  // The reader of the README, which holds the role that reads the views (REQ-288 of SPEC-0018), as an operator would
+  // bind it: an account of the installation of the views with the Role of that namespace, and the ClusterRole that
+  // lists the storage locations of the whole cluster, made for the run and gone with it.
+  const readmeReaderFile = join(STATE, `readme-reader-${run}.json`);
+  const readmeReader = readmeIdentity("reader", journal.owner, run, names.views);
   let status: number | null;
 
   // What is written is removed whatever happens after it, the second file when the first was written
@@ -2843,56 +3332,60 @@ function runViews(): void {
     writeReaderKubeconfig(forwardlessFile, DEMO_NAMESPACE, "2h", forwardless[0].metadata.name);
     for (const resource of ofThePlugin) applyOwned(resource);
     writeExecPluginKubeconfig(pluginFile, plugin, ofThePlugin[0].metadata.name, "2h");
+    for (const resource of readmeReader) applyOwned(resource);
+    writeReaderKubeconfig(readmeReaderFile, names.views, "2h", readmeReader[0].metadata.name);
     // The suites start the application with their environment: what they need of this environment is named
     // here, and the home is the one of the caller, where its toolchain is.
-    status = spawnSync(
-      headless ? "xvfb-run" : "corepack",
-      // Without a display the application gets one that has room for its largest window.
-      [
-        ...(headless ? ["-a", "--server-args=-screen 0 1920x1200x24", "corepack"] : []),
-        "pnpm",
-        "test:integration",
-        ...suites,
-      ],
-      {
-        cwd: process.cwd(),
-        env: childEnvironment(process.env, {
-          HOME: homedir(),
-          ...(process.env.DISPLAY ? { DISPLAY: process.env.DISPLAY } : {}),
-          DO_NOT_TRACK: "1",
-          FREELENS_APP: resolve(application),
-          EXTENSION_PATH: join(process.cwd(), tarballs[0]),
-          E2E_KUBECONFIG: CONFIG,
-          E2E_READER_KUBECONFIG: readerFile,
-          E2E_SECOND_READER_KUBECONFIG: secondFile,
-          E2E_NO_PORT_FORWARD_KUBECONFIG: forwardlessFile,
-          E2E_EXEC_PLUGIN_KUBECONFIG: pluginFile,
-          E2E_EXEC_PLUGIN_RUNS: plugin.runs,
-          E2E_KUBECTL: KUBECTL,
-          E2E_CLUSTER_NAME: DEMO_CLUSTER,
-          E2E_KUBE_CONTEXT: DEMO_CONTEXT,
-          E2E_NAMESPACE: DEMO_NAMESPACE,
-          E2E_STATIC_NAMESPACE: names.static,
-          E2E_VIEWS_NAMESPACE: names.views,
-          E2E_DEFAULTS_NAMESPACE: names.defaults,
-          E2E_OVERVIEW_NAMESPACE: names.overview,
-          E2E_SCALE_NAMESPACE: names.scale,
-          E2E_ADHERENCE_NAMESPACE: names.adherence,
-          E2E_ADHERENCE_SPLIT_NAMESPACE: names.adherenceSplit,
-          E2E_ADHERENCE_SCALE_NAMESPACE: names.adherenceScale,
-          E2E_FIXTURE_RUN: run,
-          E2E_ARTIFACTS_DIR: artifacts,
-        }),
-        stdio: "inherit",
-        // Two hours, as long as the identities made for the run last: every suite of the views is one run in
-        // CI, and the ones that run last must still find them.
-        timeout: 7_200_000,
-      },
-    ).status;
+    const environment = childEnvironment(process.env, {
+      HOME: homedir(),
+      ...(process.env.DISPLAY ? { DISPLAY: process.env.DISPLAY } : {}),
+      DO_NOT_TRACK: "1",
+      FREELENS_APP: resolve(application),
+      EXTENSION_PATH: join(process.cwd(), tarballs[0]),
+      E2E_KUBECONFIG: CONFIG,
+      E2E_READER_KUBECONFIG: readerFile,
+      E2E_SECOND_READER_KUBECONFIG: secondFile,
+      E2E_NO_PORT_FORWARD_KUBECONFIG: forwardlessFile,
+      E2E_EXEC_PLUGIN_KUBECONFIG: pluginFile,
+      E2E_EXEC_PLUGIN_RUNS: plugin.runs,
+      E2E_README_READER_KUBECONFIG: readmeReaderFile,
+      E2E_KUBECTL: KUBECTL,
+      E2E_CLUSTER_NAME: DEMO_CLUSTER,
+      E2E_KUBE_CONTEXT: DEMO_CONTEXT,
+      E2E_NAMESPACE: DEMO_NAMESPACE,
+      E2E_STATIC_NAMESPACE: names.static,
+      E2E_VIEWS_NAMESPACE: names.views,
+      E2E_DEFAULTS_NAMESPACE: names.defaults,
+      E2E_OVERVIEW_NAMESPACE: names.overview,
+      E2E_SCALE_NAMESPACE: names.scale,
+      E2E_ADHERENCE_NAMESPACE: names.adherence,
+      E2E_ADHERENCE_SPLIT_NAMESPACE: names.adherenceSplit,
+      E2E_ADHERENCE_SCALE_NAMESPACE: names.adherenceScale,
+      E2E_FIXTURE_RUN: run,
+      E2E_ARTIFACTS_DIR: artifacts,
+      // The suites look for none of the objects a controller makes while it runs.
+      ...(withoutController ? { E2E_WITHOUT_CONTROLLER: "1" } : {}),
+    });
+    // Where no server runs, the runner stands in for it at the location of the installation while the suites run.
+    const server = withoutController ? standInForTheServer(fixtureRuntime()) : undefined;
+
+    try {
+      status = await runSuites(headless, suites, environment);
+    } finally {
+      server?.stop();
+    }
   } finally {
-    for (const file of [readerFile, secondFile, forwardlessFile, pluginFile, plugin.token, plugin.runs])
+    for (const file of [
+      readerFile,
+      secondFile,
+      forwardlessFile,
+      pluginFile,
+      plugin.token,
+      plugin.runs,
+      readmeReaderFile,
+    ])
       rmSync(file, { force: true });
-    removeAccounts([...forwardless, ...ofThePlugin]);
+    removeAccounts([...forwardless, ...ofThePlugin, ...readmeReader]);
   }
   verifyTarget();
   requireCondition(status === 0, `The ${named} did not pass`);
@@ -2904,7 +3397,7 @@ function runViews(): void {
 const INTEGRATION_SESSION_LABEL = "freelensapp.io/velero-integration-session";
 
 // The integration test runs from this repository, under its Vitest, in the Freelens that FREELENS_APP names:
-// FND-10, which needs no cluster, and a session for each of the five kinds, each of which puts one object of
+// FND-10, which needs no cluster, and a session for each of the ten kinds, each of which puts one object of
 // its kind in a namespace of its own of this environment and removes it when it ends. It needs none of the
 // fixtures. E2E_TEST_PATTERN names some of its files by a part of their names, one or several separated by
 // spaces; without it every file runs. The target is checked before the first write and after the last, and
@@ -2970,12 +3463,28 @@ function runIntegration(): void {
   );
 }
 
+// The actions that install, ask or verify the server of the release, the store or the fixtures it makes.
+const SERVER_ACTIONS = [
+  "storage",
+  "bucket",
+  "velero",
+  "verify",
+  "transport-proof",
+  "fixtures",
+  "fixtures-live",
+  "fixtures-artifacts",
+  "fixtures-permissions",
+  "fixtures-cleanup",
+  "demo",
+];
+
 async function main(): Promise<void> {
   const [action, flag, context, ...extra] = process.argv.slice(2);
 
   requireCondition(
     [
       "up",
+      "up-definitions",
       "down",
       "tools",
       "cluster",
@@ -3000,13 +3509,19 @@ async function main(): Promise<void> {
       flag === "--context" &&
       context === DEMO_CONTEXT &&
       !extra.length,
-    `Usage: node e2e/scripts/local-demo.mts <up|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node|views|integration|demo> --context ${DEMO_CONTEXT}`,
+    `Usage: node e2e/scripts/local-demo.mts <up|up-definitions|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node|views|integration|demo> --context ${DEMO_CONTEXT}`,
   );
   let lock: number | undefined;
 
   try {
     lock = initialize();
+    // Nothing that installs, asks or verifies a server runs on the environment of the CRDs alone.
+    requireCondition(
+      journal.mode !== "definitions" || !SERVER_ACTIONS.includes(action),
+      `The environment of the CRDs alone runs no server, which ${action} needs: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up`,
+    );
     if (action === "up") await bringUp();
+    else if (action === "up-definitions") await bringUpDefinitions();
     else if (action === "down") takeDown();
     else if (action === "tools") await installTools();
     else if (action === "cluster") await setupCluster();
@@ -3023,7 +3538,7 @@ async function main(): Promise<void> {
     else if (action === "fixtures-cleanup") await cleanupFixtures();
     else if (action === "start") await startCluster();
     else if (action === "remove-failed-node") removeFailedNode();
-    else if (action === "views") runViews();
+    else if (action === "views") await runViews();
     else if (action === "integration") runIntegration();
     else if (action === "demo") prepareDemo();
     else stopCluster();

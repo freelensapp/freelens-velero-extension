@@ -1,11 +1,11 @@
 # SPEC-0014: Read-Only Repositories, Pod Volume Operations And Data Movement
 
-- **Status:** Approved
+- **Status:** Verified
 - **Date:** 2026-10-13
 - **Milestone / tasks:** M4 / T5.1, T5.2
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** `c111008912919e6a1a4127b2a0b8a641ee2dad80`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was drafted against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, where the facts of the host below were read, and they were read again at the target with the first pull request of T5.1
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; this spec was drafted against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, where the facts of the host below were read, and they were read again at the target with the first pull request of T5.1
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md), [Restores](SPEC-0005-restore-read-only.md), [locations](SPEC-0007-locations-read-only.md), [the volume information of an operation](SPEC-0011-artifact-viewers.md)
 - **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted
 
@@ -55,9 +55,9 @@ in the Design:
   ([upload](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L540-L597),
   [download](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L405-L453)).
 - The test environment installs the server and the node agent, with the volume
-  snapshots off ([the install](../../e2e/scripts/local-demo.mts#L1092-L1094)),
+  snapshots off ([the install](../../e2e/scripts/local-manifests.mts#L163-L164)),
   and its live backup is of ConfigMaps with `defaultVolumesToFsBackup: false`
-  ([the backup](../../e2e/scripts/local-fixtures.mts#L1959-L1984)): no object of
+  ([the backup](../../e2e/scripts/local-fixtures.mts#L2575-L2600)): no object of
   these five kinds exists in it today.
 
 Included: the five lists, the five workspaces, the five sections in the details
@@ -127,7 +127,7 @@ requests (M3, M5); the adherence of the schedules (T3.1 to T3.3).
 | REQ-184 | Show the progress of an operation as the release writes it: the bytes done of the total bytes of `status.progress`, with a percentage only when the total is above zero and the bytes done are not above it; a progress the object does not carry is not reported, and is not zero; on a terminal phase the bytes are shown as written, and nothing is said of what was not transferred. `status.incrementalBytes`, of a pod volume backup and of a data upload, the kinds that carry it, is shown when the object carries it and said not reported otherwise: the release writes no zero into it; a pod volume restore and a data download have no such field, and nothing is said of it for them. `spec.snapshotSize` of a pod volume restore and of a data download is the logical size of the snapshot, shown as such | KIND-08 |
 | REQ-185 | Show the times as the release writes them: accepted, started and completed. The duration of a terminal operation goes from its start to its completion; the elapsed time of one InProgress or Canceling from its start; the waiting time of one Accepted from its acceptance, with the note that the node agent fails it after its preparing timeout, which the view does not read; the waiting time of one Prepared from its acceptance, with the note that the node agent of its node is about to start the data path; one New or without a phase has no time but its creation. A cancellation or a failure of an operation that never started writes a start into some of the kinds and not into others: a start equal to the completion is shown as written, with no duration said of it. A terminal operation without a completion, as one the preparing timeout failed, has no duration and no elapsed time, and the view says that the release wrote no time for it. The time of an operation, for its order, is its start when it reports one and its creation otherwise | KIND-09 |
 | REQ-186 | Resolve what an operation refers to inside the installation. Its backup or restore, by the owner reference and by the labels of the name and of the UID: a way to the workspace when an object of that name and that UID is found; a name with its reason when the name is found with another UID, or is absent, denied or not read. Its storage location, by `spec.backupStorageLocation`. Its repository, by the three labels the release names one with: the volume namespace, which is the namespace of the pod for a pod volume backup and `spec.sourceNamespace` for the other three, the location, and the type, read from the uploader type for the pod volume kinds and kopia for a data movement. Its pod and its node are names: the pod from `spec.pod` with its namespace and UID; the node from `spec.node` of a pod volume backup and from `status.node` of the others, with `status.acceptedByNode` of a data movement when it differs; each with a way to the details the host shows of a Pod or of a Node, which the host resolves when it opens: the extension reads neither and does not say whether they exist. A data upload shows its snapshot, its snapshot class, its driver, its storage class, its source claim and namespace; a data download its target claim, volume and namespace, its snapshot ID, its source namespace, and a way to the data upload of the installation whose `status.snapshotID` is its `spec.snapshotID`, when one is found | KIND-10 |
-| REQ-187 | The workspace of a backup has a band of its volume operations, after its status: its pod volume backups and its data uploads, found by the label of its UID in its namespace, counted by phase, each with its pod and volume or its source claim, its phase, its bytes and its node, ten at a time with the way to the others, each leading to its view; the workspace of a restore has the same of its pod volume restores and data downloads. The band says what the release does: the pod volume backups run while the backup is InProgress, the data uploads while it waits for its plugin operations; a backup synced from the store carries the pod volume backups the sync created from the store, in the phase they were stored in. A backup or a restore whose families were read and that holds none says that it has none; what was not read is not known, not none. The workspace of a repository shows what used it: the operations of the installation whose volume namespace, location and type name it, counted by kind and by phase with the newest of each kind, and the backups and the restores they belong to | KIND-11 |
+| REQ-187 | The workspace of a backup has a band of its volume operations, after its status: its pod volume backups and its data uploads, found by the label of its UID in its namespace, counted by phase, each with its pod and volume or its source claim, its phase, its bytes and its node, ten at a time with the way to the others, each leading to its view; the workspace of a restore has the same of its pod volume restores and data downloads. The band says what the release does: the pod volume backups run while the backup is InProgress, and the data uploads are made then, as the CSI plugin snapshots each claim, and waited for in its plugin operations; a backup synced from the store carries the pod volume backups the sync created from the store, in the phase they were stored in. A backup or a restore whose families were read and that holds none says that it has none; what was not read is not known, not none. The workspace of a repository shows what used it: the operations of the installation whose volume namespace, location and type name it, counted by kind and by phase with the newest of each kind, and the backups and the restores they belong to | KIND-11 |
 | REQ-188 | In the Volumes tab of a backup and of a restore, the details of a row whose method is PodVolumeBackup or PodVolumeRestore, or whose data was moved, offer a way to the operation of the installation that matches it: a pod volume operation by the owner of the tab, the pod namespace, the pod name and the volume name the row carries; a data movement by the operation ID the row carries, which is the label `velero.io/async-operation-id` of the object. When none matches, nothing is offered and nothing is said absent: the rows are what the store holds, and the objects may be gone | KIND-12 |
 | REQ-189 | The Overview adds a cell for the backup repositories to what was read, and two rules to what needs attention, after the A11 of SPEC-0013: A12, a repository reports NotReady, with its message; A13, the newest maintenance of a repository failed, with its message and its time. The cell and the two rows join the table of REQ-096 of SPEC-0008 with the pull request of the slice: OVER-02 is restated with the cell and OVER-04 with the rules. The Overview reads none of the four families of the operations | KIND-13 |
 | REQ-190 | No surface of the extension writes: no cancel, no edit, no delete, no selection, by pointer, menu or keyboard; `spec.cancel` is never written; the lists are given no menu and no selection; nothing of a maintenance Job or of a pod of the node agent is read or created | KIND-14 |
@@ -240,26 +240,26 @@ Read in the source of the reviewed release. Nothing was run.
 | A pod volume backup is created with the generated name `<backup>-`, owned by the backup with `controller: true`, labelled with the name and the UID of the backup and, for a claim, with the UID of the claim and the annotation `velero.io/pvc-name`; its spec carries the node of the pod, the pod with its UID, the volume, tags, the location of the backup, the repository identifier (only for restic) and the uploader type. The reviewed release accepts the uploader kopia alone: a backup with another refuses every volume, and the node agent ignores an object with another | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/backupper.go#L545-L606), [the identifier](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/backupper.go#L311-L314), [the uploader](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/uploader/types.go#L42-L49), [refused](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/backupper.go#L260-L265), [ignored](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L640-L660) |
 | The backup waits for all its pod volume backups while it is InProgress; at its own timeout it asks the ones not ended to cancel, and takes a Failed or Canceled one as an error of the backup. The server, when it starts, fails the backups InProgress and asks their pod volume backups and data uploads that are New, Accepted, Prepared or InProgress to cancel | [The wait](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/backupper.go#L397-L459), [in the backup](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/backup.go#L703-L704), [the server start](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/server/server.go#L1008-L1009), [the phases cancelled](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/server/server.go#L1136-L1142) |
 | The node agent of the node of the pod takes a pod volume backup with no phase or New: it writes Accepted with the accepted time, and exposes the volume through a pod of its own; when that pod runs, Prepared; then InProgress with the start time, when its data path begins; the progress as the data path reports it; then Completed with the path, the snapshot ID, the completion time and the incremental bytes, with the message `volume was empty so no snapshot was taken` for an empty volume; or Failed with the message and the completion time, and a start time when there was none; or Canceled, with a start when there was none and the completion. Canceling is written only for one InProgress whose cancellation is asked; one Accepted whose pod cannot run is asked to cancel, and one Accepted longer than the preparing timeout is Failed with `timeout on preparing PVB`, with no start and no completion | [New](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L226-L259), [Accepted](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L405-L417), [Prepared](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L713-L732), [InProgress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L333-L345), [progress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L627-L636), [Completed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L540-L561), [Failed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L772-L802), [Canceled](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L419-L448), [Canceling](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L368-L398), [an abnormal pod](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L733-L750), [the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L467-L497) |
-| A pod volume restore is created with the generated name `<restore>-`, owned by the restore, labelled with the name and the UID of the restore and the UID of the pod, with the snapshot ID and the logical size taken from the pod volume backup, the location, the identifier, the uploader and the source namespace of the backup. The node agent of the node of the restored pod takes it when the init container `restore-wait` of that pod runs, writes Accepted with the accepted time and its own name as the node, then Prepared, InProgress with the start, the progress, and Completed, Failed or Canceled as a backup; a failure writes no start time, and one Accepted longer than the preparing timeout is Failed with `timeout on preparing PVR` and no time at all. One whose uploader is restic is taken by a legacy controller, which writes InProgress with the start and Completed with the completion, and no node | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/restorer.go#L261-L307), [snapshot and size](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/util.go#L75-L118), [the init container](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L568-L592), [its name](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restorehelper/util.go#L25), [Accepted with the node](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L417-L430), [Failed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L545-L566), [the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L482-L512), [legacy](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller_legacy.go#L362-L364), [its phases](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller_legacy.go#L160-L161), [and its end](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller_legacy.go#L297-L298) |
-| A data upload is created by the CSI plugin for a backup that moves the data of its snapshots, with the generated name `<backup>-`, owned by the backup, labelled with the name and the UID of the backup, the UID of the claim and the operation ID of the plugin operation, prefixed `du-`; its spec names the snapshot, the storage class, the driver, the class when the snapshot has one, the source claim and namespace, the data mover, the location and the timeout, which is the CSI snapshot timeout of the backup. A data mover that is empty or `velero` is the built-in one; the controller ignores any other. The backup is in its phases of the plugin operations while the data uploads run, and reads their phase and bytes as the progress of the operation | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L540-L597), [the prefix](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/apis/velero/v1/labels_annotations.go#L129-L134), [built-in](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/datamover/util.go#L21-L31), [ignored](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L160-L163), [the progress read](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L491-L515) |
+| A pod volume restore is created with the generated name `<restore>-`, owned by the restore, labelled with the name and the UID of the restore and the UID of the pod, with the snapshot ID and the logical size taken from the pod volume backup, the location, the identifier, the uploader and the source namespace of the backup. The node agent of the node of the restored pod takes it when the init container `restore-wait` of that pod runs, writes Accepted with the accepted time and its own name as the node, then Prepared, InProgress with the start, the progress, and Completed, Failed or Canceled as a backup; a failure writes no start time, and one Accepted longer than the preparing timeout is Failed with `timeout on preparing PVR`, with no start and no completion, its acceptance kept. One whose uploader is restic is taken by a legacy controller, which writes InProgress with the start and Completed with the completion, and no node | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/restorer.go#L261-L307), [snapshot and size](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/util.go#L75-L118), [the init container](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L568-L592), [its name](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restorehelper/util.go#L25), [Accepted with the node](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L417-L430), [Failed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L545-L566), [the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L482-L512), [legacy](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller_legacy.go#L362-L364), [its phases](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller_legacy.go#L160-L161), [and its end](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller_legacy.go#L297-L298) |
+| A data upload is created by the CSI plugin for a backup that moves the data of its snapshots, with the generated name `<backup>-`, owned by the backup, labelled with the name and the UID of the backup, the UID of the claim and the operation ID of the plugin operation, prefixed `du-`; its spec names the snapshot, the storage class, the driver, the class when the snapshot has one, the source claim and namespace, the data mover, the location and the timeout, which is the CSI snapshot timeout of the backup. A data mover that is empty or `velero` is the built-in one; the controller ignores any other. The data uploads are made while the backup is InProgress, as its items are backed up; the backup waits for them in its phases of the plugin operations, which it enters once its items are done, and reads their phase and bytes as the progress of the operation. The data downloads are made while the restore is InProgress, as its claims are restored, and it waits for them in the same way | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L540-L597), [the prefix](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/apis/velero/v1/labels_annotations.go#L129-L134), [built-in](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/datamover/util.go#L21-L31), [ignored](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L160-L163), [the progress read](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L491-L515), [made with the items](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/item_backupper.go#L439), [by the plugin](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L384-L424), [the phase after the items](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_controller.go#L833-L848), [the downloads with the items](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/restore.go#L1633), [by the plugin of the restore](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L132-L156), [the phase of the restore](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/restore_controller.go#L694-L710) |
 | Any node agent may accept a data upload with no phase or New: the first to write Accepted, with its own name as the accepted-by node and the accepted time, wins, and exposes the snapshot as a volume of a pod of its own, which the scheduler places; the node agent of that node writes Prepared with its name as the node, then InProgress with the start and the node OS, the progress, Completed with the path, the snapshot ID, the incremental bytes and the completion, with the message `volume was empty so no data was upload` for an empty one, Failed with the message, the completion and a start when there was none, or Canceled. One Accepted longer than the preparing timeout is Failed with `timeout on preparing data upload`, with no start and no completion | [Accepted](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L812-L844), [exposed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L285-L299), [Prepared](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L762-L765), [InProgress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L377-L395), [Completed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L501-L518), [Failed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L781-L810), [Canceled](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L541-L576), [the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L846-L889) |
-| A data download is created by the CSI plugin for a restore of a volume whose data was moved, with the generated name `<restore>-`, owned by the restore, labelled with the name and the UID of the restore and the operation ID, prefixed `dd-`; its spec names the target claim and namespace, with no volume yet, the location, the data mover, the snapshot ID, the size and the source namespace of the data upload it restores from, the timeout and the node OS. The node agent waits for the target claim to exist, accepts, exposes, and writes Prepared with the node, InProgress with the start, the progress, Completed after it rebinds the volume to the target claim, Failed with the message and the completion and no start, or Canceled; one Accepted longer than the preparing timeout is Failed with `timeout on preparing data download` and no time at all | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L405-L453), [the claim awaited](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L260-L263), [Accepted](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L762-L795), [Prepared](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L726-L729), [InProgress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L368-L380), [Completed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L478-L505), [Failed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L738-L760), [the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L797-L828) |
+| A data download is created by the CSI plugin for a restore of a volume whose data was moved, with the generated name `<restore>-`, owned by the restore, labelled with the name and the UID of the restore and the operation ID, prefixed `dd-`; its spec names the target claim and namespace, with no volume yet, the location, the data mover, the snapshot ID, the size and the source namespace of the data upload it restores from, the timeout and the node OS. The node agent waits for the target claim to exist, accepts, exposes, and writes Prepared with the node, InProgress with the start, the progress, Completed after it rebinds the volume to the target claim, Failed with the message and the completion and no start, or Canceled; one Accepted longer than the preparing timeout is Failed with `timeout on preparing data download`, with no start and no completion, its acceptance kept | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L405-L453), [the claim awaited](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L260-L263), [Accepted](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L762-L795), [Prepared](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L726-L729), [InProgress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L368-L380), [Completed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L478-L505), [Failed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L738-L760), [the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L797-L828) |
 | An operation that is deleted while it is not in a final phase is asked to cancel first, and deleted once the node agent cleaned up: a finalizer holds it. When the node agent starts, it resumes the operations InProgress of its node and asks to cancel the ones it cannot resume | [Deletion](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L146-L204), [resume](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L939-L983) |
 | The sync of a backup from the store creates its pod volume backups from the list the store holds, in the phase they were stored in, with the owner UID and the UID label rewritten to the synced backup and the location of the sync; the deletion of a backup forgets the snapshots its pod volume backups name in the repository, deletes its data uploads, and leaves the pod volume backups to go with their owner | [The sync](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_sync_controller.go#L226-L262), [the snapshots forgotten](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_deletion_controller.go#L334-L339), [found by the label](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_deletion_controller.go#L665-L681), [the data uploads](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_deletion_controller.go#L341-L365) |
 | `backup describe` lists the pod volume backups of a backup by the label of its name, groups them by phase in the order Completed, Failed, Canceled, In Progress, Canceling, Prepared, Accepted, New, with none and New together, and with `--details` by pod, `namespace/name`, with each volume, its percentage while in progress when the total is known, and its size and incremental size once completed when they are above zero; `restore describe` lists the pod volume restores by the label of the restore and groups them in an order of its own, Completed, Canceled, Failed, In Progress, Prepared, Accepted, New, without Canceling, with the same details by pod, and describes a moved volume by its operation ID, data mover and uploader type | [The list](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/cli/backup/describe.go#L87-L94), [the groups](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/util/output/backup_describer.go#L822-L901), [by pod](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/util/output/backup_describer.go#L918-L947), [the restores](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/cli/restore/describe.go#L74-L81), [described](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/util/output/restore_describer.go#L372-L427), [a moved volume](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/util/output/restore_describer.go#L460-L470) |
 | The volume information of a backup names, for each pod volume backup, the pod, its namespace, the volume, the node, the snapshot ID, the total bytes as the size and the incremental bytes, and for each data upload the operation ID and the phase; the one of a restore names the pod, its namespace and the volume of each pod volume restore, and the operation ID of each data download, from its label | [From a pod volume backup](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/internal/volume/volumes_information.go#L252-L264), [from a data upload](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/internal/volume/volumes_information.go#L634-L639), [from a pod volume restore](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/internal/volume/volumes_information.go#L266-L275), [from a data download](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/internal/volume/volumes_information.go#L852-L886) |
 | The documentation of the release says that the data mover shows the progress as bytes done of an estimated total, that the two are equal upon completion, and that the incremental bytes are filled once the upload is done; that the preparing timeout of the node agent is thirty minutes and the timeout of an item operation four hours unless set otherwise; that a CSI driver with snapshots at the v1 API is a prerequisite of the data movement; and that restic is being deprecated | [Progress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/csi-snapshot-data-movement.md#L119), [timeouts](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/csi-snapshot-data-movement.md#L254-L257), [prerequisites](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/csi-snapshot-data-movement.md#L29-L39), [restic](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/file-system-backup.md#L41), [one repository for each namespace](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/file-system-backup.md#L70-L72) |
 
-Of these, the views say in words, where they help: that a repository is created
-by the first backup or restore of a namespace to a location and shared by them;
-that a pod volume backup runs while its backup is InProgress and a data upload
-while its backup waits for its plugin operations; that a pod volume operation New
-waits for the node agent of the node of its pod and a data movement New for any
-node agent of the installation; that the preparing timeout and the timeout of the
-backup are settings of the installation the extension does not read; that the
-bytes are what the data mover reports, and that an equal incremental size is
-not written. The views never compute a speed or a time left: the release writes
-neither.
+Of these, the views say in words, where they help: that a repository is created by
+the first backup or restore of a namespace to a location and shared by them; that
+a pod volume backup runs while its backup is InProgress, and that a data upload is
+made then and waited for in the plugin operations of its backup; that a pod volume
+operation New waits for the node agent of the node of its pod and a data movement
+New for any node agent of the installation; that the preparing timeout and the
+timeout of the backup are settings of the installation the extension does not
+read; that the bytes are what the data mover reports, and that an equal
+incremental size is not written. The views never compute a speed or a time left:
+the release writes neither.
 
 ### Phases
 
@@ -275,7 +275,7 @@ backups do not:
 | InProgress | In flight | Running | None | Bytes done of total, elapsed time |
 | Canceling | In flight | Running | Cancellation asked | The data path is being stopped |
 | Completed | Terminal | Ran | Completed | Bytes, snapshot ID, duration; the message of an empty volume when written |
-| Failed | Terminal | Ran or not started | Failed | The message; a start equal to the completion is one the failure wrote; no time at all is one the preparing timeout wrote |
+| Failed | Terminal | Ran or not started | Failed | The message; a start equal to the completion is one the failure wrote; no start and no completion is one the preparing timeout wrote |
 | Canceled | Terminal | Ran or not started | Cancelled | The message when written; neither a success nor a failure |
 | Another value | Unknown | Unknown | Unknown | The text as written |
 
@@ -382,7 +382,7 @@ phases of the backup, as the table above records it.
 | Empty | The list says of what it is the list; the host says that it is empty | The band says that the backup has no volume operation among the ones the installation holds; the repository says that nothing of the installation used it |
 | Restricted | The list is not shown, and says that access is denied and that how many there are is not known | The band says that the kind cannot be read; a reference says denied; the Volumes tab offers no way |
 | Partial | A kind read and another denied: each list and each half of a band on its own | The repository counts the kinds it could read and says which it could not |
-| Stale | The rows of the last read that succeeded, with when; the column of the operation marked when its family is of an earlier read, by the notice over the list that names the family and when it was read | The band says that its operations were read before, and when |
+| Stale | The rows of the last read that succeeded, with when; the column of the operation marked when its family is of an earlier read, by the notice over the list that names the family and when it was read | The band says that its operations were read before, and when; the Volumes tab keeps the ways of that read, the notice over the view saying when it was |
 | Unknown | A phase or a value the release does not write, as text with its mark; an operation New without a node agent read | A reference whose family failed is not known, with the reason |
 | Failure | A read that failed keeps the last rows and says so | A failed operation shows its message; a failed maintenance its message |
 | Not served | A kind the version of the API does not serve, said so by the list and by the band, with nothing else affected | The same |
@@ -502,7 +502,17 @@ maintenance time its initialization wrote, and the server patches no repository
 at its pass. A maintenance history is seen for real in a demo brought up with a
 shorter frequency, a setting of the demo scripts that the suites never use; the
 suites expect the first maintenance time alone. The guard keeps its rule: the
-one write of the installation it expects is the validation of its location.
+writes of the installation it expects are the validation of its location and the
+PATCH the controller sends at each look to the schedule it validated, within a
+bound. What the server sends to the real repository at its pass, and whether a
+controller lists the kinds of the operations, are measured on the environment
+before any suite rests on them: when the server writes the repository at each
+pass, the guard leaves that verb of the repositories out of the writes and
+compares the status of the real repository and the versions of the synthetic
+ones; when a controller lists the operations, what a view lists is counted
+against a window of the same length with no view open. Measured on 2026-11-02 over
+fifteen minutes with no view open: the server wrote nothing to the repository, and
+no controller listed the operations, which they watch.
 
 | Check | Layer | Requirements | Scenario and expected evidence |
 | --- | --- | --- | --- |
@@ -689,14 +699,18 @@ component evidence, by check:
   time of the last read and the time of the API server as they were; no timer added
   (`src/renderer/state/installation.test.ts`,
   `src/renderer/pages/volume-lists.test.tsx`, `src/renderer/pages/overview-page.test.tsx`).
-  No family of the operations is asked by the view of a backup, of a restore or of
-  a schedule: the test of the reads of the view of a backup
-  (`src/renderer/pages/volume-lists.test.tsx`), and the tests that count what
-  opening a restore and a schedule asks, which fail when either view is given a
-  family of the operations (`src/renderer/pages/restores-page.test.tsx`, "opens
-  from a row and shows a restore that waits with a failure as in flight";
+  No family of the operations is asked by the view of a schedule, and none was by
+  the view of a backup or of a restore in this pull request: the test of the reads
+  of the view of a backup (`src/renderer/pages/volume-lists.test.tsx`), and the
+  tests that count what opening a restore and a schedule asks, which fail when
+  either view is given a family of the operations
+  (`src/renderer/pages/restores-page.test.tsx`, "opens from a row and shows a
+  restore that waits with a failure as in flight";
   `src/renderer/pages/schedules-page.test.tsx`, "shows what Velero says of the
-  schedule, and computes from its expression only its band of the adherence").
+  schedule, and computes from its expression only its band of the adherence"). The
+  second pull request gives the views of a backup and of a restore their family,
+  and restates the tests of the two (the paragraph of the second pull request,
+  below).
 - KIND-03 and KIND-04: the columns of the three lists, their stable identifiers
   and classes in the order of the Design, each cell in each state, the order of
   each column through the callbacks of the host both ways with none answering
@@ -713,9 +727,9 @@ component evidence, by check:
   with the rows, draw a message on its lines as the views do, lead to the view for
   the installation selected, say the age of the read they found the owner in, ask
   nothing and keep no timer once closed
-  (`src/renderer/pages/volume-workspaces.test.tsx`). The view of a repository has
-  no band of what used it until the second pull request, which shows the
-  operations of the volumes in it.
+  (`src/renderer/pages/volume-workspaces.test.tsx`). The view of a repository had
+  no band of what used it in this pull request: the second shows it, last in the
+  view (the paragraph of the second pull request, below).
 - KIND-06: the eight phases, none and an unknown one, for each of the two kinds,
   with their axes, their outcome and their words (`src/common/volume-phases.test.ts`);
   the message of Velero beside the phase, in the tip of a row and in the view, on a
@@ -764,8 +778,10 @@ component evidence, by check:
   waits for a node agent
   (`src/renderer/pages/volume-lists.test.tsx`,
   `src/renderer/pages/volume-workspaces.test.tsx`, `src/common/volume-words.test.ts`).
-  The words of the band of a backup and of a restore are of the second pull
-  request, which draws it.
+  The words of the band of a backup and of a restore, and of what used a
+  repository, are written beside these in `src/common/volume-words.ts` by the
+  second pull request, which draws them (the paragraph of the second pull request,
+  below).
 
 The packaged cases, on the fixtures that exist, where no object of the three kinds
 is: the journey with nine entries under Velero and the eight kinds out of the Custom
@@ -838,7 +854,7 @@ Decided while implementing, on 2026-10-26:
   three, and the second is given them with the fixtures of the fourth pull request.
 - The records of the Overview, its kinds and its plurals, are keyed by the five
   families it reads, and not by every family: the sixth is the repositories, with
-  the third pull request.
+  the third pull request, which keys them by the six (its paragraph below).
 - The column of the backup or the restore of an operation is titled by the kind
   it names, Backup or Restore, with the stable identifier `operation`.
 - An operation with no phase is labelled "No phase yet", beside the New of the
@@ -892,3 +908,911 @@ Decided while implementing, on 2026-10-27, for the review of the milestone to co
   from a temporary suite that is not kept, whose result the packaged cases record;
   the packaged proof with rows comes with the fixtures of the lists, in a later pull
   request of T5.1.
+
+T5.1, the second of its five pull requests: the band of the volume operations in
+the summary of a backup and of a restore, what used a repository last in its view,
+and the way from a row of the Volumes tab to the pod volume operation that matches
+it, with the index of the operations made once for a read, on 2026-10-29. From it
+the views of a backup and of a restore hold their family of the pod volume
+operations, and the view of a repository both.
+
+The gates of phase A, on 2026-10-29, on the branch made from main at `083d534`,
+with Node 24.21.0, pnpm 12.14.0, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.15, Knip
+6.41.0 and the launcher of Trunk 1.3.4: `pnpm type:check`, the nine programs, and
+`pnpm lint:check`, 307 files, each with no error; `pnpm test:unit`, the build, then
+99 files and 2,898 tests, all passed, 4 files and 45 tests more than main, then the
+three measures within their budgets; `pnpm knip:check`, both passes with no finding;
+and Trunk on the 45 files the branch changes, with no issue; each commit
+type-checked and linted alone, on a copy of each, with no error. The second form of
+the unit run, with `VITE_PRESERVE_MODULES=false`, and the measures on a quiet
+machine ran after the rebase, below.
+
+The gates again after the review of the second pull request, on 2026-10-29, on the
+same base and toolchain, with its fixes in three commits of code and suites and one
+of documents: `pnpm type:check`, the nine programs, `pnpm lint:check`, 307 files,
+and `pnpm knip:check`, each with no finding; `pnpm test:unit`, the build, then 99
+files and 2,911 tests, all passed, 4 files and 58 tests more than main, then the
+three measures within their budgets; Trunk on the 45 files the branch changes, with
+no issue; each of the nine commits type-checked and linted alone. A rebase on a main
+that moves the validation target runs them again with its toolchain, and is written
+here.
+
+The gates again after the rebase on main at `c16c159`, which moves the validation
+target to Freelens 2.0.0, on 2026-10-29, with no conflict, with pnpm 12.15.0, the SDK
+2.0.0 and Electron 44.10.0, and with the two commits of the ways of the Volumes tab
+after it, the second after the review of the fixes: on the machine of the runs,
+`pnpm type:check`, the nine programs, `pnpm lint:check`, 307 files, `pnpm build` and
+`pnpm knip:check`, each with no finding; Trunk on the 45 files the branch changes,
+with no issue; each commit type-checked and linted alone. On a second Linux machine,
+Ubuntu 26.04 under WSL 2 on 16 processors, from a bundle of the same code:
+`pnpm test:unit` with `VITE_PRESERVE_MODULES=false`, at a load of 0.50, then in its
+normal form, each in 23 seconds: the build, then 99 files and 2,913 tests, all
+passed, 4 files and 60 tests more than main, then the three measures within their
+budgets.
+
+The unit and component evidence, by check:
+
+- KIND-02 and KIND-15: the view of a backup asks the pod volume backups at once,
+  alone, and at every read, and not the pod volume restores, the view of a restore
+  the converse, the view of a schedule neither, the repositories still asked at
+  every read; the view of a repository asks both at once and at every read, and a
+  pod volume backup opened from it keeps them; once the way closes, both are let go
+  at the read after (`src/renderer/pages/volume-lists.test.tsx`). Opening a backup
+  or a restore from its list asks the family of its band and nothing else
+  (`src/renderer/pages/backups-page.test.tsx`,
+  `src/renderer/pages/restores-page.test.tsx`), and the tabs of a backup count what
+  they ask once that read ended (`src/renderer/pages/operation-tabs.test.tsx`). A
+  backup and a pod volume backup opened from its band keep the family between them,
+  let go at the read after the way closes; a backup, a pod volume backup from its
+  band and the storage location of that operation keep it at every read, and the way
+  back draws the operation and the band with no spinner of a family asked again; a
+  repository, a pod volume backup of what used it and its storage location keep the
+  pod volume restores, and a pod volume restore, its repository and its storage
+  location the pod volume backups, each family read only by a view under the one on
+  top (`src/renderer/pages/volume-band.test.tsx`). The notice of the pod volume backups
+  denied is said over a backup and over a repository, and not over a restore or a
+  schedule (`src/renderer/pages/volume-workspaces.test.tsx`). A read that fails
+  keeps the rows of the band and says when they were read
+  (`src/renderer/pages/volume-band.test.tsx`).
+- KIND-11: the index finds the operations of a backup and of a restore by the label
+  of the UID in their namespace, from the newest; an operation with no label of a
+  UID, one of another namespace and one that names the UID of another backup of the
+  same name are each left out of it; the operations of a restore are from the
+  newest as well, whatever their names; and it is made in one pass over each family,
+  each item read once (`src/common/volume-index.test.ts`). The counts are in the groups of
+  `backup describe` for a backup and of `restore describe` for a restore, line by
+  line in their order, none and New together, Canceling of a restore and a phase the
+  release does not write each after them, no operation left out; the band of a
+  backup holds its own from the newest and none of another backup, and a restore of
+  the UID of a backup is not counted in it; a backup synced from the store holds the
+  operations whose label the sync rewrote to its UID, with the sentence of a backup
+  that ended; the sentence of each phase of a backup and of a restore; what used a
+  repository counted by kind and by phase, from the newest, with the backups and the
+  restores they belong to, a kind denied kept with its read and no count, and none
+  of each kind when nothing names it (`src/common/volume-band.test.ts`); what used a
+  repository found by its three labels through the cut of a location of 64
+  characters and whole at 63, an operation of another type or of another location not
+  counted, and a repository without the three labels named by none
+  (`src/common/volume-index.test.ts`). In the views: a backup of 23 pod volume backups
+  counted in its groups, ten rows from the newest then ten more twice, the focus on
+  the first row added, each row the volume as a way to the view of the operation,
+  which returns to the backup, the pod and the node as the links of the host, the
+  phase with its mark and the bytes done of the total; scenario 1, the band says
+  nothing of the items and the item progress keeps its fact; scenario 2, one Failed
+  counted, with the message of Velero in the tip of its row, beside the failure of
+  the backup in its status; a backup with none; a restore in the groups of
+  `restore describe`, Canceling after them, its row a way to the pod volume restore;
+  what used a repository last in its view, by kind and by phase, the newest of each
+  and the backups and the restores they belong to, each a way, a kind denied named
+  with why and the other counted, the backups of its operations ten at a time with
+  the focus on the first added, and that no pod volume operation of the installation
+  used it when both were read and none names it
+  (`src/renderer/pages/volume-band.test.tsx`). An
+  operation whose labels name its owner and carry no UID is left out of the band, as
+  REQ-187 says, while `backup describe` lists the pod volume backups by the label of
+  the name: the band follows the requirement, since the label of a long name is cut
+  and another object may take the name.
+- KIND-12: the namespace of the pod, the pod and the volume of a row of a pod volume
+  backup and of a pod volume restore, read as texts from `pvbInfo` and `pvrInfo`,
+  and none when one of the three is empty or not a text
+  (`src/common/artifact-volumes.test.ts`); the ways of an owner by them, the newest
+  when two name the same, none for another owner of the same pod and volume, none
+  when the family is denied, even after a read that found them, while the band keeps
+  them as of that read, and kept after a read that failed or of a kind no longer
+  served, and while the family is asked again (`src/common/volume-band.test.ts`, the
+  rows of the band kept after each of the three in
+  `src/renderer/pages/volume-band.test.tsx`); the way in the details of a row of a
+  pod volume backup and of a pod volume restore, which opens
+  the view of the operation, and nothing offered and nothing said for a row that no
+  operation matches, or with no ways
+  (`src/renderer/components/volumes-viewer.test.tsx`); the ways the same object at a
+  read that leads to the same operations, in whatever order, and a new one when they
+  change, a row then leading to a newer operation of its pod and volume
+  (`src/renderer/state/volumes.test.ts`); the viewer of the volumes given the ways
+  and not drawn again at a read that changes none of them, and drawn again once, with
+  them, at a read that does (`src/renderer/components/artifact-panel.test.tsx`).
+- KIND-14: no control of the band writes: its rows are ways, and its one command
+  pages them (`src/renderer/pages/volume-band.test.tsx`).
+- KIND-15, the index of a read: one for each installation, the same object at every
+  drawing and every tick until a family it is made of is read again, a new one when
+  one is or when the availability of the API changes what a read is said to be, and
+  none at a read of the backups (`src/renderer/state/volumes.test.ts`).
+- KIND-16: the band in each state of the read of its family, each with its words:
+  not read yet, being read, said once, denied and failed with no count, not served,
+  none among the ones the installation holds, and of an earlier read with its rows
+  and when, and what used a repository in each of those states, a kind of an
+  earlier read saying so in place with its rows or with none, and that no pod volume
+  operation used it said only when each kind was read now
+  (`src/renderer/pages/volume-band.test.tsx`); when the next maintenance of
+  a repository is due, being read while the storage locations were never answered,
+  and computed once they are (`src/common/repository-view.test.ts`,
+  `src/renderer/pages/volume-band.test.tsx`). Every sentence is asserted once as a
+  literal and read from `src/common/volume-words.ts` elsewhere.
+- KIND-18, the index: the unit measure `test/volume-index.measure.ts`, which
+  `pnpm test:unit` runs after the other tests, of the index of 1,000 backups, 1,000
+  restores and 2,000 pod volume backups made for a read, and of the band of a
+  backup of 200 of them, twenty times after five that warm them: the index at
+  8.64 ms at the 95th percentile of 250 and the band at 0.05 ms, a tick of the clock
+  answering the index of the read, the band holding the 200 counted once each, in
+  the unit run of phase A, on 2026-10-29, at a load of 3.3; on a quiet machine, the
+  second Linux machine at a load of 0.50 after the rebase, the index at 3.49 ms at the
+  95th percentile and 2.11 at the median, and the band at 0.04 ms.
+
+The packaged cases, written in phase A and run in phase B: the suite of the tabs
+with the bands of the real backup and of the real restore of the demo, each saying
+that the installation holds none of its pod volume operations and what the release
+does with them, with no row and no way, nothing written; the two rows of the backup
+synced for the tabs that name a pod volume backup of a synthetic pod, which no
+operation of the installation matches, whose details offer no way and say nothing
+absent; the band of the real backup read, and not denied, through the two identities
+of the suite; the suite of the volumes with one list of the pod volume backups at
+each read while a backup is open and none of the pod volume restores, and the converse
+while a restore is open (KIND-02), within the bound of the lists, which the run of
+the pattern on 2026-10-29 met with one list at each read, three of three, with a
+backup and with a restore open, and none of the other family (the report
+`kind-02-reads-of-the-pod-volume-operations`); the suite of the restores with one
+list of the pod volume restores when a restore opens and nothing else, and the band
+of a restore with
+none, with the sentence of one that waits for its plugin operations, and of one that
+failed its validation; the notices of the two restricted suites over a backup and
+over a restore with the families those views now read; the pictures of the
+pre-review of the workspace of a backup and of a restore, taken once their band says
+that the installation holds none. Their runs: on 2026-10-29, the pattern of the
+views job, 16 files and 255 cases, passed whole on Freelens 2.0.0 built at
+`b9b53e16`, on a second Linux machine and on the hosted runner, and the suite of the
+volumes alone on the second machine (TESTING.md). The two rows of the
+synced backup pass whatever the matching of a row does, since the installation of
+the views holds no pod volume backup: the row that leads to its operation, the real
+backup of the volumes of KIND-12, has its packaged case with the fixtures of the
+fourth pull request.
+
+The unit measure of the index is of the 1,000 backups, the 1,000 restores and the
+2,000 pod volume backups of REQ-194, and of the band of a backup of 200 operations
+made from it. The 200 data uploads REQ-194 names beside them join the measure with
+the data movement, in T5.2, which reads them: until then the measure is of the pod
+volume operations alone, a deviation of the population of REQ-194.
+
+Decided while implementing, on 2026-10-29:
+
+- The frame of a page holds the families read on demand of every view of the way
+  that is open, not of the view on top alone: a backup, a pod volume backup opened
+  from its band and the storage location of that operation keep the pod volume
+  backups between them, and the way back draws the operation and the band from what
+  was read, with no view that waits for its family again. The address names every
+  view of the way as open, so a family is still read only while a view that needs
+  it is open (REQ-194), at one list of it at each read while the way is
+  (`src/renderer/components/views-frame.tsx`; the
+  [architecture](../development/ARCHITECTURE.md#the-reads-of-the-first-views) and
+  AGENTS.md restated).
+- Each view reads the families it shows, by the rule decided while implementing, on
+  2026-10-26: the view of a backup reads its family of the operations, the pod
+  volume backups, and the view of a restore the pod volume restores, the band
+  showing nothing of the repositories or of the other family; the view of a
+  repository reads the two families of the pod volume operations, and the backups
+  and the restores, which what used it counts and leads to. No read of the cluster
+  changes for the backups and the restores, which are read at every read: what
+  changes is the notices over the view of a repository for a reader denied them
+  (`src/common/views.ts`).
+- The two identities of the views the runner makes for the suite of the tabs are
+  given `get`, `list` and `watch` of the pod volume backups and the pod volume
+  restores, as their other rules (`e2e/scripts/local-fixtures.mts`,
+  `viewIdentityWithoutPortForward` and `viewIdentityOfAnExecPlugin`, pinned in
+  `test/environment.test.ts`): the views of a backup and of a restore ask their
+  family when they open, and the suite of the tabs opens a backup with the first.
+  The two readers of the restricted suites keep their kinds: the first never reads
+  the two families, and the second is given them with the fixtures of the fourth
+  pull request; until then the notices over a backup and over a restore name the
+  family that is denied.
+- When the next maintenance of a repository is due, on a first read where the
+  repositories answer before the storage locations: the view says that the
+  locations are being read, and that the server runs no maintenance of a repository
+  of a read-only one, in place of the words of a location that is not known, which
+  stay for one that is denied, failed, not served or absent
+  (`src/common/repository-view.ts`, its words in `src/common/volume-words.ts`).
+- The index of the operations is made of the two families of the pod volume
+  operations alone, and its memo, one entry for each installation, is keyed by
+  their reads as they are stored and by the availability of the API: the backups,
+  the restores and the repositories are not in the key, since the index is not made
+  of them, and a read of them makes no new index. It takes none of the maps of the
+  first pull request: the operations of a backup and of a restore are keyed by the
+  label of the UID, and what used a repository by its three labels through the cut,
+  keyed as the repository of an operation is found (`tripleKey`, exported for it
+  from `src/common/volume-references.ts` with no change of what it answers); the
+  owners named in what used a repository are resolved as the view of an operation
+  resolves its owner, through the maps of the reads of the backups and the restores
+  made once for each array of items (`src/common/volume-index.ts`,
+  `src/renderer/state/volumes.ts`).
+- No map of the rows of the Volumes tab is made in the index: the ways of a tab
+  are made from the operations of its owner, which the index holds from the newest,
+  by the namespace of the pod, the pod and the volume, the newest when more than
+  one names the same. A map of the rows of every owner would be made at each read
+  for tabs that are not open (`src/common/volume-band.ts`).
+- The ways given to the viewer of the volumes are the same object for as long as
+  they lead to the same operations, in whatever order, kept when a new index gives
+  the same ways: each
+  read makes a new index, and ways made by a memo of the panel keyed by the index
+  would draw the viewer again at each read (`src/renderer/state/volumes.ts`).
+- The groups of the counts: an operation with no phase is counted with New, as
+  `backup describe` counts it, for both kinds, its row keeping the label "No phase
+  yet"; Canceling of a restore, which `restore describe` has no group for, and a
+  phase the release does not write are each counted in a group of their own after
+  the groups of the release, with their label and their mark, the second by its
+  text: no operation is left out of the counts.
+- The sentence of a backup that ended: no rule of the views tells a backup synced
+  from the store, and the band guesses none. It says that the pod volume backups the
+  installation holds of the backup are the ones its run made, or the ones a sync
+  from the store made, in the phase they were stored in. The sentences of a restore
+  say what the release does with its pod volume restores by its phase, the node
+  agent of the node of each restored pod taking its own when the init container
+  `restore-wait` of that pod runs. A restore has no sentence of its deletion: the
+  release writes no phase Deleting for a restore, and one that reports it is said to
+  report a phase the release does not write.
+- An operation whose labels name its owner and carry no UID is left out of the
+  band of that owner, which finds its operations by the label of the UID as REQ-187
+  says, while its own view names its owner from the owner reference: the release
+  writes both labels.
+- Each half of the band has its own words: the half of the pod volume operations of
+  a backup says that it has no pod volume backup among the ones the installation
+  holds, and of a restore no pod volume restore, where What Is Not Known says it of
+  the volume operations of the whole band; the half of the data movement says its
+  own with the second slice. What used a repository reads the pod volume operations
+  alone as well, and says that no pod volume operation of the installation used it,
+  where the table of the states says that nothing of the installation used it, which
+  holds once the data movement is read.
+- A row of the Volumes tab has no way while the family of the operations of its
+  owner is denied, even when a read before found its operation, as the table of the
+  states says. A read that failed, or of a kind no longer served, keeps the ways of
+  the read before, as the band keeps its rows (REQ-191): the notice over the view
+  says that the family is of an earlier read, and when, and a way that a passing
+  failure took away would take the focus with it. A read asked again keeps the ways
+  until it ends (`src/common/volume-band.ts`). The way of a row of the band is named
+  by its volume, then by the operation it opens, since the pods of one StatefulSet
+  share the name of a volume.
+- The rows of the band after the first ten, and the backups and the restores of
+  what used a repository after the first ten, are given by "Show ten more", a
+  command of the band, which gives the focus to the first it added; the list cannot
+  be narrowed by owner. A row of the band shows no time, since the band names none
+  for a row (the workspaces, above): a tick of the clock of the views moves nothing
+  in it.
+- The two restricted suites restate the notices over the view of a backup and of a
+  restore with the families those views now read. The words of the band for a
+  reader denied the pod volume backups, with no count, are proven at the component
+  layer here, and in the packaged application by the fifth pull request (scenario
+  7).
+
+T5.1, the third of its five pull requests: the backup repositories in the Overview,
+their cell among what was read and the rules A12 and A13, on 2026-10-29, written
+from main at `c16c159`. The gates on the machine of the phase, on 2026-10-29, with
+Node 24.21.0, pnpm 12.15.0, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.15, Knip 6.41.0
+and the launcher of Trunk 1.3.4: `pnpm type:check`, the nine programs, and
+`pnpm lint:check`, 298 files, each with no error; `pnpm test:unit`, the
+build, then 95 files and 2,866 tests, all passed, then the two
+measures within their budgets; `pnpm knip:check`, both passes with no finding; Trunk
+on the files the branch changes, with no issue. Its second form with
+`VITE_PRESERVE_MODULES=false`, and each commit type-checked and linted alone, ran
+after the rebase on main at `e4e8b2f`, on 2026-11-02, with the same toolchain:
+`pnpm type:check`, the nine programs, `pnpm lint:check`, 307 files, and
+`pnpm knip:check`, each with no finding; Trunk on the 18 files the branch changes,
+with no issue; each of the six commits type-checked and linted alone, with no
+error; and `pnpm test:unit` in both forms on a second Linux machine, Ubuntu 26.04
+under WSL 2, 99 files and 2,927 tests passed in each, 14 more than main at
+`e4e8b2f`, then the three measures within their budgets. The unit and component
+evidence, by check:
+
+- KIND-13, the rules and the cell (`src/common/overview.ts`,
+  `src/common/overview.test.ts`): A12 for NotReady and for no other phase, Ready,
+  New, none and a phase the release does not write giving no item; its reason with
+  the message of Velero, with no message, and with a volume namespace and a location
+  not set, in the words of the repositories; the location it leads to found by
+  `spec.backupStorageLocation` in the namespace of the repository, absent, of another
+  namespace, of a name of 64 characters whose labels carry it cut, and none when the
+  locations are denied; A13 for the newest maintenance by its start that failed,
+  whatever the order of the entries in the object, and none for one that succeeded,
+  a result not known, no history and an older entry that failed under a newer one
+  that succeeded; its time the start of that entry, and none when no entry has a
+  start, which its reason says; its two sentences of the last maintenance that
+  succeeded, its age and none recorded; a repository NotReady whose newest
+  maintenance failed giving both, A12 first; the items of the storage by name, a
+  repository between two locations; the items of a stale read, and A12 of an earlier
+  read when the location it leads to is; the sixth cell read, stale with the time of
+  its read, denied, not served, failed and not read yet; the line of what was not
+  checked of the repositories, after the one of the restores, and the summary, which
+  says that nothing was read only when none of the five families the rules look at
+  was, and not when the four of before are denied and the repositories are read. The
+  records of the Overview, its kinds, its plurals and its lines of what was not
+  checked, are keyed by its six families, as the first pull request announced. The
+  tests that list every cell, every rule and the families that were not read are
+  restated with the repositories: 52 tests, 9 of them added. No line of the
+  repositories is in the bands of the schedules and of the storage: the rules of a
+  line are taken by the kind of an item, never by the object it leads to.
+- KIND-13 and KIND-16 at the component layer
+  (`src/renderer/pages/overview-page.test.tsx`): the stub answers the repositories of
+  both installations, none, so that every test of before reads the sixth family as
+  the page does, and each one the sixth read moves is restated, none weakened; the
+  sixth cell in each of its states with its way to the list of the repositories; the
+  items of A12 and A13 with their reasons, their times and their ways, to the
+  repository and to the location of A12, in the order of the page among the items of
+  the storage; the line of the repositories with its way to their list; the summary;
+  and an item of an earlier read. 59 tests, 4 of them added.
+- KIND-02 (`src/renderer/pages/volume-lists.test.tsx`, "are read while their list
+  is shown, at every read, and not while the Overview or another list is"): with the
+  Overview shown over three reads, each of the six families of `ALWAYS`, the
+  repositories among them, asked at each of the three, none of `ON_DEMAND`, and no
+  timer left when the page closes. The one read counted inside the test of the cells
+  of the page stays as it was.
+- KIND-07 (`src/common/repository-view.test.ts`, "takes the later in the list as the
+  newer of two with the same start or with none, as the release appends them"): of
+  two maintenances with the same start, or with none, the later in
+  `status.recentMaintenance` is the newer, in the view of a repository and so in A13;
+  seen failing first on the order of the object. 1 test added.
+
+The packaged cases, written in phase A on the fixtures that exist, where no
+repository is, and run in phase B: `velero-e2e-overview` with six cells in each installation,
+`Backup Repositories 0` where the suite counts none on the cluster, the sixth cell
+leading to the list of the repositories and back, and no item of A12 or A13 in any
+installation of the fixtures; both readers of the restricted suites denied the
+repositories, with the cell, the line of what was not checked and, for the first,
+the way of the cell to the list, which says the same; and `overview()` of the
+helper waiting for six cells: green in the packaged application on 2026-11-02,
+with every suite of the views, the pre-review and FND-10, 255 cases in 16 files,
+in 48 minutes 10 seconds on the second Linux machine. The count of KIND-13 on the API
+server, no read of the operations with the Overview open, is the window of
+`velero-e2e-volumes` (`e2e/__tests__/velero-e2e-volumes.tests.ts:170-182`): three
+reads with the Overview shown, none of the two kinds of the pod volume operations
+and the repositories at every read, green on 2026-10-27 (above). The first case of
+the suite of the Overview keeps its count of the six families read and none of the
+two once an installation is chosen. The room of the six cells at 900 by 650 and at
+twice the zoom is seen in the pre-review, in both themes, with no problem of the
+layout: two rows of three at 900 by 650 and rows of two at twice the zoom, on
+2026-11-02.
+
+Decided while implementing, on 2026-10-29:
+
+- The count of KIND-13 on the API server is the window of the suite of the volumes
+  above, cited, and no window of three reads is added to the suite of the Overview,
+  which would cost it about 45 seconds for the same assertion; the fourth pull
+  request restates it with the objects in place, as it restates the suite of the
+  volumes.
+- The third pull request is written from main while the second is reviewed, with no
+  stack, and is merged after it: the rebase of the third on the second merged with no
+  conflict the seven files of the code and of the suites that both change, and met
+  the second in three documents only.
+- A repository NotReady whose newest maintenance failed gives both items, A12
+  before A13.
+- The words of A12, of A13 and of the line of the repositories are written in
+  `src/common/overview.ts` beside the reasons of A1 to A11, with the words of the
+  repositories for a value that is not set. The reason of A13 is made of whole
+  sentences, and the age of the last maintenance that succeeded is said as the ages
+  of A1 and A3 are, by the clock of this machine.
+- An item of A12 is of an earlier read when the repositories are, or when the
+  location it leads to is; an item of A13 when the repositories are. An item of A13
+  whose newest entry has no start has no time, and its reason says so.
+- The newest maintenance of a repository, which A13 reads and the view of a
+  repository lists first: by the start, then, of two with the same start or with
+  none, the later in `status.recentMaintenance`, where the first pull request kept
+  the order of the object. Velero v1.18.4 appends each maintenance to the list and
+  keeps the last three (`pkg/controller/backup_repository_controller.go:559-573`),
+  and lists them from the oldest when it gathers them again from the Jobs
+  (`consolidateHistory`, 436-476); every maintenance it writes has a start, the
+  creation of its Job (`pkg/repository/maintenance/maintenance.go:699-708`) or the
+  time of a Job that could not start (`backup_repository_controller.go:515-517`), so
+  the place decides only for an object the release did not write
+  (`src/common/repository-view.ts`).
+- No line of the repositories is in the bands of the schedules and of the storage,
+  which REQ-102 of [SPEC-0008](SPEC-0008-overview.md) names alone.
+- The index of the specs names the third pull request in the rows of SPEC-0014 and
+  of SPEC-0008.
+
+T5.1, the fourth of its five pull requests, phase A of 2026-10-29 and 2026-11-02:
+the environment places the volume of each run and removes it, the views and the
+long lists hold pod volume operations, the suites compare and read the three
+kinds, and the second reader reads them. Its phase B, on 2026-11-02 and
+2026-11-04, created the environment again, read back what the volume left
+(RECON-T0.1), ran every suite of the views, the pre-review and FND-10 green in the
+packaged application, 256 cases in 16 files, and found the deletion of the backup
+of the volume refused after the transport proof, which the decisions of 2026-11-04
+settle.
+
+- Volumes (REQ-195): the server is installed with
+  `--default-repo-maintain-frequency=168h`, which the probe of the images finds in
+  the help of the installer, and the verification reads it on the Deployment of the
+  server, as `168h` or `168h0m0s`, and asks for the environment to be brought up
+  again without it; it refuses an installation that holds an object of the five
+  kinds. The live fixtures back up and restore a pod whose `emptyDir` named `data`
+  holds a megabyte of random bytes and their checksum, of the image of the store,
+  never pulled; the pod volume backup and restore are found by the labels of the
+  name and the UID of their owners, the repository by its three labels, and the
+  checksum of the restored bytes is read from the log of the restored pod. The
+  record of the live fixtures holds what was found: on 2026-11-02 the pod volume
+  backup and restore Completed within seconds, 1,048,641 bytes each, the repository
+  Ready and maintained every `168h0m0s`, and the restored checksum the one written
+  (RECON-T0.1, "With The Volume Of The Environment").
+- The cleanup has the server delete the backup of the volume through a request,
+  with its restore; the pod volume operations go with their owners, waited for with
+  a bound of their own; the repository is deleted by the identity the run recorded,
+  with its UID as a precondition, once the backup is gone. The data of the
+  repository stays in the bucket until `pnpm demo:down`.
+- Reader: the second reader reads the pod volume backups, the pod volume restores
+  and the backup repositories of its namespace; the first keeps its three kinds.
+- The guard compares eight kinds; what the server sends at its pass and what the
+  controllers list (LM4), measured on 2026-11-02 over fifteen minutes with no view
+  open: nothing written to the repository, and no list of the operations, only
+  their watches; both constants keep their defaults.
+- Operations (478): twenty-three pod volume operations in `velero-views-<run>`,
+  placed once with the views, each created after its owner with the UID the
+  cluster gave it, every status one the release writes in that phase; nothing of
+  the data movement, which a later pull request places. Deviation from the table:
+  one pod volume backup names a triple of no repository, to show the operation
+  whose repository is not there.
+- Repositories (479): nine in `velero-views-<run>`, with the three labels the
+  release writes, two of them of one triple.
+- Long lists (480): 2,000 pod volume backups in `velero-scale-<run>`, two of each
+  of the first nine hundred backups and two hundred of the last, placed by the
+  clock in two phases by their owners: the backups and the restores first, their
+  UIDs read, then the operations in one create, each owned by its backup as the
+  release writes it, accepted a minute after its backup started, in the phases the
+  release writes in turn and never none. Their digest is made with placeholder
+  UIDs. Placed again, the operations are removed first and read until they are
+  gone, then the rest. The 200 data uploads are of a later pull request. The probe
+  of the fixtures finds the two hundred of the last backup by its label. On
+  2026-11-02 `pnpm demo:views` placed them in 117 seconds with the other fixtures
+  of the views, and the two hundred of the last backup, read back, name its UID in
+  their owner reference and in their label, twenty-five in each phase.
+
+Decided while implementing, on 2026-10-29:
+
+- LM1: the live flow of the volume runs in the live fixtures, which `pnpm demo:up`,
+  the fixture suite and the transport proof run; the environment is created again
+  once, and the hosted job keeps its shape. A placement of the views that finds the
+  repository of the volume less than a day from its next maintenance stops and says
+  to create the environment again, about six days after `pnpm demo:up` with `168h`.
+- The end check of the cleanup asks the store, HEAD only, for the nine keys the
+  server writes for the backup and the restore of the volume, beside the ones of
+  the real operations; the keys of the repository of the volume are not asked, since
+  its data stays in the bucket until `pnpm demo:down`.
+- LM2: the pod runs the image of the store, preloaded and pinned, with
+  `imagePullPolicy: Never`; its entry point is checked first in phase B, and the
+  image of the helpers is its fallback, written only if that check refuses it.
+- LM3: the cleanup deletes the repository of the run by its UID after the backup
+  of the volume is gone, and its end check names it while it is there; its data
+  stays in the bucket until `pnpm demo:down`; no script removes a key of the store.
+- LM4: two constants beside the one of the schedule, set from the measure of phase
+  B, each branch a pure function of the guard tested both ways.
+- The repository is kept out of the resources of the journal, which ask the label
+  of the demo of each entry; its name, UID and three labels are in the record of
+  the run and in `fixture-live-result.json`; it is told as of the run by its three
+  labels, removed with `delete --raw` and `preconditions.uid`, refused when the
+  labels or the UID differ.
+- The restore of the volume names the pods alone, as its backup does: the release
+  restores the volumes of a pod it restores whose pod volume backups hold a
+  snapshot, whatever else the restore leaves out, and an `emptyDir` names no claim
+  (`pkg/restore/restore.go:2046-2055`, `pkg/podvolume/util.go:75-102` and
+  `pkg/podvolume/restorer.go:174-193` of the source of the release).
+- The checksum of the restored data is read from the log of each pod, without an
+  `exec`.
+- The pod volume operations of the views are owned by backups and restores of the
+  views that exist, so that no count of the backups and the restores of the views
+  moves; two repositories of one triple are placed in that namespace, which no
+  controller reads.
+- The operations of the views take the name of their owner, a dash and five
+  lower-case letters and digits made of the run, the owner and their place, not
+  drawn by chance, so that a second placement finds each by its name.
+- The volumes suite says its words of an empty list in the installation of the
+  defaults, now that the one of the views holds the three kinds.
+- A namespace of the fixtures is removed with the events the cluster wrote of a pod
+  of the run, told by the object they regard.
+- Phase B is split: the environment, its measures, its placements, the cleanup
+  proof and `pnpm e2e` first; the suites and the pre-review once the pull request
+  is rebased on a main that holds the second and the third pull requests.
+
+Decided while implementing, on 2026-11-02:
+
+- The placement by the clock has three ways, each for its namespaces and refused
+  for any other: in one phase, the Overview; in two by the clock of their
+  submissions, the installations of the adherence; in two by their owners, the
+  long lists.
+- The backups between the nine hundredth and the last own no pod volume backup,
+  so that the list of the operations of a backup is empty, short and long among
+  the long lists.
+- Two operations of one backup whose generated names would be the same: the second
+  is drawn again from another seed, so that no create is refused for a name that is
+  taken.
+- The count the views placement says of the long lists names their pod volume
+  backups; the restores are what was found, less the backups and the operations.
+- The path a synthetic pod volume backup that completed reports is a slash and a
+  UID made of the run and of its key: the release writes a slash and the UID of the
+  pod volume backup, where its node agent mounts the volume (seen with the volume of
+  the environment, RECON-T0.1), and the UID of a synthetic one is given by the
+  cluster when it is created. The path of the volume on the node, which the
+  operations of the views carried before, is not what this release writes.
+- The pod volume backups of the long lists take no account of the phase of their
+  backup: a backup that never started or failed its validation owns operations
+  that completed. No view reads the phase of the owner beside its operations.
+
+Decided while implementing, on 2026-11-04:
+
+- The cleanup asks the deletion of the backup of the volume once the repository of
+  the volume is Ready, read again for six minutes at most, and the transport proof
+  changes the storage location only once the rollout of the store has ended, at
+  its start and at its end. `pnpm e2e` failed twice that day at the cleanup after
+  the proof: the server ended the request with "backup repository is not ready:
+  error to check backup repo: error to connect to storage", and left the backup
+  with its files. The release makes every repository of a location NotReady when
+  the location changes and checks each again at once, a check while the store
+  restarts fails, and the next comes with the sync, five minutes later
+  (`pkg/controller/backup_repository_controller.go:54` and `114-160`); and the
+  server refuses at once to forget the snapshots of a backup through a repository
+  that is not Ready (`pkg/repository/ensurer.go:118-141` and
+  `pkg/repository/backup_repo_op.go:81-83`).
+- The evidence of phase B is read from the store through the filer of its own pod,
+  at `127.0.0.1`, with no credentials and nothing written; the scripts of the
+  environment keep asking the store only what `assertStoreRequest` allows.
+
+T5.1, the fifth of its five pull requests, on 2026-11-05: the three kinds proven in
+the packaged application on the fixtures of the fourth, with their sessions of the
+integration test, the measure of their long list and the pre-review of their views.
+Its runs were made on a second Linux machine, in Freelens built at the validation
+target `b9b53e16`. Its final runs, on 2026-11-07 and 2026-11-08, at its head with
+main merged in: on that machine, the integration test in 96 seconds, the part of the
+volumes and the server, thirty cases of three suites, in 920 seconds, the two parts on
+the CRDs alone, 157 cases of twelve files, in 698 seconds, and the pre-review and the
+suite of the tabs, 38 and 54 cases, in 1,681 seconds; on macOS x64, in Freelens 2.0.0
+of the release, the suite of the long lists, 11 cases in 258 seconds, before the
+control of its counters was added, and the suite of the tabs with the case of
+KIND-12, which passed in each of two runs while three cases did not on that machine,
+for the reasons the last bullet records. The cases the review of the pull request
+added, the control of the counters, the views with no control that writes, the way
+of the details followed, the real repository and the real pod volume restore against
+the cluster, ran in the hosted runs of its pull request, which ran every part. The
+changes made on purpose to see the new cases fail are recorded in the last bullet.
+
+- The sessions of the integration test (REQ-215 of SPEC-0015): a BackupRepository, a
+  PodVolumeBackup and a PodVolumeRestore, each in a namespace no controller of the
+  release reads, their nine cases green in 35 seconds and each seen failing for its
+  own reason; the whole integration test, nine files and thirty cases, green in 97
+  seconds.
+- KIND-03, KIND-07, KIND-19 (the suite of the repositories): the nine repositories of
+  the views against what the cluster holds of each, read with `kubectl` in their
+  namespace before the page; the last maintenance how long ago between two readings
+  of the clock, the first moved back by what the clock of the views may lag, with the
+  mark of a newest one that failed; the orders of the readiness and of the last
+  maintenance, each both ways; the search; the three maintenances of the one whose
+  newest failed, newest first; the next maintenance of each; the identifier of the
+  one of restic as written; what used the real repository of the installation, its
+  pod volume backup and its pod volume restore, each a way and back.
+- KIND-05 (the details of the host): for a repository, a pod volume backup and a pod
+  volume restore, the section reads as the row and its way leads to the view, with
+  the drawer gone with the address that named the object, as for every kind.
+- KIND-06, KIND-09, KIND-10, KIND-11 (the suite of the volumes): the sentence of each
+  phase of a pod volume backup; the band of the backup in progress counted by phase
+  as `velero backup describe` counts an operation with no phase, ten rows and ten
+  more; the backup that partially failed, its one pod volume backup failed with its
+  message and no repository for its namespace; the pod volume backup of the name of
+  the daily backup, read on the cluster before the band says none, whose owner
+  reference names the backup its labels do not; the pod volume backup of the real
+  backup of the volume with its phase, snapshot ID, node, volume and namespace of the
+  pod as the cluster holds them, and the way to its repository and back; the pod
+  volume restore of the real restore of the volume with its phase, snapshot ID, node,
+  volume, namespace of the pod and source namespace as the cluster holds them; the
+  real repository with the cells of its row and its last maintenance, the time the
+  server wrote when it made it ready, against the cluster (KIND-07, KIND-19).
+- KIND-12 (the tab of the volumes): the row of the real backup of the volume of the
+  run whose method is PodVolumeBackup leads, from its details, to the pod volume backup
+  of the installation that made it, found by the owner of the tab, the namespace of the
+  pod, the pod and the volume, which the suite reads on the cluster by the label of the
+  backup; the way back leads to the backup. The rows of the backup synced from the
+  store offer no way and say nothing absent, as before.
+- KIND-14 (no write): no way to select, edit, cancel or delete a repository or a pod
+  volume operation, by pointer or by keyboard; nothing written. Nothing of a pod or of
+  a Job is read, counted on the API server on the CRDs of the release alone, in the
+  suite of the long lists, where no server, node agent or maintenance Job reads
+  either: no read of a pod or of a Job in a namespace or by name while the list of the
+  two thousand pod volume backups, the Overview and the view of the backup of two
+  hundred operations are shown. The counters are proven to see such a read: a list of
+  the pods and one of the Jobs of `kube-system`, made by `kubectl` between two
+  readings in the same suite, are each counted as a list in a namespace. The views of
+  a repository, of a pod volume backup and of a pod volume restore hold no control
+  that writes: every button is the way back or a way to another view, with no field.
+  Decided while implementing, on 2026-11-07: on the environment with the server, the
+  lists of the Jobs of its maintenance cannot be told from the views by the counters,
+  which carry no namespace and no client, and the reader of the extension asks no path
+  outside `/apis/velero.io/` (LOC-09).
+- KIND-16 (the readers): to the first reader the band says that the pod volume
+  backups cannot be read and how many the backup has is not known, with no count; to
+  the second, a pod volume restore with the restore it belongs to, and a pod volume
+  backup with its backup denied.
+- KIND-17 (the pre-review): the three lists, the view of the repository whose newest
+  maintenance failed, the band of the backup in progress whole and the view of its
+  pod volume backup that failed with a message of several lines, in both themes at
+  every size, forty-six views in all; the band read with the keyboard alone. The
+  restores suite and the pre-review count the eleven links the band of the mapped
+  restore draws.
+- KIND-18 (the long list): the two thousand pod volume backups, a hundred rows
+  mounted at most, twenty interactions against the budget of 250 milliseconds at the
+  95th percentile, reported as `kind-18-volumes-performance`. The view of the backup
+  of two hundred operations, opened twenty times after two that warm it, each time
+  after a read with the view open, which keeps the family read: the band whole in
+  34 milliseconds at the 95th percentile, 32 at the median, reported as
+  `kind-18-busiest-backup-performance`, with the lists of the family counted over the
+  loop: one at each read and none at an opening. The reads, counted on the API server over
+  three reads of the installation: with the list of the two thousand open, three
+  lists of the pod volume backups, one at each read, and none of the pod volume
+  restores; with the Overview, none of either, reported as
+  `kind-18-reads-of-the-pod-volume-operations`. Measured on 2026-11-07 on macOS x64
+  with Docker Desktop, in Freelens 2.0.0 of the release: the list of the two thousand
+  at 159 milliseconds at the 95th percentile and 46 at the median.
+- The changes made on purpose, on macOS on 2026-11-07 and 2026-11-08, each seen
+  failing: the Overview made to hold the family of the pod volume backups, and the case
+  of the reads counted three lists of them with the Overview open, where none is
+  expected; the band of the busiest backup slowed, and its case measured 342
+  milliseconds at the 95th percentile against the budget of 250; the way of a row of
+  the Volumes tab taken away, and the case of KIND-12 found no way in the details of
+  the row of the real backup of the volume; the two path rules of the parts taken
+  away, and the test of the plan failed. The control of the counters, made by hand on
+  the environment with the server before it was a case, counted one list of the pods
+  and one of the Jobs of the namespace of the installation. On that machine the suite
+  of the tabs failed, in its three runs, cases of the timing of the machine and not of
+  this pull request: the answers of the log of 200,000 lines at 289 to 301
+  milliseconds at the 95th percentile against 250, and the frames of its scroll at 132
+  to 199 against 50, with the virtual machine of Docker at work beside it; once, the
+  menu of the catalog that disconnects the cluster, not stable when it was clicked, and
+  the case after it, whose click the catalog left over the page took; once, the picture
+  of a load in flight in the light theme, which three loads ended before it was taken.
+  Its hosted runs, where these cases pass, are the evidence of them.
+
+Amendment of 2026-11-07 (REQ-195, KIND-19): the suite of the volumes keeps the
+server of the release, the real repository and the real pod volume operations, in
+the part of the hosted job of the views with the server. The suites of the Overview
+and of the locations, which list the backup of the volume of the run and its
+restore among the operations of the installation, run on the CRDs of the release
+alone, where the static fixtures hold their counterparts, completed with their one
+item each as the server left them on 2026-11-06, and no repository and no pod volume
+operation, which the suites count on the cluster (SPEC-0015, amendment of
+2026-11-07).
+
+T5.2, the first of its two pull requests, on 2026-11-08: the data uploads and the
+data downloads, read under the second version of the group, in their lists, their
+views, the details of the host and the bands, read only. The gates on the machine of
+the runs, macOS x64 with Node 24.21.0 and pnpm 12.15.0: `pnpm type:check`, the nine
+programs, and `pnpm lint:check`, each with no error; `pnpm test:unit`, the build, then
+101 files and 3,014 tests, all passed, three timed cases of the log viewer and of the
+Overview alone after the full run met their five seconds beside a run of the views
+on the same machine; the build test with the eleven pages and the ten sections. The unit and
+component evidence, by check:
+
+- KIND-01: the two classes, with their kind, their `declare` literals, the version
+  `velero.io/v2alpha1`, their plural and no short name; `detailsFor` given the kind
+  and the version of each; `customResources` of ten; eleven pages and ten sections in
+  the build test (`src/entrypoints.test.ts`, `test/build.test.ts`,
+  `src/renderer/registrations.test.tsx`). The reader takes the discovery of the second
+  version and the lists of its two kinds in one namespace, and refuses a kind of the
+  first version under it, a list of the whole cluster, an object by its name, a query
+  and another version (`src/renderer/api/reader.test.ts`). The discovery of the second
+  version served, with one kind, not served, denied, failed and not a list, each with
+  the families it affects, and never a word of it on whether Velero is there
+  (`src/common/discovery.test.ts`).
+- KIND-02: one union of ten families, the six read at every read and the four of the
+  operations on demand; the data movement asked under its version when a holder needs
+  it, and never asked where its version is not served, the pod volume backups asked
+  as before (`src/renderer/state/installation.test.ts`); the view of a backup asks the
+  data uploads with the pod volume backups and not the data downloads, the view of a
+  restore the converse, and the Overview none (`src/renderer/pages/data-movement.test.tsx`,
+  `src/renderer/pages/backups-page.test.tsx`, `src/renderer/pages/restores-page.test.tsx`).
+- KIND-04, KIND-05, KIND-06, KIND-08, KIND-09, KIND-10, KIND-16: the lists of the two
+  kinds with the twelve columns, the data mover in the place of the uploader, the
+  source claim of an upload and the target claim of a download, the restore of a
+  download a way; a data mover the release does not run marked as not known; the two
+  lists said not served where the second version is not; the view of an upload with
+  its snapshot, its classes, its driver, its source claim and the node of its data
+  path, the node agent that accepted it said only when it is another node; its data
+  mover, configuration, timeout, node OS, snapshot type, snapshot ID, path and result;
+  a snapshot type and a data mover the release does not write marked as not known; the
+  view of a download with its target claim, its volume when bound, its source
+  namespace, its snapshot ID and the data upload of that snapshot as a way and back,
+  nothing said when none names it; what an upload and a download New wait for; no
+  control that writes; the sections of the host of both, asking nothing
+  (`src/renderer/pages/data-movement.test.tsx`).
+- KIND-11: the band of a backup and of a restore in two halves, each under its title
+  with the state of its own read, the second the data movement, with its rows by claim,
+  ten at a time, a way to each view and back; a denied half beside one in rows; the
+  sentence of each phase of the owner, speaking of both kinds; what used a repository
+  counted over the four kinds, the data movement by its source namespace and the type
+  kopia (`src/common/volume-band.test.ts`, `src/renderer/pages/volume-band.test.tsx`,
+  `src/renderer/pages/data-movement.test.tsx`). The index made in one pass over each of
+  the four families, with the data uploads by their snapshot
+  (`src/common/volume-index.test.ts`).
+- KIND-12: a row whose data was moved leads to the data upload of its operation ID
+  among the operations of the owner of the tab, and a row whose data was not moved is
+  not found by the ID it carries; the ID read from the detail of the row, and none
+  when it is empty or not a text (`src/common/volume-band.test.ts`,
+  `src/renderer/components/volumes-viewer.test.tsx`, `src/common/artifact-volumes.test.ts`).
+
+The packaged application has no data upload or data download yet: the fixtures of
+the data movement, with their suites, their measures and their pre-review, are the
+second pull request of T5.2. The suites of the views read the two kinds where they
+are: the journey with the eleven entries and the ten kinds, every request of the
+frame of a version of the group; the restricted suite with the first reader denied
+the two kinds, their lists and the notice over the view of a backup saying so; the
+band of every view through its first half, the pod volume operations; the sentences
+of the band restated. The hosted runs of its pull request at the head with main merged
+in, `80bcddb`, passed every part of the views, among them the journey in the part
+`static-views-1` in 9 minutes, the integration tests with Freelens v2 in 3 minutes 46
+seconds and the end-to-end tests in 9 minutes 31 seconds (runs 42431786999,
+42431787058 and 42431787083).
+
+Decided while implementing, on 2026-11-08:
+
+- The discovery asks the second version of the group beside the first, at each of
+  its asks, and takes from it only whether the two kinds of the data movement are
+  served: an answer that lists them serves them, one that lists one of them serves
+  that one, and a version the API does not serve, the only evidence of an absence,
+  makes the two families not served, which are then never asked. An answer that
+  refused, that failed or that is not a list says nothing of them: they are read,
+  and the read of each says what it is. The first version alone says whether
+  Velero is there (`src/common/discovery.ts`, `apiAvailability`).
+- The reader takes the second version for its discovery and for the lists of the
+  two kinds in one namespace, and for nothing else of it: not a kind of the first
+  version, not a list of the whole cluster, not an object by its name
+  (`src/renderer/api/reader.ts`).
+- The band of a backup and of a restore is two halves, one for each kind of its
+  operations, the pod volume operations first, each under its title and with the
+  state of its own read: a family that is denied, failed or not served says so in
+  its half and takes nothing from the other. The sentence of what the release does
+  is one for the band, and speaks of both kinds
+  (`src/renderer/components/volume-band.tsx`).
+- The column of the uploader of a pod volume operation is, in the lists of the data
+  movement, the one of its data mover, titled Data mover, with the same identifier
+  and the same place in a narrow list: a data mover that is not set is said
+  Built-in, the word of the spec, and `velero` is shown as written; any other is
+  kept as its text with the mark of what is not known.
+- The repository of a data movement is found by the type kopia, whatever its data
+  mover, since the release names the repository of the data movement by that type.
+- The node of a data movement is the one of its data path, `status.node`; the node
+  whose node agent accepted it is said beside it in its view, as Accepted by, only
+  when it is another one.
+- The way from a row of the Volumes tab whose data was moved is found among the
+  data uploads or the data downloads of the owner of the tab, by the label of the
+  operation ID the row carries, as a pod volume operation is found among the ones
+  of its owner: the release makes the operation ID of the UID of the owner, and an
+  operation of another owner is not the one of the row.
+- The data upload of a data download is found among the data uploads of the
+  installation by the snapshot its result names, the newest when two name it, in
+  the index made once for a read; one found is a way, and none found is not said.
+- The four families of the operations are read on demand; the Overview reads none.
+- The phases of the data movement are grouped in the order of the describe of their
+  owner, which groups neither kind: the data uploads in the order of `backup
+  describe`, the data downloads in the order of `restore describe`, and a data
+  download Canceling after the others, as a pod volume restore Canceling is
+  (`src/common/volume-band.ts`).
+- The two identities of the views the runner makes for the suite of the tabs read
+  the two kinds as well (`viewIdentityWithoutPortForward` and
+  `viewIdentityOfAnExecPlugin`), and so does the second reader of the restricted
+  suites; the first reader, which reads none of the volumes, is denied them, and
+  its lists and the notice over the view of a backup say so.
+- The suites count the reads of the families of the views among the kinds of their
+  snapshot, which hold no data movement until its fixtures are placed: the second
+  pull request of T5.2 adds the two kinds to them with the fixtures.
+
+Amendment of 2026-11-08 (REQ-187, KIND-11): the independent review of the first pull
+request of T5.2 read in the release that the CSI plugin makes the data uploads of a
+backup while it is InProgress, as its items are backed up, and the data downloads of
+a restore while it is InProgress, as its claims are restored; the backup and the
+restore wait for them in their phases of the plugin operations, which they enter once
+their items are done. REQ-187, the fact of the data uploads and the words of the views
+said that the data uploads run while the backup waits for its plugin operations: they
+are restated, and so are the sentences of the band.
+
+T5.2, the second of its two pull requests, on 2026-11-08: the data uploads and the
+data downloads placed in the test environment, proven and measured in the packaged
+application, and the pre-review of their views. The fixtures of the views hold
+twenty-one data movements under the second version of the group, each created after
+its owner with the labels the CSI plugin writes and a status the release writes in
+its phase, and the long lists two hundred data uploads; the environment test pins
+their phases, their placement after their owners and their counts, and, for every
+operation of the views and of the long lists, the fields its CRD of the release
+requires and the rules of what its node agent writes: the node that accepted and
+the time it did together, the node of a data path after an acceptance, a preparing
+timeout only after one, a cancellation asked for each Canceling and each Canceled
+with no message of its own, and the path of a data upload that completed
+(`test/environment.test.ts`). The evidence, by check, in Freelens 2.0.0 of the
+release on macOS x64 with Node 24.21.0 and pnpm 12.15.0, and on the hosted runner:
+
+- KIND-01: the sessions of the integration test of the two kinds, ten in all, as the
+  amendment of 2026-11-08 of SPEC-0015 records: eleven files and thirty-six cases in
+  222 seconds, the two new files seen failing for their own reasons.
+- KIND-02, KIND-15: one list of the data uploads at each read while their list or a
+  backup is open, one of the data downloads while their list or a restore is, none
+  of the other and neither while the Overview is, counted on the API server
+  (`velero-e2e-data-movement`, the report `kind-02-reads-of-the-data-movement`); a
+  restore that opens asks one list of the pod volume restores and one of the data
+  downloads, a restore open one list of each at each read and none of the families
+  of a backup, and a read asked over the list of the restores none of the four
+  families (`velero-e2e-data-movement`, `velero-e2e-restores`); the Overview none of
+  the four (`velero-e2e-overview`).
+- KIND-04, KIND-05, KIND-06, KIND-08, KIND-09, KIND-10, KIND-19: the two lists against
+  what the cluster holds of each, each row found by its name, the data mover not set
+  said Built-in and one the release does not run marked as not known; the view of a
+  data upload of each phase with what the phase means; the details of the host of
+  each kind and their way to the view, with the drawer gone
+  (`velero-e2e-data-movement`).
+- KIND-11: the twelve data uploads of the backup in progress in the second half of
+  its band, ten and ten more, each a way and back; the way from the data download
+  that completed to the data upload of its snapshot and back, and nothing said of
+  one whose snapshot no data upload names (`velero-e2e-data-movement`); the eight
+  data downloads of the mapped restore in the second half of its band, the claims of
+  their rows among the ways of the view and the nodes of the four whose data path
+  has one among its links, sixteen in all with the twelve of its pod volume restores
+  (`velero-e2e-restores`); the band of every view read by the half it means
+  (`velero-e2e-volumes`, the pre-review).
+- KIND-14: no way to select, edit, cancel or delete a data upload or a data download,
+  by pointer or by keyboard, no control but ways in their views, nothing written and
+  nothing asked of Velero (`velero-e2e-data-movement`).
+- KIND-16: what a data movement New waits for, any node agent of the installation, in
+  its view (`velero-e2e-data-movement`); the readers as the first pull request of
+  T5.2 left them (`velero-e2e-restricted`).
+- KIND-17: the pre-review: the two lists, the view of a data upload that failed with
+  a message of several lines and the view of a data download with the way to the data
+  upload of its snapshot, in both themes at every size, fifty views in all; the band
+  of the backup in progress whole, its two halves; the band of the mapped restore
+  read with the keyboard alone through the ways of its data downloads and the links
+  of their nodes.
+- KIND-18: the two hundred data uploads beside the two thousand pod volume backups:
+  on the hosted runner, 26 rows mounted at most, twenty interactions against the
+  budget of 250 milliseconds, 108 at the 95th percentile and 34 at the median; one
+  list of them at each read while their list is open, none of the
+  three other families, and none of the four while the Overview is
+  (`velero-e2e-scale`, the reports `kind-18-data-movement-performance` and
+  `kind-18-reads-of-the-pod-volume-operations`).
+
+The local runs, on the demo environment with the server of the release: the
+integration test as SPEC-0015 records; the suites of the restores, 14 cases, and of
+the volumes, 13; the suite of the data movement, 9 cases, whose first case failed
+once where the list mounted 11 of its 13 rows in view, before it found each row by
+its name, and passed after it, in 358 seconds; the pre-review, 39 cases and the 50
+views, in 1,120 seconds. The hosted runs of the pull request at the head `987e187`
+passed every part of the views, among them the suite of the data movement in the
+part `static-views-1` and the long lists in `static-views-2`, the integration tests
+and the end-to-end tests (runs 42436934592, 42436934576 and 42436934579).
+
+Decided while implementing, on 2026-11-08:
+
+- The data movement of the views and of the long lists is synthetic, in namespaces
+  no node agent reads: the environment has no CSI driver with snapshots, which the
+  data movement needs, and REQ-195 asks the synthetic one.
+- The suite of the data movement runs in the part of the static views, on the CRDs
+  of the release alone, as the suites that read what the fixtures wrote do; the list
+  of the two hundred data uploads is measured in the suite of the long lists, beside
+  the pod volume backups.
+- A list of the data movement is compared with the cluster row by row, each found by
+  a search of its name: the list mounts the rows in view, and a list of thirteen does
+  not hold them all in a window of 1440 by 900 with every notice over it.
+
+Amendment of 2026-11-08, of the facts (KIND-07): the independent review of the second
+pull request of T5.2 read that the preparing timeout of a pod volume restore and of a
+data download fires on one accepted only, and keeps its acceptance, as the one of a
+pod volume backup and of a data upload does: the facts said that it writes no time at
+all, and the sentence of the phase Failed said so of every operation. They say no
+start and no completion, with the links the facts give; the pod volume restore and
+the data download of the timeout in the fixtures carry the acceptance, the first with
+the node that accepted it, which makes the band of the mapped restore draw a link
+more.

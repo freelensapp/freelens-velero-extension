@@ -10,7 +10,7 @@ import type { ReadStatus } from "./read-state";
 import type { Window } from "./window";
 
 // The families of an installation, one union: the five of the first milestones, the backup repositories, and the
-// families of the operations of the volumes.
+// families of the operations of the volumes, the two of the data movement last.
 export const FAMILIES = [
   "backups",
   "restores",
@@ -20,8 +20,22 @@ export const FAMILIES = [
   "backupRepositories",
   "podVolumeBackups",
   "podVolumeRestores",
+  "dataUploads",
+  "dataDownloads",
 ] as const;
 export type Family = (typeof FAMILIES)[number];
+
+// The versions of the group the views read: the second serves the two kinds of the data movement, and the first every
+// other kind (SPEC-0014, REQ-177). A kind is read under its version and under no other.
+export const VERSIONS = ["v1", "v2alpha1"] as const;
+export type Version = (typeof VERSIONS)[number];
+
+// The families the second version serves.
+export const SECOND_VERSION = ["dataUploads", "dataDownloads"] as const satisfies readonly Family[];
+
+export function versionOf(family: Family): Version {
+  return (SECOND_VERSION as readonly Family[]).includes(family) ? "v2alpha1" : "v1";
+}
 
 // The families a backup, a restore and a schedule are shown with: the three kinds and the two locations they name.
 export const BACKUPS_AND_LOCATIONS = [
@@ -38,7 +52,12 @@ export const ALWAYS = [...BACKUPS_AND_LOCATIONS, "backupRepositories"] as const 
 
 // The families read only while a view that shows them is open: an installation may hold thousands of their
 // objects, and a view that does not show them does not pay for them.
-export const ON_DEMAND = ["podVolumeBackups", "podVolumeRestores"] as const satisfies readonly Family[];
+export const ON_DEMAND = [
+  "podVolumeBackups",
+  "podVolumeRestores",
+  "dataUploads",
+  "dataDownloads",
+] as const satisfies readonly Family[];
 
 // The plural of each family in the API, which is how the discovery of the API names it.
 export const RESOURCES: Record<Family, string> = {
@@ -50,6 +69,8 @@ export const RESOURCES: Record<Family, string> = {
   backupRepositories: "backuprepositories",
   podVolumeBackups: "podvolumebackups",
   podVolumeRestores: "podvolumerestores",
+  dataUploads: "datauploads",
+  dataDownloads: "datadownloads",
 };
 
 export const TITLES: Record<Family, string> = {
@@ -61,6 +82,8 @@ export const TITLES: Record<Family, string> = {
   backupRepositories: "Backup Repositories",
   podVolumeBackups: "Pod Volume Backups",
   podVolumeRestores: "Pod Volume Restores",
+  dataUploads: "Data Uploads",
+  dataDownloads: "Data Downloads",
 };
 
 // An answer of the API: its status and, when it has one, its body. `status` is absent when there was none.
@@ -77,7 +100,8 @@ export type ApiAvailability =
   // The discovery was not asked yet.
   | { state: "unknown" }
   | { state: "asking" }
-  // The API answered for the group: these are the kinds it serves.
+  // The API answered for the group: these are the kinds its first version serves, and the families it does not
+  // serve under the version of each.
   | { state: "served"; resources: string[]; missing: Family[] }
   // The API answered that it does not know the group. It is the only evidence of an absence.
   | { state: "not-installed" }
@@ -90,17 +114,42 @@ function succeeded(answer: Answer): boolean {
   return typeof answer.status === "number" && answer.status >= 200 && answer.status < 300;
 }
 
-export function apiAvailability(answer: Answer): ApiAvailability {
+// The kinds an answer of the discovery of a version lists, or nothing when it is not a list of resources.
+function listedResources(answer: Answer): string[] | undefined {
+  const listed = (answer.body as { resources?: unknown } | undefined)?.resources;
+
+  if (!Array.isArray(listed)) return undefined;
+  return listed
+    .map((resource) => (resource as { name?: unknown } | null)?.name)
+    .filter((name): name is string => typeof name === "string" && !name.includes("/"));
+}
+
+// What the discovery of the second version says of its kinds: the ones it lists, or that the API does not serve the
+// version, which is the only evidence of an absence. An answer that refused or failed, or was not given, says
+// nothing: the families are read, and each read says what it is.
+function secondVersion(answer: Answer | undefined): string[] | "not-served" | undefined {
+  if (!answer) return undefined;
+  if (succeeded(answer)) return listedResources(answer);
+  return failedStatus(answer.status) === "not-served" ? "not-served" : undefined;
+}
+
+// The availability of the API, from the discovery of the first version, which says whether Velero is there, and of
+// the second, which says only whether the kinds it serves are: a version the API does not serve makes its families
+// not served, and changes nothing else.
+export function apiAvailability(answer: Answer, second?: Answer): ApiAvailability {
   if (succeeded(answer)) {
-    const listed = (answer.body as { resources?: unknown } | undefined)?.resources;
+    const resources = listedResources(answer);
 
     // An answer that is not a list of resources is not the discovery of the group.
-    if (!Array.isArray(listed)) return { state: "failed" };
-    const resources = listed
-      .map((resource) => (resource as { name?: unknown } | null)?.name)
-      .filter((name): name is string => typeof name === "string" && !name.includes("/"));
+    if (!resources) return { state: "failed" };
+    const others = secondVersion(second);
+    const missing = FAMILIES.filter((family) =>
+      versionOf(family) === "v1"
+        ? !resources.includes(RESOURCES[family])
+        : others === "not-served" || (others !== undefined && !others.includes(RESOURCES[family])),
+    );
 
-    return { state: "served", resources, missing: FAMILIES.filter((family) => !resources.includes(RESOURCES[family])) };
+    return { state: "served", resources, missing };
   }
   const status = failedStatus(answer.status);
 

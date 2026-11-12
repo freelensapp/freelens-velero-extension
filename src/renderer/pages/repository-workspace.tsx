@@ -8,6 +8,7 @@ import { writtenType } from "../../common/volume-phases";
 import { agoText, NOT_WRITTEN, REPOSITORY_WORDS } from "../../common/volume-words";
 import { time } from "../components/status";
 import styles from "../components/views.module.css";
+import { UsedBy } from "../components/volume-band";
 import {
   FailedMaintenanceMark,
   MaintenanceResultMark,
@@ -76,9 +77,12 @@ export const RepositoryWorkspace = observer(({ installation, name, now, back, on
   const location = view.location
     ? (locations.items as BackupStorageLocationResource[]).find((item) => item.metadata.name === view.location)
     : undefined;
-  // Not known when the location is not read, is denied or is not there: a read-only one is never maintained.
+  // Not known when the location is not read, is denied or is not there: a read-only one is never maintained. Before
+  // the locations are answered once, the location is not known to be any of these.
   const readOnly = location ? location.spec?.accessMode === "ReadOnly" : undefined;
-  const due = maintenanceDue(view, now, readOnly);
+  const answered =
+    locations.lastSuccess !== undefined || (locations.status !== "idle" && locations.status !== "loading");
+  const due = maintenanceDue(view, now, readOnly, answered);
 
   return (
     <Workspace kind="backup-repository" name={view.name} uid={view.uid} back={back} onBack={onBack}>
@@ -186,6 +190,8 @@ export const RepositoryWorkspace = observer(({ installation, name, now, back, on
       )}
       <p className={styles.factNote}>{REPOSITORY_WORDS.job}</p>
       {readOnly ? <p className={styles.factNote}>{REPOSITORY_WORDS.readOnly}</p> : null}
+
+      <UsedBy installation={installation} repository={repository} />
     </Workspace>
   );
 });

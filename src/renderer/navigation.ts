@@ -1,5 +1,5 @@
 import { Renderer } from "@freelensapp/extensions";
-import { closed, decodeViews, encodeView, openedFrom, sameView } from "../common/views";
+import { closed, decodeViews, encodeView, openedFrom, replaced, sameView } from "../common/views";
 import { readTab } from "./components/workspace-tabs";
 
 import type { ViewKind, ViewTarget } from "../common/views";
@@ -27,6 +27,10 @@ export const POD_VOLUME_BACKUPS_PAGE_ID = "pod-volume-backups";
 export const POD_VOLUME_BACKUPS_MENU_ID = "velero-pod-volume-backups";
 export const POD_VOLUME_RESTORES_PAGE_ID = "pod-volume-restores";
 export const POD_VOLUME_RESTORES_MENU_ID = "velero-pod-volume-restores";
+export const DATA_UPLOADS_PAGE_ID = "data-uploads";
+export const DATA_UPLOADS_MENU_ID = "velero-data-uploads";
+export const DATA_DOWNLOADS_PAGE_ID = "data-downloads";
+export const DATA_DOWNLOADS_MENU_ID = "velero-data-downloads";
 
 // The page where the list of each kind is, which is where a link from outside the views opens one of it.
 export const PAGES: Record<ViewKind, string> = {
@@ -38,6 +42,16 @@ export const PAGES: Record<ViewKind, string> = {
   "backup-repository": REPOSITORIES_PAGE_ID,
   "pod-volume-backup": POD_VOLUME_BACKUPS_PAGE_ID,
   "pod-volume-restore": POD_VOLUME_RESTORES_PAGE_ID,
+  "data-upload": DATA_UPLOADS_PAGE_ID,
+  "data-download": DATA_DOWNLOADS_PAGE_ID,
+  "backup-now": SCHEDULES_PAGE_ID,
+  "backup-create": BACKUPS_PAGE_ID,
+  "schedule-create": SCHEDULES_PAGE_ID,
+  "restore-backup": BACKUPS_PAGE_ID,
+  "restore-schedule": SCHEDULES_PAGE_ID,
+  "schedule-pause": SCHEDULES_PAGE_ID,
+  "schedule-resume": SCHEDULES_PAGE_ID,
+  "backup-delete": BACKUPS_PAGE_ID,
 };
 
 // The views that are open travel in the address, by their kind and their name, in the order they were
@@ -112,6 +126,16 @@ function showViews(path: ViewTarget[]): void {
 // Opens a view from the one that is shown, or from the list.
 export function openView(target: ViewTarget): void {
   showViews(openedFrom(openViews(), target));
+}
+
+// Opens a view at a tab of it, from the one that is shown, in one change of the address.
+export function openViewAt(target: ViewTarget, shown: WorkspaceTab): void {
+  show(openedFrom(openViews(), target), readTab(shown));
+}
+
+// The view that is shown gives its place to another, whose way back leads where the first one was opened from.
+export function replaceView(target: ViewTarget): void {
+  showViews(replaced(openViews(), target));
 }
 
 // Takes the way back: to the view this one was opened from, or to the list.

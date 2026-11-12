@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M3 / T2.3, in three pull requests
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [the write gate](SPEC-0009-write-gate.md), [the request and its transport](SPEC-0010-diagnostic-request-and-transport.md), [states and Backups](SPEC-0003-backup-read-only.md), [Restores](SPEC-0005-restore-read-only.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-30, as drafted
 
@@ -1964,3 +1964,25 @@ design and, in the evidence of the first pull request of T2.3, its summary, VIEW
 and what was not seen in the packaged application, describe Freelens 1, and are read
 with this amendment. The header and the evidence of this spec move to Freelens v2
 with T0.8.
+
+### 2026-11-09: The Roles Of The Lines
+
+Made by the first pull request of T6.2 of [SPEC-0018](SPEC-0018-release-readiness.md),
+for what an accessibility scan of the pre-review found the one time it ran, on
+2026-11-09, before the lead maintainer decided that the pre-review stays the visual
+one of the other extensions and that the scan is not kept (D8 of that spec). Its first
+packaged run found the list of the lines of a log holding a child a list may not hold,
+by the rule of axe-core for the children of a role (WCAG 2.1, 1.3.1): the list was the
+element the Tab key reaches, with the name and the keys, and between it and its items
+react-window draws the part that scrolls, which is focusable with no role, so that it
+is no stop of the Tab key.
+
+The element the Tab key reaches keeps the name, the keys and its place: it is a group
+of the lines, and the part that scrolls is the list, with the role react-window writes
+on it, whose items are the rows, with nothing between them. The part that scrolls stays
+out of the order of the Tab key. What the keyboard does among the lines and what
+REQ-142 and REQ-149 ask do not change: the list of lines is one stop of the Tab key,
+with keys of its own, as the decision of the design says; to who does not see it, the
+stop is a group with the name of the list, and the lines are the items of the list in
+it, each with its place and their count. The component tests of the lines and of the
+log read the group, its name, and the list of the rows.

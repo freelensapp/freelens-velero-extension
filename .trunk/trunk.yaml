@@ -2,7 +2,7 @@
 # To learn more about the format of this file, see https://docs.trunk.io/reference/trunk-yaml
 version: 0.1
 cli:
-  version: 1.25.0
+  version: 1.29.0
 # Trunk provides extensibility via plugins. (https://docs.trunk.io/plugins)
 plugins:
   sources:
@@ -15,6 +15,24 @@ runtimes:
     - go@1.21.0
     - node@24.21.0! # datasource=node-version depName=node
     - python@3.14.4
+# actionlint comes from the maintained fork of kjanat, which continues the
+# releases of rhysd/actionlint after 1.7.12 with the same names of the files,
+# where the plugin downloads them from rhysd/actionlint.
+downloads:
+  - name: actionlint
+    downloads:
+      - os:
+          linux: linux
+          macos: darwin
+        cpu:
+          x86_64: amd64
+          arm_64: arm64
+        url: https://github.com/kjanat/actionlint/releases/download/v${version}/actionlint_${version}_${os}_${cpu}.tar.gz
+      - os: windows
+        cpu:
+          x86_64: amd64
+          arm_64: arm64
+        url: https://github.com/kjanat/actionlint/releases/download/v${version}/actionlint_${version}_windows_${cpu}.zip
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
   # Trunk's built-in `javascript` file type does not match `.cjs` (or `.mjs`),
@@ -80,10 +98,10 @@ lint:
   enabled:
     - shellcheck@0.11.0
     - shfmt@3.14.1
-    - actionlint@1.7.12
+    - actionlint@1.17.1
     - biome@2.5.15! # datasource=npm depName=@biomejs/biome
     - git-diff-check
-    - markdownlint@0.49.1
+    - markdownlint@0.50.0
     - taplo@0.10.0
     - yamlfmt@0.21.0
     - yamllint@1.38.0

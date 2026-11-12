@@ -100,6 +100,23 @@ const PLACED = 33_000_000;
 // How long a cluster that was disconnected is watched for a request of the extension.
 const DISCONNECTED_FOR = 60_000;
 const FAMILIES: Record<artifacts.Operation, string> = { backup: "backups", restore: "restores" };
+// What the band of the volume operations of the summary of a backup and of a restore says of the backup and of the
+// restore of the demo, which backed up and restored no volume of a pod: what the release does with the operations of
+// one that ended, and that the installation holds none of them.
+const BANDS: Record<artifacts.Operation, { kind: string; sentence: string; words: string }> = {
+  backup: {
+    kind: "PodVolumeBackup",
+    sentence:
+      "The pod volume backups the installation holds of this backup are the ones its run made, or the ones a sync from the store made, in the phase they were stored in. Its data uploads are the ones its run made: a sync makes none.",
+    words: "This backup has no pod volume backup among the ones the installation holds.",
+  },
+  restore: {
+    kind: "PodVolumeRestore",
+    sentence:
+      "The pod volume restores and the data downloads the installation holds of this restore are the ones its run made.",
+    words: "This restore has no pod volume restore among the ones the installation holds.",
+  },
+};
 const LISTS: Record<artifacts.Operation, cluster.ListOf> = { backup: cluster.BACKUPS, restore: cluster.RESTORES };
 // The labels the extension gives a DownloadRequest: who created it, and the identifier of the request of the views.
 const LABELS = { "app.kubernetes.io/managed-by": "freelens-velero-extension" };
@@ -117,16 +134,16 @@ const REMOVED_WITHIN = 12 * 60 * 1000;
 // How long the panel has to show the part of a load the main process runs for a step of that part to be
 // expected among the ones it showed: the views ask the main process where a load is four times a second.
 const WATCHABLE = 1000;
-// The second gestures the cases of the suite give, twenty-five: eighteen loads that end with their text, which
+// The second gestures the cases of the suite give, twenty-six: nineteen loads that end with their text, which
 // are the four tabs of the restore, the log of the backup twice and its other three tabs, the three empty
 // artifacts of the backup synced without its log, the results, the resources and the volumes of the backup
 // synced with its artifacts, its log, the log of the backup through the identity whose token an `exec` plugin
-// gives, and the log of the backup once the extension was disabled and enabled again; three that end as a file
-// the store does not have, the log of the backup synced without one and the logs of the two operations that
-// failed their validation; one that ends at the port-forward, which its identity may not ask; one whose cluster
-// is disconnected while it runs; and two that are cancelled, the results of the backup as soon as their load
-// begins, and the large log once its request is in the cluster.
-const GESTURES = 25;
+// gives, the log of the backup once the extension was disabled and enabled again, and the volumes of the real
+// backup of the volume of the run; three that end as a file the store does not have, the log of the backup synced
+// without one and the logs of the two operations that failed their validation; one that ends at the port-forward,
+// which its identity may not ask; one whose cluster is disconnected while it runs; and two that are cancelled, the
+// results of the backup as soon as their load begins, and the large log once its request is in the cluster.
+const GESTURES = 26;
 // The rows a list of lines mounts at most.
 const ROWS_BOUND = 100;
 // The characters a row shows of a line at most: a longer line is cut in its row, and whole in its copy.
@@ -824,7 +841,8 @@ describe("the log, the results, the resources and the volumes of an operation", 
         // counters of the API server read before and after: nothing is read of any family for them. The
         // reads of the families are measured for the clicks alone: a tab opened by its address, and a view
         // opened again, are measured below by what is counted of the DownloadRequests, which are what a
-        // tab could create.
+        // tab could create. The view asked the pod volume operations of its band once, when it opened: each try
+        // begins after the read of the installation that follows ended, so that read is before the window.
         expect([
           kind,
           await cluster.readsDuring(
@@ -1133,6 +1151,33 @@ describe("the log, the results, the resources and the volumes of an operation", 
         rows: [],
         titles: [],
       });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says in the summary of the restore of the demo that the installation holds no pod volume restore of it, and what the release does with them, and writes nothing",
+    async () => {
+      const earlier = cluster.requestCodes(RESOURCE);
+      const writesBefore = cluster.apiRequests();
+
+      expect(read("restore").status?.phase).toBe("Completed");
+      await stay("restore", "summary");
+      // The band of the volumes, after the status of the restore: no count and no row, since the restore of the
+      // demo restored no volume of a pod; the tab of its volumes, which it keeps, said the same of the store.
+      expect(await cluster.volumeBand(frame)).toEqual({
+        ...BANDS.restore,
+        state: "none",
+        count: "",
+        groups: [],
+        rows: [],
+        more: false,
+        stale: "",
+      });
+      expect(
+        await frame.locator("[data-testid=velero-volume-band] button, [data-testid=velero-volume-band] a").count(),
+      ).toBe(0);
+      await expectNoWrite(earlier, writesBefore);
     },
     TIMEOUT,
   );
@@ -1616,6 +1661,36 @@ describe("the log, the results, the resources and the volumes of an operation", 
       const none = artifacts.PARTS.viewer("backup", "volumes", "none");
 
       expect(await cluster.focusOn(frame, none)).toBe(none);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says in the summary of the backup of the demo that the installation holds no pod volume backup of it, and what the release does with them, and writes nothing",
+    async () => {
+      const earlier = cluster.requestCodes(RESOURCE);
+      const writesBefore = cluster.apiRequests();
+
+      expect(read("backup").status?.phase).toBe("Completed");
+      await stay("backup", "summary");
+      // The band of the volumes, after the status of the backup: no count and no row, since the backup of the
+      // ConfigMaps of the demo backed up no volume of a pod; the tab of its volumes, which it keeps, said the same.
+      expect(await cluster.volumeBand(frame)).toEqual({
+        ...BANDS.backup,
+        state: "none",
+        count: "",
+        groups: [],
+        rows: [],
+        more: false,
+        stale: "",
+      });
+      expect(
+        await frame.locator("[data-testid=velero-volume-band] button, [data-testid=velero-volume-band] a").count(),
+      ).toBe(0);
+      // The band says nothing of the items of the backup, whose progress is in the status, with its note.
+      expect(await frame.locator("[data-testid=velero-volume-band]").innerText()).not.toContain("item");
+      expect(await frame.locator("[data-testid=velero-backup-progress]").count()).toBe(1);
+      await expectNoWrite(earlier, writesBefore);
     },
     TIMEOUT,
   );
@@ -2699,6 +2774,88 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await artifacts.clickOn(frame, toggle);
         await artifacts.gone(frame, artifacts.PARTS.volumeDetails("backup", row));
       }
+      // The rows of the volumes a pod volume backup backed up name a pod, its namespace and the volume, by which the
+      // tab finds the pod volume backup of the installation that made it. The pods the fixtures name are synthetic,
+      // and no pod volume backup of the installation is of this backup: the details of each row offer no way, and say
+      // nothing absent, since the rows are what the store holds, and the operations may be gone.
+      const ofAPod = entries.flatMap((entry, row) => (text(entry, "backupMethod") === "PodVolumeBackup" ? [row] : []));
+
+      expect(
+        ofAPod.map((row) => {
+          const info = entries[row].pvbInfo as Record<string, unknown> | undefined;
+
+          return [info?.podNamespace, info?.podName, info?.volumeName];
+        }),
+      ).toEqual([
+        ["synthetic-ns-17", "synthetic-pod-22", "data"],
+        ["synthetic-ns-3", "synthetic-pod-31", "data"],
+      ]);
+      for (const row of ofAPod) {
+        const toggle = artifacts.PARTS.volumeToggle("backup", row);
+
+        await artifacts.clickOn(frame, toggle);
+        const details = await artifacts.volumeDetails(frame, "backup", row);
+
+        expect([row, details]).toEqual([row, { none: "", details: detailsOf(entries[row]) }]);
+        expect([
+          row,
+          await frame
+            .locator(`[data-testid="${artifacts.PARTS.volumeDetails("backup", row)}"] [data-detail=operation]`)
+            .count(),
+          await frame.locator(`[data-testid="${artifacts.PARTS.volumeDetails("backup", row)}"] button`).count(),
+        ]).toEqual([row, 0, 0]);
+        await artifacts.clickOn(frame, toggle);
+        await artifacts.gone(frame, artifacts.PARTS.volumeDetails("backup", row));
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "leads from the row of the volume of the real backup of the volume, in its tab of the volumes, to the pod volume backup of the installation that made it, and back",
+    async () => {
+      // The real backup of the volume of the run, made by the server of the release with its node agent: one volume
+      // of a pod, backed up by the one pod volume backup the cluster holds for it, which the suite reads by the
+      // label of the backup, never by its name, which the release makes (SPEC-0014, REQ-188, KIND-12).
+      const backup = `fixture-volume-backup-${RUN}`;
+      const operations = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "podvolumebackups",
+        `velero.io/backup-name=${backup}`,
+      );
+
+      expect(operations).toHaveLength(1);
+      const [operation] = operations;
+
+      await stay("backup", "volumes", backup);
+      // The load is a write: the gate is on for it, as for every load of the suite.
+      await writesOn();
+      await loadOf("backup", "volumes", backup);
+      const volumes = await artifacts.volumesShown(frame, "backup");
+      // The one row the file of the volumes holds of a pod volume backup: the volume of the pod the backup took.
+      const rows = volumes.rows.flatMap((row, index) => (/PodVolumeBackup/.test(row.method ?? "") ? [index] : []));
+
+      expect(rows).toHaveLength(1);
+      const [row] = rows;
+      const toggle = artifacts.PARTS.volumeToggle("backup", row);
+
+      await artifacts.clickOn(frame, toggle);
+      const details = frame.locator(`[data-testid="${artifacts.PARTS.volumeDetails("backup", row)}"]`);
+      const way = details.locator("[data-detail=operation] button");
+
+      // Its details offer one way, to the pod volume backup that made the row, found by the owner of the tab, the
+      // namespace of the pod, the pod and the volume the row carries.
+      expect(await way.count()).toBe(1);
+      expect(await way.getAttribute("data-way")).toBe(`pod-volume-backup/${operation.metadata.name}`);
+      await application().window.mouse.move(1, 1);
+      await cluster.captureScreenshot(frame, "dark-artifact-volumes-way-to-the-pod-volume-backup");
+      await way.click();
+      await frame
+        .locator("[data-testid=velero-pod-volume-backup-workspace]")
+        .waitFor({ state: "visible", timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(operation.metadata.name);
+      // The way back leads to the backup again.
+      await cluster.closeWorkspace(frame);
+      expect((await cluster.shownView(frame))?.name).toBe(backup);
     },
     TIMEOUT,
   );
@@ -3617,6 +3774,9 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await cluster.waitForList(other, cluster.BACKUPS);
         await cluster.openWorkspace(other, NAMES.backup, cluster.BACKUPS);
         await artifacts.shownAt(other, "backup", NAMES.backup, "summary");
+        // The identity reads the pod volume backups the view of a backup asks when it opens: the band says what the
+        // installation holds of the backup, and not that access is denied.
+        expect(await cluster.volumeBand(other)).toMatchObject({ ...BANDS.backup, state: "none" });
         await artifacts.openTab(other, "backup", "log");
         await other.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
         await cluster.turnWritesOn(other);
@@ -3704,6 +3864,9 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await cluster.waitForList(other, cluster.BACKUPS);
         await cluster.openWorkspace(other, NAMES.backup, cluster.BACKUPS);
         await artifacts.shownAt(other, "backup", NAMES.backup, "summary");
+        // The identity reads the pod volume backups the view of a backup asks when it opens: the band says what the
+        // installation holds of the backup, and not that access is denied.
+        expect(await cluster.volumeBand(other)).toMatchObject({ ...BANDS.backup, state: "none" });
         await artifacts.openTab(other, "backup", "log");
         await other.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
         await cluster.turnWritesOn(other);
@@ -4035,7 +4198,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
       }
       expect(await cluster.writesState(frame)).toBe("off");
-      // Last, what says that every case before this one gave its gesture: eighteen loads that end with their
+      // Last, what says that every case before this one gave its gesture: nineteen loads that end with their
       // text, three that end as a file the store does not have, one that ends at the port-forward, one whose
       // cluster is disconnected while it runs, and two that are cancelled, each a request of its own but for
       // the first cancelled one, which created one or none. A case that failed before its gesture is found

@@ -1,0 +1,471 @@
+{
+  "about": "Each schedule as the API server of the kind cluster of the suites gave it, and the backup `velero backup create <name> --from-schedule <schedule> -o json` of Velero v1.18.4 printed from it without creating it, on 2026-11-08 (SPEC-0017, NOW-02).",
+  "cases": {
+    "plain": {
+      "name": "golden-plain",
+      "schedule": {
+        "apiVersion": "velero.io/v1",
+        "kind": "Schedule",
+        "metadata": {
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"name\":\"plain\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"hooks\":{\"resources\":[{\"name\":\"freeze\",\"pre\":[{\"exec\":{\"command\":[\"/sbin/fsfreeze\",\"--freeze\",\"/data\"]}}]}]},\"includedNamespaces\":[\"shop\"],\"storageLocation\":\"default\",\"ttl\":\"720h0m0s\"}}}\n"
+          },
+          "creationTimestamp": "2026-11-08T02:34:52Z",
+          "generation": 1,
+          "name": "plain",
+          "namespace": "velero-now-goldens",
+          "resourceVersion": "30943",
+          "uid": "894b31b8-807f-4409-8059-a7e36d70ddcd"
+        },
+        "spec": {
+          "schedule": "0 3 * * *",
+          "template": {
+            "hooks": {
+              "resources": [
+                {
+                  "name": "freeze",
+                  "pre": [
+                    {
+                      "exec": {
+                        "command": ["/sbin/fsfreeze", "--freeze", "/data"]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "includedNamespaces": ["shop"],
+            "storageLocation": "default",
+            "ttl": "720h0m0s"
+          }
+        }
+      },
+      "backup": {
+        "kind": "Backup",
+        "apiVersion": "velero.io/v1",
+        "metadata": {
+          "name": "golden-plain",
+          "namespace": "velero-now-goldens",
+          "creationTimestamp": null,
+          "labels": {
+            "velero.io/schedule-name": "plain"
+          },
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"name\":\"plain\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"hooks\":{\"resources\":[{\"name\":\"freeze\",\"pre\":[{\"exec\":{\"command\":[\"/sbin/fsfreeze\",\"--freeze\",\"/data\"]}}]}]},\"includedNamespaces\":[\"shop\"],\"storageLocation\":\"default\",\"ttl\":\"720h0m0s\"}}}\n"
+          }
+        },
+        "spec": {
+          "metadata": {},
+          "includedNamespaces": ["shop"],
+          "ttl": "720h0m0s",
+          "hooks": {
+            "resources": [
+              {
+                "name": "freeze",
+                "pre": [
+                  {
+                    "exec": {
+                      "command": ["/sbin/fsfreeze", "--freeze", "/data"],
+                      "timeout": "0s"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "storageLocation": "default",
+          "csiSnapshotTimeout": "0s",
+          "itemOperationTimeout": "0s"
+        },
+        "status": {}
+      }
+    },
+    "template-labels": {
+      "name": "golden-template-labels",
+      "schedule": {
+        "apiVersion": "velero.io/v1",
+        "kind": "Schedule",
+        "metadata": {
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"labels\":{\"team\":\"shop\"},\"name\":\"template-labels\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"],\"metadata\":{\"labels\":{\"app\":\"cart\"}}}}}\n"
+          },
+          "creationTimestamp": "2026-11-08T02:34:52Z",
+          "generation": 1,
+          "labels": {
+            "team": "shop"
+          },
+          "name": "template-labels",
+          "namespace": "velero-now-goldens",
+          "resourceVersion": "30944",
+          "uid": "94e0ac2c-a2f8-42d0-a2c1-9478aa59d68b"
+        },
+        "spec": {
+          "schedule": "0 3 * * *",
+          "template": {
+            "includedNamespaces": ["shop"],
+            "metadata": {
+              "labels": {
+                "app": "cart"
+              }
+            }
+          }
+        }
+      },
+      "backup": {
+        "kind": "Backup",
+        "apiVersion": "velero.io/v1",
+        "metadata": {
+          "name": "golden-template-labels",
+          "namespace": "velero-now-goldens",
+          "creationTimestamp": null,
+          "labels": {
+            "app": "cart",
+            "velero.io/schedule-name": "template-labels"
+          },
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"labels\":{\"team\":\"shop\"},\"name\":\"template-labels\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"],\"metadata\":{\"labels\":{\"app\":\"cart\"}}}}}\n"
+          }
+        },
+        "spec": {
+          "metadata": {
+            "labels": {
+              "app": "cart",
+              "velero.io/schedule-name": "template-labels"
+            }
+          },
+          "includedNamespaces": ["shop"],
+          "ttl": "0s",
+          "hooks": {},
+          "csiSnapshotTimeout": "0s",
+          "itemOperationTimeout": "0s"
+        },
+        "status": {}
+      }
+    },
+    "template-empty-labels": {
+      "name": "golden-template-empty-labels",
+      "schedule": {
+        "apiVersion": "velero.io/v1",
+        "kind": "Schedule",
+        "metadata": {
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"labels\":{\"team\":\"shop\"},\"name\":\"template-empty-labels\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"],\"metadata\":{\"labels\":{}}}}}\n"
+          },
+          "creationTimestamp": "2026-11-08T02:34:52Z",
+          "generation": 1,
+          "labels": {
+            "team": "shop"
+          },
+          "name": "template-empty-labels",
+          "namespace": "velero-now-goldens",
+          "resourceVersion": "30945",
+          "uid": "c2081b3e-cf10-4768-8d25-faf51032ec89"
+        },
+        "spec": {
+          "schedule": "0 3 * * *",
+          "template": {
+            "includedNamespaces": ["shop"],
+            "metadata": {
+              "labels": {}
+            }
+          }
+        }
+      },
+      "backup": {
+        "kind": "Backup",
+        "apiVersion": "velero.io/v1",
+        "metadata": {
+          "name": "golden-template-empty-labels",
+          "namespace": "velero-now-goldens",
+          "creationTimestamp": null,
+          "labels": {
+            "velero.io/schedule-name": "template-empty-labels"
+          },
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"labels\":{\"team\":\"shop\"},\"name\":\"template-empty-labels\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"],\"metadata\":{\"labels\":{}}}}}\n"
+          }
+        },
+        "spec": {
+          "metadata": {
+            "labels": {
+              "velero.io/schedule-name": "template-empty-labels"
+            }
+          },
+          "includedNamespaces": ["shop"],
+          "ttl": "0s",
+          "hooks": {},
+          "csiSnapshotTimeout": "0s",
+          "itemOperationTimeout": "0s"
+        },
+        "status": {}
+      }
+    },
+    "schedule-labels": {
+      "name": "golden-schedule-labels",
+      "schedule": {
+        "apiVersion": "velero.io/v1",
+        "kind": "Schedule",
+        "metadata": {
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"labels\":{\"team\":\"shop\",\"velero.io/schedule-name\":\"another\"},\"name\":\"schedule-labels\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"]}}}\n"
+          },
+          "creationTimestamp": "2026-11-08T02:34:52Z",
+          "generation": 1,
+          "labels": {
+            "team": "shop",
+            "velero.io/schedule-name": "another"
+          },
+          "name": "schedule-labels",
+          "namespace": "velero-now-goldens",
+          "resourceVersion": "30946",
+          "uid": "0d438a23-a8ca-4265-bfb7-e5858769ff9c"
+        },
+        "spec": {
+          "schedule": "0 3 * * *",
+          "template": {
+            "includedNamespaces": ["shop"]
+          }
+        }
+      },
+      "backup": {
+        "kind": "Backup",
+        "apiVersion": "velero.io/v1",
+        "metadata": {
+          "name": "golden-schedule-labels",
+          "namespace": "velero-now-goldens",
+          "creationTimestamp": null,
+          "labels": {
+            "team": "shop",
+            "velero.io/schedule-name": "schedule-labels"
+          },
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"labels\":{\"team\":\"shop\",\"velero.io/schedule-name\":\"another\"},\"name\":\"schedule-labels\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"]}}}\n"
+          }
+        },
+        "spec": {
+          "metadata": {},
+          "includedNamespaces": ["shop"],
+          "ttl": "0s",
+          "hooks": {},
+          "csiSnapshotTimeout": "0s",
+          "itemOperationTimeout": "0s"
+        },
+        "status": {}
+      }
+    },
+    "annotated": {
+      "name": "golden-annotated",
+      "schedule": {
+        "apiVersion": "velero.io/v1",
+        "kind": "Schedule",
+        "metadata": {
+          "annotations": {
+            "example.test/owner": "team-shop",
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{\"example.test/owner\":\"team-shop\"},\"name\":\"annotated\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"]}}}\n"
+          },
+          "creationTimestamp": "2026-11-08T02:34:52Z",
+          "generation": 1,
+          "name": "annotated",
+          "namespace": "velero-now-goldens",
+          "resourceVersion": "30947",
+          "uid": "ae6c597f-e60a-4281-8227-98fb908952b4"
+        },
+        "spec": {
+          "schedule": "0 3 * * *",
+          "template": {
+            "includedNamespaces": ["shop"]
+          }
+        }
+      },
+      "backup": {
+        "kind": "Backup",
+        "apiVersion": "velero.io/v1",
+        "metadata": {
+          "name": "golden-annotated",
+          "namespace": "velero-now-goldens",
+          "creationTimestamp": null,
+          "labels": {
+            "velero.io/schedule-name": "annotated"
+          },
+          "annotations": {
+            "example.test/owner": "team-shop",
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{\"example.test/owner\":\"team-shop\"},\"name\":\"annotated\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"]}}}\n"
+          }
+        },
+        "spec": {
+          "metadata": {},
+          "includedNamespaces": ["shop"],
+          "ttl": "0s",
+          "hooks": {},
+          "csiSnapshotTimeout": "0s",
+          "itemOperationTimeout": "0s"
+        },
+        "status": {}
+      }
+    },
+    "owner": {
+      "name": "golden-owner",
+      "schedule": {
+        "apiVersion": "velero.io/v1",
+        "kind": "Schedule",
+        "metadata": {
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"name\":\"owner\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"]},\"useOwnerReferencesInBackup\":true}}\n"
+          },
+          "creationTimestamp": "2026-11-08T02:34:52Z",
+          "generation": 1,
+          "name": "owner",
+          "namespace": "velero-now-goldens",
+          "resourceVersion": "30948",
+          "uid": "b00b1569-c26e-42b0-9f4f-0a835e619df0"
+        },
+        "spec": {
+          "schedule": "0 3 * * *",
+          "template": {
+            "includedNamespaces": ["shop"]
+          },
+          "useOwnerReferencesInBackup": true
+        }
+      },
+      "backup": {
+        "kind": "Backup",
+        "apiVersion": "velero.io/v1",
+        "metadata": {
+          "name": "golden-owner",
+          "namespace": "velero-now-goldens",
+          "creationTimestamp": null,
+          "labels": {
+            "velero.io/schedule-name": "owner"
+          },
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"name\":\"owner\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"]},\"useOwnerReferencesInBackup\":true}}\n"
+          },
+          "ownerReferences": [
+            {
+              "apiVersion": "velero.io/v1",
+              "kind": "Schedule",
+              "name": "owner",
+              "uid": "b00b1569-c26e-42b0-9f4f-0a835e619df0",
+              "controller": true
+            }
+          ]
+        },
+        "spec": {
+          "metadata": {},
+          "includedNamespaces": ["shop"],
+          "ttl": "0s",
+          "hooks": {},
+          "csiSnapshotTimeout": "0s",
+          "itemOperationTimeout": "0s"
+        },
+        "status": {}
+      }
+    },
+    "not-owner": {
+      "name": "golden-not-owner",
+      "schedule": {
+        "apiVersion": "velero.io/v1",
+        "kind": "Schedule",
+        "metadata": {
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"name\":\"not-owner\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"]},\"useOwnerReferencesInBackup\":false}}\n"
+          },
+          "creationTimestamp": "2026-11-08T02:34:52Z",
+          "generation": 1,
+          "name": "not-owner",
+          "namespace": "velero-now-goldens",
+          "resourceVersion": "30949",
+          "uid": "5effdd21-7e89-47d5-974a-c21e0217f3be"
+        },
+        "spec": {
+          "schedule": "0 3 * * *",
+          "template": {
+            "includedNamespaces": ["shop"]
+          },
+          "useOwnerReferencesInBackup": false
+        }
+      },
+      "backup": {
+        "kind": "Backup",
+        "apiVersion": "velero.io/v1",
+        "metadata": {
+          "name": "golden-not-owner",
+          "namespace": "velero-now-goldens",
+          "creationTimestamp": null,
+          "labels": {
+            "velero.io/schedule-name": "not-owner"
+          },
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"name\":\"not-owner\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"]},\"useOwnerReferencesInBackup\":false}}\n"
+          }
+        },
+        "spec": {
+          "metadata": {},
+          "includedNamespaces": ["shop"],
+          "ttl": "0s",
+          "hooks": {},
+          "csiSnapshotTimeout": "0s",
+          "itemOperationTimeout": "0s"
+        },
+        "status": {}
+      }
+    },
+    "policy": {
+      "name": "golden-policy",
+      "schedule": {
+        "apiVersion": "velero.io/v1",
+        "kind": "Schedule",
+        "metadata": {
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"name\":\"policy\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"],\"resourcePolicy\":{\"kind\":\"ConfigMap\",\"name\":\"skip-large\"}}}}\n"
+          },
+          "creationTimestamp": "2026-11-08T02:34:52Z",
+          "generation": 1,
+          "name": "policy",
+          "namespace": "velero-now-goldens",
+          "resourceVersion": "30950",
+          "uid": "25fc1ded-3069-4499-bd8d-c7291c6a2d51"
+        },
+        "spec": {
+          "schedule": "0 3 * * *",
+          "template": {
+            "includedNamespaces": ["shop"],
+            "resourcePolicy": {
+              "kind": "ConfigMap",
+              "name": "skip-large"
+            }
+          }
+        }
+      },
+      "backup": {
+        "kind": "Backup",
+        "apiVersion": "velero.io/v1",
+        "metadata": {
+          "name": "golden-policy",
+          "namespace": "velero-now-goldens",
+          "creationTimestamp": null,
+          "labels": {
+            "velero.io/schedule-name": "policy"
+          },
+          "annotations": {
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"velero.io/v1\",\"kind\":\"Schedule\",\"metadata\":{\"annotations\":{},\"name\":\"policy\",\"namespace\":\"velero-now-goldens\"},\"spec\":{\"schedule\":\"0 3 * * *\",\"template\":{\"includedNamespaces\":[\"shop\"],\"resourcePolicy\":{\"kind\":\"ConfigMap\",\"name\":\"skip-large\"}}}}\n"
+          }
+        },
+        "spec": {
+          "metadata": {},
+          "includedNamespaces": ["shop"],
+          "ttl": "0s",
+          "hooks": {},
+          "csiSnapshotTimeout": "0s",
+          "itemOperationTimeout": "0s",
+          "resourcePolicy": {
+            "apiGroup": null,
+            "kind": "configmap",
+            "name": "skip-large"
+          }
+        },
+        "status": {}
+      }
+    }
+  }
+}

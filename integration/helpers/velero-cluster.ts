@@ -14,7 +14,18 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
-import { realScheduleSubmission, writesOf } from "./velero-guard";
+import {
+  codeWritesOf,
+  countedAs,
+  installedVersion,
+  operationListsOf,
+  realScheduleSubmission,
+  workloadCountsOf,
+  workloadReadsOf,
+  writesOf,
+} from "./velero-guard";
+
+export { countedAs };
 
 import type { Frame, Locator, Page, Request } from "playwright";
 
@@ -41,6 +52,8 @@ export const E2E_ADHERENCE_SPLIT_NAMESPACE = process.env.E2E_ADHERENCE_SPLIT_NAM
 export const E2E_ADHERENCE_SCALE_NAMESPACE = process.env.E2E_ADHERENCE_SCALE_NAMESPACE || "";
 /** The run of the fixtures, from the record of the environment: the names of its operations end with it. */
 export const E2E_FIXTURE_RUN = process.env.E2E_FIXTURE_RUN || "";
+/** Set by the runner of the views on the environment of the CRDs alone, where no controller runs. */
+const WITHOUT_CONTROLLER = process.env.E2E_WITHOUT_CONTROLLER === "1";
 
 /**
  * The namespaces a discovery finds: the ones that hold a backup storage location. The long lists and the
@@ -173,6 +186,14 @@ export function secondReaderKubeconfigPath(): string {
 }
 
 /**
+ * The kubeconfig of the reader of the README: the identity that holds the role of the README that reads the views, its
+ * Role in the installation of the views and its ClusterRole, which lists the storage locations of the whole cluster.
+ */
+export function readmeReaderKubeconfigPath(): string {
+  return required("E2E_README_READER_KUBECONFIG");
+}
+
+/**
  * The kubeconfig of the identity of the installation that reads what a download reads, creates its request
  * and reads the route to the store, and has neither verb of the port-forward.
  */
@@ -211,6 +232,8 @@ export interface ListOf {
 export const MARK_WIDTH = 28;
 export const LONG_LOCATION_NAME = "location-with-a-name-as-long-as-the-name-of-an-object-can-be-63";
 export const LONG_RESTORE_NAME = "restore-with-a-name-as-long-as-the-name-of-a-restore-can-be-one";
+/** The backup of the fixtures of the views with a name as long as the value of a label may be, InProgress. */
+export const LONG_BACKUP_NAME = "backup-with-a-name-as-long-as-the-value-of-a-label-is-allowed-1";
 
 /** The Overview is a page and not a list: it has no rows, and no view of its kind. */
 export const OVERVIEW: ListOf = { id: "overview", kind: "overview", menu: "velero-overview" };
@@ -241,6 +264,16 @@ export const POD_VOLUME_RESTORES: ListOf = {
   id: "pod-volume-restores",
   kind: "pod-volume-restore",
   menu: "velero-pod-volume-restores",
+};
+export const DATA_UPLOADS: ListOf = {
+  id: "data-uploads",
+  kind: "data-upload",
+  menu: "velero-data-uploads",
+};
+export const DATA_DOWNLOADS: ListOf = {
+  id: "data-downloads",
+  kind: "data-download",
+  menu: "velero-data-downloads",
 };
 
 /**
@@ -316,6 +349,13 @@ export function kubectlE2E(...args: string[]): { status: number; stdout: string;
  * `pnpm demo:views`, which `pnpm e2e:views` runs before the suites.
  */
 export function fixturesMissing(): string {
+  if (WITHOUT_CONTROLLER) {
+    return (
+      `The fixtures are missing from ${E2E_CLUSTER_NAME}, the environment of the CRDs alone: ` +
+      "`node e2e/scripts/local-demo.mts fixtures-static` places its static fixtures and its installation, and " +
+      "`pnpm e2e:views` the ones of the views before it runs the suites."
+    );
+  }
   return (
     `The fixtures are missing from ${E2E_CLUSTER_NAME}: \`pnpm demo:up\` brings the environment up with the ` +
     "fixtures of the phases, and `pnpm demo:views` places the ones of the views and of their tabs, which " +
@@ -331,10 +371,14 @@ export function fixturesMissing(): string {
  * the suite would take that backup into its first snapshot.
  */
 export function fixturesReady(): boolean {
+  // On the environment of the CRDs alone no controller runs: its installation is static, with the counterparts of what
+  // the controllers leave in the one of the demo, by the same names, and nothing a server makes while it runs is
+  // looked for.
+  const controlled = !WITHOUT_CONTROLLER;
   const probes: [namespace: string, resource: string, name: string][] = [
     [E2E_NAMESPACE, "backupstoragelocations.velero.io", "default"],
-    // What the fixtures of the tabs place in the installation, by the names of the run: the two backups the
-    // server synced from the store, and the three operations it refused.
+    // What the fixtures of the tabs place in the installation, by the names of the run, or their static counterparts
+    // where no controller runs: the two backups the server synced from the store, and the three operations it refused.
     [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-${E2E_FIXTURE_RUN}`],
     [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-no-log-${E2E_FIXTURE_RUN}`],
     [E2E_NAMESPACE, "backups.velero.io", `fixture-invalid-backup-${E2E_FIXTURE_RUN}`],
@@ -356,9 +400,9 @@ export function fixturesReady(): boolean {
     [E2E_OVERVIEW_NAMESPACE, "schedules.velero.io", "overview-schedule-12"],
     [E2E_SCALE_NAMESPACE, "backups.velero.io", "backup-1000"],
     [E2E_SCALE_NAMESPACE, "restores.velero.io", "restore-1000"],
-    // The schedule the controller of the installation validated, by the name of the run; the two schedules of the
-    // views that submitted and have no backup; and a schedule of each installation of the adherence, which are
-    // created after the backups of their submissions.
+    // The schedule the controller of the installation validated, by the name of the run, or its static counterpart; the
+    // two schedules of the views that submitted and have no backup; and a schedule of each installation of the
+    // adherence, which are created after the backups of their submissions.
     [E2E_NAMESPACE, "schedules.velero.io", `fixture-yearly-${E2E_FIXTURE_RUN}`],
     [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "views-submitted"],
     [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "views-interval"],
@@ -367,13 +411,59 @@ export function fixturesReady(): boolean {
     [E2E_ADHERENCE_SCALE_NAMESPACE, "schedules.velero.io", "schedule-300"],
   ];
 
+  // What the volume of the run leaves in the installation, each found by what the release writes into it, one of
+  // each: the repository of the source namespace by its three labels, never by its name, and the pod volume backup
+  // and the pod volume restore of the volume by the label of the name of their owner. In the views, whose operations
+  // have generated names: the seven pod volume restores of their restore, and the two repositories of one triple. In
+  // the long lists, placed after their owners: the two hundred pod volume backups of their last backup.
+  const labelled: [namespace: string, resource: string, selector: string, count: number][] = [
+    ...(controlled
+      ? ([
+          [E2E_NAMESPACE, "backuprepositories.velero.io", runRepositorySelector(), 1],
+          [
+            E2E_NAMESPACE,
+            "podvolumebackups.velero.io",
+            `velero.io/backup-name=fixture-volume-backup-${E2E_FIXTURE_RUN}`,
+            1,
+          ],
+          [
+            E2E_NAMESPACE,
+            "podvolumerestores.velero.io",
+            `velero.io/restore-name=fixture-volume-restore-${E2E_FIXTURE_RUN}`,
+            1,
+          ],
+        ] as [string, string, string, number][])
+      : []),
+    [E2E_VIEWS_NAMESPACE, "podvolumerestores.velero.io", "velero.io/restore-name=restore-mapped", 7],
+    [E2E_VIEWS_NAMESPACE, "backuprepositories.velero.io", "velero.io/volume-namespace=views-twice", 2],
+    [E2E_VIEWS_NAMESPACE, "datauploads.velero.io", "velero.io/backup-name=backup-inprogress", 12],
+    [E2E_VIEWS_NAMESPACE, "datadownloads.velero.io", "velero.io/restore-name=restore-mapped", 8],
+    [E2E_SCALE_NAMESPACE, "podvolumebackups.velero.io", "velero.io/backup-name=backup-1000", 200],
+    [E2E_SCALE_NAMESPACE, "datauploads.velero.io", `freelensapp.io/velero-fixture-run=${E2E_FIXTURE_RUN}`, 200],
+  ];
+
   // A run is eight hexadecimal characters: without one, no name of the run is probed.
   const found =
     /^[a-f0-9]{8}$/.test(E2E_FIXTURE_RUN) &&
     probes.every(
       ([namespace, resource, name]) =>
         namespace !== "" && kubectlE2E("get", resource, name, "--namespace", namespace, "-o", "name").status === 0,
-    );
+    ) &&
+    labelled.every(([namespace, resource, selector, count]) => {
+      if (namespace === "") return false;
+      const { status, stdout } = kubectlE2E(
+        "get",
+        resource,
+        "--namespace",
+        namespace,
+        "--selector",
+        selector,
+        "-o",
+        "name",
+      );
+
+      return status === 0 && stdout.split("\n").filter(Boolean).length === count;
+    });
 
   if (!found) return false;
   const installed = kubectlE2E(
@@ -395,10 +485,62 @@ export function fixturesReady(): boolean {
   return true;
 }
 
-// The kinds whose objects the snapshot of a suite compares before and after it: the ones its fixtures place.
-const SNAPSHOT_KINDS = ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"];
-// The kinds the views read: the families of an installation, which a suite reads and counts the reads of.
-const KINDS = [...SNAPSHOT_KINDS, "backuprepositories", "podvolumebackups", "podvolumerestores"];
+/**
+ * The labels the release writes into the repository the volume of the run
+ * made, as a selector: the source namespace of the run, the location
+ * `default` and the uploader kopia. The repository is found by them, never by
+ * its name, which the release says it may change.
+ */
+export function runRepositorySelector(): string {
+  return [
+    `velero.io/volume-namespace=velero-source-${E2E_FIXTURE_RUN}`,
+    "velero.io/storage-location=default",
+    "velero.io/repository-type=kopia",
+  ].join(",");
+}
+
+/**
+ * The objects of a family of Velero in a namespace that carry the labels of
+ * `selector`, as the API server holds them: how a suite reads what the server
+ * and the node agent made, whose names they generated.
+ */
+export function labelledObjects<Read>(resource: string, selector: string, namespace = E2E_NAMESPACE): Read[] {
+  if (!KINDS.includes(resource)) {
+    throw new Error(`"${resource}" is not a family of Velero: a request is read by its name, never whole`);
+  }
+  const { status, stdout, stderr } = kubectlE2E(
+    "get",
+    `${resource}.velero.io`,
+    "--namespace",
+    namespace,
+    "--selector",
+    selector,
+    "-o",
+    "json",
+  );
+
+  if (status !== 0) throw new Error(`kubectl get ${resource} --selector ${selector} failed: ${stderr}`);
+  return (JSON.parse(stdout) as { items: Read[] }).items;
+}
+
+// The kinds whose objects the snapshot of a suite compares before and after it: the ones its fixtures place, with
+// the repositories, the pod volume operations and the data movement of the views and of the long lists, by their
+// versions, and the real ones the volume of the run leaves in the installation, by their identities.
+const SNAPSHOT_KINDS = [
+  "backups",
+  "restores",
+  "schedules",
+  "backupstoragelocations",
+  "volumesnapshotlocations",
+  "backuprepositories",
+  "podvolumebackups",
+  "podvolumerestores",
+  "datauploads",
+  "datadownloads",
+];
+// The kinds the views read: the families of an installation, which a suite reads and counts the reads of. They are
+// the kinds of the snapshot.
+const KINDS = [...SNAPSHOT_KINDS];
 // The kinds a read of Velero is asked through: a request of any of them is a write.
 const REQUESTS = ["downloadrequests", "serverstatusrequests", "deletebackuprequests"];
 
@@ -406,7 +548,9 @@ export interface ClusterSnapshot {
   /**
    * Every synthetic object with its version, which changes with every write; and each schedule of the namespace
    * of the installation, which is the one its controller validated, with its version and its status: a
-   * submission writes its last submission into it, and a patch that changes it changes its version.
+   * submission writes its last submission into it, and a patch that changes it changes its version. The real
+   * repository of the installation with its version and its status, or its status alone when the server writes
+   * it at each of its passes (`REPOSITORY_WRITTEN_AT_EACH_PASS`).
    */
   versions: Record<string, string>;
   /** The objects of the namespace of the installation, which its controllers may change. */
@@ -468,11 +612,11 @@ export function clusterSnapshot(): ClusterSnapshot {
       }
     }
     for (const item of list(kind, E2E_NAMESPACE)) {
+      const version = installedVersion(kind, item, REPOSITORY_WRITTEN_AT_EACH_PASS);
+
       installed.push(`${kind}/${item.metadata.name}/${item.metadata.uid}`);
-      if (kind === "schedules") {
-        versions[`${E2E_NAMESPACE}/${kind}/${item.metadata.name}/${item.metadata.uid}`] =
-          `${item.metadata.resourceVersion} ${JSON.stringify(item.status ?? {})}`;
-      }
+      if (version !== undefined)
+        versions[`${E2E_NAMESPACE}/${kind}/${item.metadata.name}/${item.metadata.uid}`] = version;
     }
   }
   for (const kind of REQUESTS) {
@@ -520,6 +664,21 @@ export function apiRequests(): Record<string, number> {
   return counts;
 }
 
+/** What `workloadReadsOf` keeps of the counters of the pods and of the Jobs: their reads in a namespace or by name. */
+export const workloadReads = workloadReadsOf;
+
+/**
+ * The counters of the pods and of the Jobs in the metrics of the API server, by verb, kind and scope, as `countsOf`
+ * keys the kinds of Velero: what reads a maintenance Job of a repository or a pod of the node agent, or anything else
+ * of the two, whoever asks (SPEC-0014, REQ-190).
+ */
+export function workloadRequests(): Record<string, number> {
+  const { status, stdout, stderr } = kubectlE2E("get", "--raw", "/metrics");
+
+  if (status !== 0) throw new Error(`The counters of the API server could not be read: ${stderr}`);
+  return workloadCountsOf(stdout);
+}
+
 /**
  * The counters of the kinds of Velero in the metrics of the API server, by
  * verb, kind and scope. A request on one object by its name, as a PATCH or the
@@ -557,7 +716,7 @@ export function clusterReads(counts: Record<string, number>): Record<string, num
 }
 
 /**
- * The lists and the reads by name of the eight families, in a namespace, of one
+ * The lists and the reads by name of the ten families, in a namespace, of one
  * object or of the whole cluster, among the ones counted, and their watches in
  * a namespace or of one object. It is what a view would ask to read again what
  * it shows. The watches of the whole cluster are left out: the control plane
@@ -594,6 +753,33 @@ export function familyReads(counts: Record<string, number>): Record<string, numb
 export const SCHEDULE_PATCHED_AT_EVERY_LOOK: boolean = true;
 
 /**
+ * The verb of the request the server sends to the real repository at its
+ * pass, with no maintenance due, or none: the measure of the local integration
+ * of the volume of the environment says which, over fifteen minutes with no
+ * view open and nothing else reading or writing, and sets this. When it names
+ * one, `writes` leaves that verb of the repositories out, as it leaves out the
+ * PATCH of the locations, and what proves that a suite wrote nothing to a
+ * repository is the status of the real one and the versions of the synthetic
+ * ones, which the snapshot of every suite holds. Measured on 2026-11-02, over
+ * fifteen minutes with no view open and nothing else reading or writing: the
+ * server sent the repositories nothing but its watches, with its repository
+ * Ready and no maintenance due, so no verb is left out.
+ */
+export const REPOSITORY_WRITTEN_AT_EACH_PASS: string | undefined = undefined;
+
+/**
+ * Whether a controller of the installation lists the kinds of the operations
+ * of a volume in a namespace: the same measure says which, and sets this. When
+ * one does, what a view lists of them is what a window with the view open
+ * counted above a window of the same length with none (`operationLists`).
+ * Measured on 2026-11-02, over the same fifteen minutes: no list of the pod
+ * volume backups or of the pod volume restores, in a namespace or in the
+ * cluster, only the watches of the server and of the node agent, so what a view
+ * lists of them is counted alone.
+ */
+export const OPERATIONS_LISTED_BY_A_CONTROLLER: boolean = false;
+
+/**
  * The requests that change something, or ask Velero for something, among the
  * ones counted between two readings of `apiRequests` (`writesOf`), the PATCH
  * of a schedule among them, but the ones its controller sends at every look
@@ -609,7 +795,26 @@ export function writes(before: Record<string, number>, after: Record<string, num
       "The writes are counted between two readings of apiRequests, which keep the moment they were asked",
     );
   }
-  return writesOf(counted(before, after), SCHEDULE_PATCHED_AT_EVERY_LOOK, (to - from) / 60_000);
+  return writesOf(
+    counted(before, after),
+    SCHEDULE_PATCHED_AT_EVERY_LOOK,
+    (to - from) / 60_000,
+    REPOSITORY_WRITTEN_AT_EACH_PASS,
+  );
+}
+
+/**
+ * The lists of the kinds of the operations of a volume in a namespace that a
+ * view asked, by kind, from what was counted over a window with the view open
+ * (`during`): when a controller of the installation lists them too
+ * (`OPERATIONS_LISTED_BY_A_CONTROLLER`), the ones above what a window of the
+ * same length with no view open counted (`without`).
+ */
+export function operationLists(
+  during: Record<string, number>,
+  without?: Record<string, number>,
+): Record<string, number> {
+  return operationListsOf(during, OPERATIONS_LISTED_BY_A_CONTROLLER, without);
 }
 
 /** What was counted between two readings of the counters: the requests that are more, with how many more. */
@@ -661,13 +866,25 @@ const SETTLE = 1500;
 /** The views read again every fifteen seconds: what is measured between two reads ends before the second. */
 const BETWEEN_READS = 12_000;
 
+/** Whether two counts are the same: the same requests, each counted as many times. */
+function sameCounts(one: Record<string, number>, other: Record<string, number>): boolean {
+  const keys = Object.keys(one);
+
+  return keys.length === Object.keys(other).length && keys.every((key) => one[key] === other[key]);
+}
+
 /**
  * What the API server counted of the families while a step was taken, in the
  * time between two reads of the installation. Others read the cluster too: the
  * controllers of the installation, in their own namespace. A step that asks
- * nothing is one that was taken once with nothing counted; the step is taken
- * again, after `again` has undone it, when something was. A step that asks
- * the cluster is counted every time it is taken.
+ * what is `expected`, nothing unless said, is one that was taken once with
+ * that counted and nothing else; the step is taken again, after `again` has
+ * undone it, when something else was. A count of zero in `expected` never
+ * matches, since what was not asked is not counted: a family that must not
+ * be asked is left out of it. A step that asks the cluster is counted
+ * every time it is taken: a view that asks a family when it opens asks it
+ * again at each try, since the read of the installation each try begins after
+ * drops what the view that closed let go.
  *
  * The time is the one of the application: the moment its last read ended, and
  * the moment the counters were read after the step and after what the step
@@ -679,6 +896,7 @@ export async function readsDuring(
   step: () => Promise<void>,
   again: () => Promise<void>,
   tries = 3,
+  expected: Record<string, number> = {},
 ): Promise<Record<string, number>> {
   let asked: Record<string, number> = {};
 
@@ -695,7 +913,7 @@ export async function readsDuring(
     const late = state.reading || state.read !== read || taken - Number(read) > BETWEEN_READS;
 
     asked = counted(familyReads(before), familyReads(after));
-    if (!late && Object.keys(asked).length === 0) return {};
+    if (!late && sameCounts(asked, expected)) return asked;
     if (late) asked = { ...asked, "a read of the installation began before the counters were read": 1 };
     if (attempt < tries) await again();
   }
@@ -1670,6 +1888,69 @@ export async function measureClose(frame: Frame, of: ListOf = BACKUPS): Promise<
   return measure(frame, { kind: "close" }, of);
 }
 
+/**
+ * The time a view of an operation takes to open whole with the band of its volume operations: from the click on
+ * its row to the frame that shows the view with the rows of the band, which the family of the operations, already
+ * read, gives it from the index built for the read (SPEC-0014, REQ-194). Its response is its total: the list
+ * waits for nothing of the host.
+ */
+export async function measureOpenWithBand(
+  frame: Frame,
+  name: string,
+  of: ListOf = BACKUPS,
+  limit = 10_000,
+): Promise<Measure> {
+  return frame.evaluate(
+    ({ root, kind, name, limit }) =>
+      new Promise<{ total: number; response: number }>((resolve, reject) => {
+        const row = [...(document.querySelector(root)?.querySelectorAll<HTMLElement>(`[data-${kind}-row]`) ?? [])].find(
+          (element) => element.getAttribute(`data-${kind}-row`) === name,
+        );
+
+        if (!row) {
+          reject(new Error(`No row of ${name} is mounted`));
+          return;
+        }
+        // The band is whole when its first half, of the pod volume operations, shows its rows: with no rows it shows
+        // the words of its state instead. The second half, of the data movement, says its own state.
+        const whole = () => {
+          const band = document.querySelector(
+            `[data-testid=velero-${kind}-workspace] [data-testid=velero-volume-band] [data-testid=velero-volume-half]`,
+          );
+
+          return (
+            band !== null &&
+            band.querySelector("[data-testid=velero-volume-state]") === null &&
+            band.querySelectorAll("[data-testid=velero-volume-rows] tbody tr").length > 0
+          );
+        };
+        const start = performance.now();
+        let over = false;
+        const deadline = setTimeout(() => {
+          over = true;
+          reject(new Error(`The view of ${name} did not show the rows of its band`));
+        }, limit);
+        const wait = () => {
+          if (over) return;
+          if (whole()) {
+            requestAnimationFrame(() => {
+              const end = performance.now();
+
+              clearTimeout(deadline);
+              resolve({ total: end - start, response: end - start });
+            });
+          } else {
+            requestAnimationFrame(wait);
+          }
+        };
+
+        row.click();
+        requestAnimationFrame(wait);
+      }),
+    { root: list(of), kind: of.kind, name, limit },
+  );
+}
+
 /** Orders the list by a column, the way a click on its head gives, which is the other way at a second click. */
 export async function measureOrder(
   frame: Frame,
@@ -1892,6 +2173,80 @@ export async function notices(frame: Frame, expected?: string[]): Promise<Record
     if (Date.now() > deadline) return found;
     await frame.waitForTimeout(200);
   }
+}
+
+/** What a half of the band of the volume operations of the view of a backup or of a restore shows. */
+export interface VolumeBandShown {
+  // The kind of the operations of the half: PodVolumeBackup or PodVolumeRestore, DataUpload or DataDownload.
+  kind: string;
+  // `rows` when it has rows, or the state its words say: none, loading, denied, failed, not-served, not-read.
+  state: string;
+  // What the release does with the operations, by the phase of the backup or the restore.
+  sentence: string;
+  // The words of its state, when it has no rows.
+  words: string;
+  // How many operations it holds, in words, and their counts by phase in the order it gives them.
+  count: string;
+  groups: [phase: string, count: number][];
+  // The operations of its rows, from the first it shows, and whether it offers ten more.
+  rows: string[];
+  more: boolean;
+  // What it says of rows of an earlier read, and when.
+  stale: string;
+}
+
+/**
+ * A half of the band of the volume operations of the view that is shown, by
+ * default the first, of the pod volume operations, once its family is not being
+ * read for the first time: the view asks it when it opens, and says until then
+ * that it is being read. With the state that is expected, the half is waited for
+ * until it is in that state; the one it is in when the time is over is
+ * answered. The sentence is the one of the whole band.
+ */
+export async function volumeBand(frame: Frame, expected?: string, kind?: string): Promise<VolumeBandShown> {
+  const half = `[data-testid=velero-volume-band] [data-testid=velero-volume-half]${kind ? `[data-kind=${kind}]` : ""}`;
+
+  await frame.locator(half).first().waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+  await frame
+    .waitForFunction(
+      ({ selector, wanted }) => {
+        const root = document.querySelector(selector);
+        const state = root
+          ? (root.querySelector("[data-testid=velero-volume-state]")?.getAttribute("data-state") ?? "rows")
+          : "";
+
+        return wanted ? state === wanted : state !== "" && state !== "loading" && state !== "not-read";
+      },
+      { selector: half, wanted: expected },
+      { timeout: ELEMENT_TIMEOUT, polling: 100 },
+    )
+    .catch(() => undefined);
+
+  return frame.evaluate((selector) => {
+    const band = document.querySelector<HTMLElement>("[data-testid=velero-volume-band]");
+    const root = document.querySelector<HTMLElement>(selector);
+
+    if (!band || !root) throw new Error("The band of the volume operations went while it was read");
+    const said = (id: string, within: HTMLElement = root) =>
+      (within.querySelector<HTMLElement>(`[data-testid=${id}]`)?.textContent ?? "").replace(/\s+/g, " ").trim();
+
+    return {
+      kind: root.getAttribute("data-kind") ?? "",
+      state: root.querySelector("[data-testid=velero-volume-state]")?.getAttribute("data-state") ?? "rows",
+      sentence: said("velero-volume-sentence", band),
+      words: said("velero-volume-state"),
+      count: said("velero-volume-count"),
+      groups: [...root.querySelectorAll<HTMLElement>("[data-testid=velero-volume-groups] > li")].map(
+        (group) =>
+          [group.getAttribute("data-phase") ?? "", Number(group.getAttribute("data-count"))] as [string, number],
+      ),
+      rows: [...root.querySelectorAll<HTMLElement>("[data-testid=velero-volume-rows] tbody tr")].map(
+        (row) => row.getAttribute("data-operation") ?? "",
+      ),
+      more: root.querySelector("[data-testid=velero-volume-more]") !== null,
+      stale: said("velero-volume-stale"),
+    };
+  }, half);
 }
 
 /** Asks the views to read again, and waits for the read to end. */
@@ -2247,6 +2602,20 @@ export async function selectHostNamespace(frame: Frame, namespace: string): Prom
 export async function hostDetails(frame: Frame, name: string, ...texts: string[]): Promise<string> {
   await frame.locator(".TableRow", { hasText: name }).first().locator(".TableCell", { hasText: name }).first().click();
 
+  return detailsText(frame, name, texts);
+}
+
+/**
+ * The details of the host of an object opened by its address, as a link of the host opens them, and their text once
+ * it holds every text given: a list of the host mounts the rows in view, and the object is not looked for there.
+ */
+export async function hostDetailsAt(frame: Frame, selfLink: string, ...texts: string[]): Promise<string> {
+  await showHostDetails(frame, selfLink);
+
+  return detailsText(frame, selfLink.slice(selfLink.lastIndexOf("/") + 1), texts);
+}
+
+async function detailsText(frame: Frame, name: string, texts: string[]): Promise<string> {
   const drawer = frame.locator(".Drawer.KubeObjectDetails");
 
   await drawer.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
@@ -2495,24 +2864,6 @@ export async function veleroRequestsDuring(page: Page, step: () => Promise<void>
   return seen;
 }
 
-/**
- * What the API server counts of a request the window sent to the API of Velero, in its words: the verb, the
- * kind and the scope, as `apiRequests()` gives them. The read of the group itself, which says what it serves,
- * is of no kind, and is counted as none of them.
- */
-export function countedAs(request: SeenRequest): string | undefined {
-  const address = new URL(request.url);
-  const path = /\/apis\/velero\.io\/v1\/(.+)$/.exec(address.pathname)?.[1];
-
-  if (!path) return undefined;
-  const parts = path.split("/");
-  const namespaced = parts[0] === "namespaces";
-  const [kind, name] = namespaced ? parts.slice(2) : parts;
-  const verb = address.searchParams.get("watch") ? "WATCH" : name ? "GET" : "LIST";
-
-  return `${verb} ${kind} ${name ? "resource" : namespaced ? "namespace" : "cluster"}`;
-}
-
 /** The kinds of Velero the Custom Resources of the host list in their tree, under the group of `velero.io`. */
 export async function customResourceKinds(frame: Frame): Promise<string[]> {
   const tree = "sidebar-item-custom-resources";
@@ -2544,7 +2895,7 @@ export async function groupTabs(frame: Frame): Promise<{ tabs: string[]; active:
 }
 
 export interface OverviewShown {
-  /** What was read of each family: the words of its cell, and its state. */
+  /** What was read of each of the six families, by family: the words of its cell, and its state. */
   read: Record<string, { text: string; state: string }>;
   summary: string;
   /** The items that are shown, in their order: the rule, and what each one names. */
@@ -2570,16 +2921,17 @@ export interface OverviewShown {
 }
 
 /**
- * Waits for the Overview to have read the installation that is selected, and
- * answers what it shows, in the words of each of its parts and without the
- * names of the marks.
+ * Waits for the Overview to have read the installation that is selected, which
+ * is its six cells of what was read, one for each family it reads, the backup
+ * repositories the sixth, each with a state, and answers what it shows, in the
+ * words of each of its parts and without the names of the marks.
  */
 export async function overview(frame: Frame): Promise<OverviewShown> {
   await frame.waitForFunction(
     () => {
       const cells = [...document.querySelectorAll("[data-testid^=velero-overview-read-]")];
 
-      return cells.length === 5 && cells.every((cell) => cell.getAttribute("data-read") !== "not-read");
+      return cells.length === 6 && cells.every((cell) => cell.getAttribute("data-read") !== "not-read");
     },
     undefined,
     { timeout: ELEMENT_TIMEOUT },
@@ -2975,6 +3327,7 @@ export function serverStatusRequests(namespace: string): ServerStatusRequestObje
  * watches its requests, and lists them again when a watch ends.
  */
 export function requestCodes(resource: string): Record<string, number> {
+  const asked = Date.now();
   const { status, stdout, stderr } = kubectlE2E("get", "--raw", "/metrics");
 
   if (status !== 0) throw new Error(`The counters of the API server could not be read: ${stderr}`);
@@ -2989,8 +3342,31 @@ export function requestCodes(resource: string): Record<string, number> {
 
     counts[key] = (counts[key] ?? 0) + Number(line.slice(line.lastIndexOf(" ") + 1));
   }
-
+  READ_AT.set(counts, asked);
   return counts;
+}
+
+/**
+ * The codes of the requests of a kind that change something, between two
+ * readings of `requestCodes`: the reads left out, and for the schedules the
+ * PATCH its controller sends a schedule at every look, within the bound of the
+ * minutes between the readings, as `writes` leaves it out
+ * (`SCHEDULE_PATCHED_AT_EVERY_LOOK`).
+ */
+export function requestWrites(
+  resource: string,
+  before: Record<string, number>,
+  after: Record<string, number>,
+): Record<string, number> {
+  const from = READ_AT.get(before);
+  const to = READ_AT.get(after);
+
+  if (from === undefined || to === undefined) {
+    throw new Error(
+      "The codes are counted between two readings of requestCodes, which keep the moment they were asked",
+    );
+  }
+  return codeWritesOf(resource, counted(before, after), SCHEDULE_PATCHED_AT_EVERY_LOOK, (to - from) / 60_000);
 }
 
 /**
@@ -3108,12 +3484,148 @@ function requestsOfTheExtension(namespace: string, kind: RequestKind): number {
 }
 
 /**
+ * Removes a backup a suite of the actions created, in a namespace of the fixtures on the environment of the CRDs
+ * alone, where no controller holds it: by its name and the UID the suite read of it, or, when the suite could not read
+ * it, by its name, when it was created since the suite began. The deletion carries the UID as its precondition: a
+ * backup of that name that is not the one the suite created is left as it is, and said. Nothing is said of one that is
+ * already gone; a read that fails for another reason is said.
+ */
+export function removeCreatedBackup(namespace: string, name: string, uid: string | undefined, since: number): void {
+  removeCreated("backups", namespace, name, uid, since);
+}
+
+/** Removes a schedule a suite of the actions created, the same way as a backup. */
+export function removeCreatedSchedule(namespace: string, name: string, uid: string | undefined, since: number): void {
+  removeCreated("schedules", namespace, name, uid, since);
+}
+
+/** Removes a restore a suite of the actions created, the same way as a backup: no controller runs on the CRDs alone. */
+export function removeCreatedRestore(namespace: string, name: string, uid: string | undefined, since: number): void {
+  removeCreated("restores", namespace, name, uid, since);
+}
+
+/** A DeleteBackupRequest as a suite compares it with the text of its review: it carries no URL, and is read whole. */
+export interface DeleteRequestRead {
+  metadata: { name: string; uid: string; generateName?: string; labels?: Record<string, string> };
+  spec?: unknown;
+  status?: { phase?: string; errors?: string[] };
+}
+
+/**
+ * The DeleteBackupRequests of a namespace of the fixtures that carry the label of the UID of a backup, or every one of
+ * the namespace when no UID is given: a request whose label is wrong is found there.
+ */
+export function deleteRequestsOf(namespace: string, backupUid?: string): DeleteRequestRead[] {
+  const { status, stdout, stderr } = kubectlE2E(
+    "get",
+    "deletebackuprequests.velero.io",
+    "--namespace",
+    namespace,
+    ...(backupUid === undefined ? [] : ["--selector", `velero.io/backup-uid=${backupUid}`]),
+    "-o",
+    "json",
+  );
+
+  if (status !== 0) throw new Error(`kubectl get deletebackuprequests failed: ${stderr}`);
+  return (JSON.parse(stdout) as { items: DeleteRequestRead[] }).items;
+}
+
+/**
+ * Removes a DeleteBackupRequest a suite of the actions created and read, on the environment of the CRDs alone, where
+ * no controller processes it, the same way as a backup: by its name and the UID the suite read of it, or by its name
+ * when it was created since the suite began.
+ */
+export function removeCreatedDeleteRequest(
+  namespace: string,
+  name: string,
+  uid: string | undefined,
+  since: number,
+): void {
+  removeCreated("deletebackuprequests", namespace, name, uid, since);
+}
+
+/**
+ * Removes the DeleteBackupRequests of a backup whose deletion a suite of the actions asked and that the suite did not
+ * read: each one that carries the label of the UID of the backup, by its name, when it was created since the suite
+ * began, the same way as a backup whose UID the suite could not read. One created before is not the suite's: it is
+ * left as it is, the others are removed all the same, and each one left is said at the end.
+ */
+export function removeCreatedDeleteRequests(namespace: string, backupUid: string, since: number): void {
+  const left: string[] = [];
+
+  for (const request of deleteRequestsOf(namespace, backupUid)) {
+    try {
+      removeCreated("deletebackuprequests", namespace, request.metadata.name, undefined, since);
+    } catch (error) {
+      left.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (left.length > 0) throw new Error(left.join("; "));
+}
+
+// What each kind a suite of the actions creates is called in what it says.
+const CREATED_NOUNS = {
+  backups: "backup",
+  schedules: "schedule",
+  restores: "restore",
+  deletebackuprequests: "request to delete a backup",
+} as const;
+
+function removeCreated(
+  resource: keyof typeof CREATED_NOUNS,
+  namespace: string,
+  name: string,
+  uid: string | undefined,
+  since: number,
+): void {
+  const noun = CREATED_NOUNS[resource];
+
+  if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {
+    throw new Error(`The suites remove the ${resource} of a namespace of the fixtures, and "${namespace}" is not one`);
+  }
+  const found = kubectlE2E("get", `${resource}.velero.io`, name, "--namespace", namespace, "-o", "json");
+
+  if (found.status !== 0) {
+    if (/\(NotFound\)/.test(found.stderr)) return;
+    throw new Error(`The ${noun} ${name} could not be read before its removal: ${found.stderr.trim()}`);
+  }
+  const metadata = (JSON.parse(found.stdout) as { metadata: { uid: string; creationTimestamp?: string } }).metadata;
+  const created = Date.parse(metadata.creationTimestamp ?? "");
+
+  if (uid !== undefined ? metadata.uid !== uid : !(created >= since)) {
+    throw new Error(`The ${noun} ${name} is not the one the suite created`);
+  }
+  const { status, stderr } = spawnSync(
+    required("E2E_KUBECTL"),
+    [
+      "--kubeconfig",
+      kubeconfigPath(),
+      "--context",
+      E2E_KUBE_CONTEXT,
+      "delete",
+      "--raw",
+      `/apis/velero.io/v1/namespaces/${namespace}/${resource}/${name}`,
+      "-f",
+      "-",
+    ],
+    {
+      encoding: "utf8",
+      timeout: KUBECTL_TIMEOUT,
+      input: JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: metadata.uid } }),
+    },
+  );
+
+  if (status !== 0) throw new Error(`The ${noun} ${name} could not be removed: ${(stderr ?? "").trim()}`);
+}
+
+/**
  * Removes what a suite left in a namespace no server looks at: the requests of
  * one kind that carry the label of the extension, the ServerStatusRequests
  * unless another is named, and nothing else, and answers how many they were.
- * It is the one write of the suites, of what one of them asked the extension
- * to create, in the disposable cluster of the test environment. The namespace
- * of the installation is refused: there the server removes its requests itself.
+ * It and the removal of a backup a suite of the actions created are the writes
+ * of the suites, of what one of them asked the extension to create, in the
+ * disposable cluster of the test environment. The namespace of the
+ * installation is refused: there the server removes its requests itself.
  */
 export function removeRequestsOfTheExtension(namespace: string, kind: RequestKind = "ServerStatusRequest"): number {
   if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {

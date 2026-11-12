@@ -5,10 +5,13 @@ import { hostDialog, saveThroughDialog } from "./artifact-save";
 import { catalogEntries, hostDependencies } from "./host";
 import { VeleroIpc } from "./ipc";
 
+export { deleteRequestOf, deleteRequestText } from "../common/delete-request";
+export { expressionRefused } from "../common/schedule-form";
 export { DiagnosticKubernetes } from "./diagnostic-kubernetes";
+export { resolveRoute } from "./diagnostic-route";
 export { DiagnosticError, downloadArtifact } from "./diagnostic-transport";
 export { KubectlTunnels } from "./diagnostic-tunnel";
-export { registerHandlers } from "./ipc";
+export { downloadFailureOf, registerHandlers } from "./ipc";
 export { WriteGate } from "./write-gate";
 
 export default class VeleroMain extends Main.LensExtension {

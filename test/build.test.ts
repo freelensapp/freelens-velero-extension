@@ -4,7 +4,7 @@
 // one of the main process in a process of its own, where nothing of the tests is, as the host loads it.
 
 import { spawnSync } from "node:child_process";
-import { type Dirent, readdirSync, readFileSync } from "node:fs";
+import { type Dirent, readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as Mobx from "mobx";
@@ -43,10 +43,11 @@ const manifest: Manifest = JSON.parse(readFileSync(resolve("package.json"), "utf
 const MAIN = resolve("dist/main.js");
 const RENDERER = resolve("dist/renderer.js");
 
-// The nightly of the validation target of SPEC-0015, and the versions of the catalog of the host at that commit
-// (pnpm-workspace.yaml of freelensapp/freelens at 7801fb10a5f20af308093b39e5f79cd6e8c3461d, lines 11 to 17, 56
-// and 120).
-const SDK = "2.0.0-0-nightly-2026-10-25";
+// The range of the SDK, D10 of SPEC-0015; the release of the validation target of SPEC-0015, which the range
+// resolves to; and the versions of the catalog of the host at its commit (pnpm-workspace.yaml of
+// freelensapp/freelens at b9b53e16056578c5407312eba5823a089972f6d5, lines 11 to 17, 56 and 120).
+const SDK_RANGE = "^2.0.0";
+const SDK = "2.0.0";
 const HOST_LIBRARIES = {
   react: "19.3.1",
   "react-dom": "19.3.1",
@@ -54,7 +55,7 @@ const HOST_LIBRARIES = {
   "@types/react-dom": "19.3.0",
   mobx: "7.0.6",
   "mobx-react": "10.0.2",
-  electron: "43.8.3",
+  electron: "44.10.0",
 };
 const REACT_WINDOW = "2.3.4";
 
@@ -81,7 +82,7 @@ describe("the manifest", () => {
     expect(manifest.private).toBeUndefined();
   });
 
-  it("pins the SDK exactly to the nightly of the validation target, and takes no other package of Freelens", () => {
+  it("takes the SDK by the range of Freelens 2, resolved to the version of the validation target, and no other package of Freelens", () => {
     const all = [
       manifest.dependencies,
       manifest.devDependencies,
@@ -89,8 +90,17 @@ describe("the manifest", () => {
       manifest.optionalDependencies,
     ].flatMap((dependencies) => Object.keys(dependencies ?? {}));
 
-    expect(manifest.devDependencies?.["@freelensapp/extensions"]).toBe(SDK);
+    expect(manifest.devDependencies?.["@freelensapp/extensions"]).toBe(SDK_RANGE);
     expect(all.filter((name) => name.startsWith("@freelensapp/"))).toEqual(["@freelensapp/extensions"]);
+    // The version the range resolves to, which the bundles below were built from, is the one the header of
+    // SPEC-0015 names with the commit of the target: a release of Freelens moves the three together.
+    const header = readFileSync(resolve("docs/specs/SPEC-0015-freelens-v2-host.md"), "utf8")
+      .split("\n")
+      .find((line) => line.startsWith("- **Freelens validation target:**"));
+
+    expect(header).toContain(
+      `the commit of the tag v${SDK} of the release Freelens ${SDK}, with \`@freelensapp/extensions\` ${SDK};`,
+    );
   });
 
   it("has the libraries of the host as devDependencies at the versions of its catalog, and react-window alone in dependencies", () => {
@@ -119,6 +129,33 @@ describe("the files of the build", () => {
       .sort();
 
     expect(files).toEqual(["main.js", "main.js.map", "renderer.css", "renderer.js", "renderer.js.map"]);
+  });
+});
+
+// The ceiling of the bytes of each file the host loads, a quarter above its size when the ceiling was set (REQ-317 of
+// SPEC-0018). A change that passes a ceiling fails here until the ceiling is moved, with its reason written beside
+// it, in the pull request that needs it. No other file of the build has one: the host loads these three alone.
+const CEILINGS: Record<string, number> = {
+  // 265,505 bytes when it was set, on 2026-11-09.
+  "dist/main.js": 331_882,
+  // 932,411 bytes when it was set, on 2026-11-09.
+  "dist/renderer.js": 1_165_514,
+  // 61,044 bytes when it was set, on 2026-11-09.
+  "dist/renderer.css": 76_305,
+};
+
+describe("the size of what the host loads", () => {
+  it("holds the bundle of the main process, the bundle of the renderer and the stylesheet each under its ceiling of bytes", () => {
+    const sizes = Object.entries(CEILINGS).map(([file, ceiling]) => ({
+      file,
+      bytes: statSync(resolve(file)).size,
+      ceiling,
+    }));
+
+    expect(
+      sizes.filter(({ bytes, ceiling }) => bytes > ceiling),
+      "A file passes its ceiling: move the ceiling, with its reason in place of the size beside it, in the pull request that needs it",
+    ).toEqual([]);
   });
 });
 
@@ -205,13 +242,13 @@ describe("the bundle of the renderer", () => {
         extension.kubeObjectDetailItems as { kind: string; components: { Details(props: object): Drawn } }[]
       ).map((item) => item.components.Details({ object }));
 
-      expect(pages).toHaveLength(9);
-      expect(sections).toHaveLength(8);
+      expect(pages).toHaveLength(11);
+      expect(sections).toHaveLength(10);
       for (const drawn of [...pages, ...sections]) {
         expect(typeof drawn.type.getDerivedStateFromError).toBe("function");
         expect(drawn.props.extension).toBe(extension);
       }
-      expect(sections.map((drawn) => drawn.props.resetKey)).toEqual(Array(8).fill(object));
+      expect(sections.map((drawn) => drawn.props.resetKey)).toEqual(Array(10).fill(object));
       expect(
         (extension.customResources as { kind: string }[]).map((kind) => [
           kind.kind,
@@ -227,6 +264,8 @@ describe("the bundle of the renderer", () => {
           "BackupRepository",
           "PodVolumeBackup",
           "PodVolumeRestore",
+          "DataUpload",
+          "DataDownload",
         ].map((kind) => [kind, true]),
       );
     });
@@ -352,8 +391,17 @@ describe("the bundle of the main process", () => {
         "KubectlTunnels",
         "WriteGate",
         "default",
+        "deleteRequestOf",
+        "deleteRequestText",
         "downloadArtifact",
+        // The words of a download that failed, which FND-10 makes in the main process of the host of the refusal of a
+        // route (REQ-290 of SPEC-0018).
+        "downloadFailureOf",
+        "expressionRefused",
         "registerHandlers",
+        // The route to the store of a signed URL, which FND-10 resolves in the main process of the host (REQ-290 of
+        // SPEC-0018).
+        "resolveRoute",
       ],
       dispatchers: [true, true],
     });

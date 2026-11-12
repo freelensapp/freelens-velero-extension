@@ -15,7 +15,15 @@ import {
 } from "./local-artifacts.mts";
 import { mixedExpression } from "./local-expressions.mts";
 import { DEMO_CONTEXT, DEMO_NAMESPACE, type KindConfig, OWNER_LABEL, requireCondition } from "./local-kind.mts";
-import { BUCKET, type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
+import {
+  BUCKET,
+  durationMilliseconds,
+  IMAGES,
+  type KubeResource,
+  MAINTAIN_FREQUENCY_HOURS,
+  preloadedImage,
+  STORAGE_ENDPOINT,
+} from "./local-manifests.mts";
 import { STORE_WAYS, type StoreAnswer, type StoreBody, type StoreWay } from "./local-store.mts";
 
 export const FIXTURE_LABEL = "freelensapp.io/velero-fixture-run";
@@ -58,6 +66,27 @@ export const VIEW_OF_AN_EXEC_PLUGIN = "views-exec-plugin";
 export const EXEC_CREDENTIAL_VERSION = "client.authentication.k8s.io/v1";
 export const SCALE_BACKUPS = 1000;
 export const SCALE_RESTORES = 1000;
+// The pod volume backups of the long lists: two of each of the first nine hundred backups, and two hundred of the
+// last one, whose view reads them at once. The backups between them have none.
+export const SCALE_OWNERS_OF_TWO = 900;
+export const SCALE_OPERATIONS_OF_THE_LAST = 200;
+export const SCALE_OPERATIONS = 2 * SCALE_OWNERS_OF_TWO + SCALE_OPERATIONS_OF_THE_LAST;
+// The data uploads of the long lists: one of each of the two hundred backups before the ones that hold no operation,
+// which hold two pod volume backups each, in the phases of the pod volume backups in turn (SPEC-0014, REQ-194). The
+// backups between them and the last one hold none, and the last one its two hundred pod volume backups alone.
+export const SCALE_DATA_UPLOADS = 200;
+// The phases the pod volume backups of the long lists are in, in turn: each one the release writes, and never
+// none, which the placement by the clock refuses.
+export const SCALE_OPERATION_PHASES = [
+  "New",
+  "Accepted",
+  "Prepared",
+  "InProgress",
+  "Canceling",
+  "Completed",
+  "Failed",
+  "Canceled",
+] as const;
 
 export function fixtureNames(run: string) {
   requireCondition(/^[a-f0-9]{8}$/.test(run), "A generated local fixture run ID is required");
@@ -76,6 +105,11 @@ export function fixtureNames(run: string) {
     adherenceScale: `velero-adherence-scale-${run}`,
     backup: `fixture-backup-${run}`,
     restore: `fixture-restore-${run}`,
+    // The volume of the run: a pod of the source namespace whose emptyDir the node agent backs up with the file
+    // system backup of the release, the backup of its pod and the restore of that backup.
+    volumePod: `fixture-volume-${run}`,
+    volumeBackup: `fixture-volume-backup-${run}`,
+    volumeRestore: `fixture-volume-restore-${run}`,
     // The operations the server refuses, which the transport proof asks the artifacts of: a backup and a
     // restore that fail their validation, and a restore asked from a schedule that has no backup.
     invalidBackup: `fixture-invalid-backup-${run}`,
@@ -187,8 +221,30 @@ export function realTabArtifactPaths(run: string) {
   };
 }
 
-// Every key of a run the client of the store may ask for: what the server wrote for the real operations, and
-// what the store is given for the tabs. Once a run is cleaned the store holds none of them.
+// The keys the server writes for the backup of the volume and its restore, laid out as the ones of the real backup
+// and restore: the archive, the log and the results of each, the list of the resources and the volume information.
+// The keys of the repository under the prefix of the location are not keys of an operation, and are not asked.
+export function volumeArtifactPaths(run: string) {
+  const names = fixtureNames(run);
+  const backup = `/${BUCKET}/backups/${names.volumeBackup}/${names.volumeBackup}`;
+  const restore = `/${BUCKET}/restores/${names.volumeRestore}`;
+
+  return {
+    archive: `${backup}.tar.gz`,
+    backupLog: `${backup}-logs.gz`,
+    backupResults: `${backup}-results.gz`,
+    backupResourceList: `${backup}-resource-list.json.gz`,
+    backupVolumeInfo: `${backup}-volumeinfo.json.gz`,
+    restoreLog: `${restore}/restore-${names.volumeRestore}-logs.gz`,
+    restoreResults: `${restore}/restore-${names.volumeRestore}-results.gz`,
+    restoreResourceList: `${restore}/restore-${names.volumeRestore}-resource-list.json.gz`,
+    restoreVolumeInfo: `${restore}/${names.volumeRestore}-volumeinfo.json.gz`,
+  };
+}
+
+// Every key of a run the client of the store may ask for: what the server wrote for the real operations and for
+// the ones of the volume, and what the store is given for the tabs. Once a run is cleaned the store holds none of
+// them.
 export function runArtifactPaths(run: string): string[] {
   const tabs = tabArtifactPaths(run);
 
@@ -197,6 +253,7 @@ export function runArtifactPaths(run: string): string[] {
     ...Object.values(realTabArtifactPaths(run)),
     ...Object.values(tabs.synced),
     ...Object.values(tabs.withoutLog),
+    ...Object.values(volumeArtifactPaths(run)),
   ];
 }
 
@@ -264,6 +321,27 @@ export function assertStoreRequest(request: {
   );
 }
 
+// An event the cluster wrote of an object of the run, such as a pod of the volume: it carries no label, and is told
+// by the object it regards, which is in the same namespace and carries the labels of the run, with its UID.
+function eventOfTheRun(owner: string, run: string, resource: KubeResource, resources: KubeResource[]): boolean {
+  if (resource.kind !== "Event") return false;
+  const event = resource as {
+    involvedObject?: { kind?: string; name?: string; uid?: string };
+    regarding?: { kind?: string; name?: string; uid?: string };
+  };
+  const regarded = event.involvedObject ?? event.regarding;
+
+  return resources.some(
+    (item) =>
+      item.kind === regarded?.kind &&
+      item.metadata.name === regarded.name &&
+      item.metadata.uid !== undefined &&
+      item.metadata.uid === regarded.uid &&
+      item.metadata.labels?.[OWNER_LABEL] === owner &&
+      item.metadata.labels?.[FIXTURE_LABEL] === run,
+  );
+}
+
 export function assertFixtureNamespaceContents(
   owner: string,
   run: string,
@@ -275,7 +353,8 @@ export function assertFixtureNamespaceContents(
     requireCondition(resource.metadata.namespace === namespace, "Cleanup inventory contains another namespace");
     const systemDefault =
       (resource.kind === "ConfigMap" && resource.metadata.name === "kube-root-ca.crt") ||
-      (resource.kind === "ServiceAccount" && resource.metadata.name === "default");
+      (resource.kind === "ServiceAccount" && resource.metadata.name === "default") ||
+      eventOfTheRun(owner, run, resource, resources);
 
     // What is not of the run is told by what it is, and left: the namespace is not removed with it inside.
     requireCondition(
@@ -289,8 +368,8 @@ export function assertFixtureNamespaceContents(
 }
 
 // The request that asks the controller to delete a backup of the fixtures: the real one, the one that
-// failed its validation, or one of the two the sync created from the store. No other backup is deleted
-// this way.
+// failed its validation, the one of the volume, or one of the two the sync created from the store. No other
+// backup is deleted this way.
 export function fixtureDeletionRequest(
   owner: string,
   run: string,
@@ -301,7 +380,9 @@ export function fixtureDeletionRequest(
 
   requireCondition(owner && backupUid, "Bound backup ownership is required for deletion");
   requireCondition(
-    [names.backup, names.invalidBackup, names.syncedBackup, names.syncedBackupWithoutLog].includes(backupName),
+    [names.backup, names.invalidBackup, names.volumeBackup, names.syncedBackup, names.syncedBackupWithoutLog].includes(
+      backupName,
+    ),
     "Only a backup of the fixtures is deleted",
   );
   return {
@@ -900,8 +981,597 @@ export function viewFixtures(
       "schedules",
       "backupstoragelocations",
       "volumesnapshotlocations",
+      "podvolumebackups",
+      "podvolumerestores",
+      "datauploads",
+      "datadownloads",
+      "backuprepositories",
     ]),
   ];
+}
+
+// The name of an object the release creates with a generated name: the name it is given, a dash, and five
+// lower-case letters and digits. These are made of the run, the owner and the place of the object among the ones
+// of that owner, not drawn by chance, so that a second placement finds each by its name.
+export function generatedName(run: string, owner: string, index: number): string {
+  const characters = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const digest = createHash("sha256").update(`${run}/${owner}/${index}`).digest();
+
+  return `${owner}-${[...digest.subarray(0, 5)].map((byte) => characters[byte % characters.length]).join("")}`;
+}
+
+// The path a pod volume backup or a data upload that completed reports, of the shape the release writes: a slash and
+// the UID of the operation, which its pod mounts the volume at (seen on 2026-11-02 with v1.18.4 for a pod volume
+// backup; for a data upload, `MakePodPVCAttachment` of its exposer). The UID of a synthetic one is the cluster's,
+// given when it is created: its path is a UID made of the run and its key instead.
+export function volumePath(run: string, key: string): string {
+  const hex = createHash("sha256").update(`${run}/path/${key}`).digest("hex");
+
+  return `/${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+// The workloads the operations of the views name, as text: no pod, namespace or node of these names exists.
+export const VIEW_WORKLOADS = "views-workloads";
+export const VIEW_ELSEWHERE = "views-elsewhere";
+// The UID the label of a pod volume backup carries when it was written for an earlier backup of the same name.
+export const EARLIER_BACKUP_UID = "00000000-0000-4000-8000-0000000000e1";
+
+// The pod volume operations, the data movement and the repositories of the views. Each operation is owned by a
+// backup or a restore of the views that is there, given with the UID the cluster gave it: its owner reference names
+// that UID with `controller: true`, and its labels the name and the UID of its owner, as the release writes them.
+// Every status is one the release writes in that phase, but New, which the CRDs admit and the release reads as no
+// phase; no node agent reads the namespace, and nothing they name exists. The
+// repositories carry the three labels the release writes: the operations name the triples of the first two, and
+// one names a triple of none. Their times are counted back from the start, by the hour, as the ones of the views.
+export function viewOperationFixtures(
+  owner: string,
+  run: string,
+  started: number,
+  owners: KubeResource[],
+): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  requireCondition(Number.isFinite(started), "The time the fixtures were started is required");
+  const names = fixtureNames(run);
+  const MINUTE = 60_000;
+  const HOUR = 60 * MINUTE;
+  const start = Math.floor(started / HOUR) * HOUR;
+  const at = (minutes: number) => new Date(start - minutes * MINUTE).toISOString().replace(".000Z", "Z");
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const ownerOf = (kind: "Backup" | "Restore", name: string) => {
+    const found = owners.find(
+      (item) => item.kind === kind && item.metadata.name === name && item.metadata.namespace === names.views,
+    );
+
+    requireCondition(
+      found?.metadata.uid,
+      `The ${kind.toLowerCase()} ${name} of ${names.views} that owns pod volume operations of the views is not there`,
+    );
+    return { name, uid: String(found?.metadata.uid) };
+  };
+  const reference = (kind: "Backup" | "Restore", of: { name: string; uid: string }) => [
+    { apiVersion: "velero.io/v1", kind, name: of.name, uid: of.uid, controller: true },
+  ];
+  const MEBIBYTE = 1024 * 1024;
+  const snapshot = (index: number) =>
+    createHash("sha256").update(`${run}/snapshot/${index}`).digest("hex").slice(0, 32);
+  let made = 0;
+  // The node agent writes Canceling only for an operation whose cancellation was asked, by `spec.cancel`: by its
+  // owner at its timeout, by the server or the node agent when it starts, or by a deletion; and Canceled after it,
+  // or with a message of its own for one whose volume it could not expose, which no fixture is.
+  const cancelOf = (status: Record<string, unknown> | undefined) =>
+    status?.phase === "Canceling" || status?.phase === "Canceled" ? { cancel: true } : {};
+  const backupOf = (
+    of: { name: string; uid: string },
+    status: Record<string, unknown> | undefined,
+    more: { namespace?: string; uploaderType?: string; uidLabel?: string } = {},
+  ): KubeResource => {
+    const index = made++;
+    const pod = `views-app-${index}`;
+    const namespace = more.namespace ?? VIEW_WORKLOADS;
+
+    return {
+      apiVersion: "velero.io/v1",
+      kind: "PodVolumeBackup",
+      metadata: {
+        name: generatedName(run, of.name, index),
+        namespace: names.views,
+        labels: { ...labels, "velero.io/backup-name": of.name, "velero.io/backup-uid": more.uidLabel ?? of.uid },
+        ownerReferences: reference("Backup", of),
+      },
+      spec: {
+        node: "views-node-1",
+        pod: { kind: "Pod", namespace, name: pod, uid: `views-pod-uid-${index}` },
+        volume: `data-${index}`,
+        tags: {
+          backup: of.name,
+          "backup-uid": of.uid,
+          pod,
+          "pod-uid": `views-pod-uid-${index}`,
+          ns: namespace,
+          volume: `data-${index}`,
+        },
+        backupStorageLocation: "views-available",
+        repoIdentifier: "",
+        uploaderType: more.uploaderType ?? "kopia",
+        ...cancelOf(status),
+      },
+      ...(status ? { status } : {}),
+    };
+  };
+  const restoreOf = (
+    of: { name: string; uid: string },
+    status: Record<string, unknown>,
+    uploaderType = "kopia",
+  ): KubeResource => {
+    const index = made++;
+
+    return {
+      apiVersion: "velero.io/v1",
+      kind: "PodVolumeRestore",
+      metadata: {
+        name: generatedName(run, of.name, index),
+        namespace: names.views,
+        labels: {
+          ...labels,
+          "velero.io/restore-name": of.name,
+          "velero.io/restore-uid": of.uid,
+          "velero.io/pod-uid": `views-pod-uid-${index}`,
+        },
+        ownerReferences: reference("Restore", of),
+      },
+      spec: {
+        pod: {
+          kind: "Pod",
+          namespace: `${VIEW_WORKLOADS}-restored`,
+          name: `views-app-${index}`,
+          uid: `views-pod-uid-${index}`,
+        },
+        volume: `data-${index}`,
+        backupStorageLocation: "views-available",
+        repoIdentifier: uploaderType === "restic" ? `s3:${STORAGE_ENDPOINT}/${BUCKET}/restic/${VIEW_WORKLOADS}` : "",
+        uploaderType,
+        snapshotID: snapshot(index),
+        sourceNamespace: VIEW_WORKLOADS,
+        snapshotSize: 64 * MEBIBYTE,
+        ...cancelOf(status),
+      },
+      status,
+    };
+  };
+  const inProgress = ownerOf("Backup", "backup-inprogress");
+  const history = ownerOf("Backup", "views-history-4");
+  const long = ownerOf("Backup", LONG_BACKUP_NAME);
+  const daily = ownerOf("Backup", "views-daily-20260901030000");
+  const mapped = ownerOf("Restore", "restore-mapped");
+  const several = "data path failed: error to run kopia\nunable to read the source\npermission denied";
+  const operations = [
+    backupOf(inProgress, undefined),
+    backupOf(inProgress, { phase: "New" }),
+    backupOf(inProgress, { phase: "Accepted", acceptedTimestamp: at(9) }),
+    backupOf(inProgress, { phase: "Prepared", acceptedTimestamp: at(9) }),
+    backupOf(inProgress, {
+      phase: "InProgress",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      progress: { totalBytes: 256 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+    }),
+    backupOf(inProgress, {
+      phase: "InProgress",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      progress: { bytesDone: 32 * MEBIBYTE },
+    }),
+    backupOf(inProgress, {
+      phase: "Canceling",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      progress: { totalBytes: 128 * MEBIBYTE, bytesDone: 16 * MEBIBYTE },
+    }),
+    backupOf(inProgress, {
+      phase: "Completed",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      completionTimestamp: at(6),
+      path: volumePath(run, "views-7"),
+      snapshotID: snapshot(7),
+      progress: { totalBytes: 96 * MEBIBYTE, bytesDone: 96 * MEBIBYTE },
+      incrementalBytes: 8 * MEBIBYTE,
+    }),
+    backupOf(inProgress, {
+      phase: "Completed",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      completionTimestamp: at(8),
+      path: volumePath(run, "views-8"),
+      message: "volume was empty so no snapshot was taken",
+    }),
+    backupOf(inProgress, {
+      phase: "Failed",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(7),
+      completionTimestamp: at(7),
+      message: several,
+    }),
+    backupOf(inProgress, { phase: "Failed", acceptedTimestamp: at(45), message: "timeout on preparing PVB" }),
+    backupOf(inProgress, { phase: "Canceled", startTimestamp: at(5), completionTimestamp: at(5) }),
+    // The uploader the release reads as restic for the repository when it is empty.
+    backupOf(
+      inProgress,
+      {
+        phase: "Completed",
+        acceptedTimestamp: at(9),
+        startTimestamp: at(8),
+        completionTimestamp: at(7),
+        path: volumePath(run, "views-12"),
+        snapshotID: snapshot(12),
+        progress: { totalBytes: 4 * MEBIBYTE, bytesDone: 4 * MEBIBYTE },
+      },
+      { uploaderType: "" },
+    ),
+    // A volume of a namespace no repository of the views is for.
+    backupOf(
+      history,
+      {
+        phase: "Failed",
+        acceptedTimestamp: at(4 * 24 * 60 + 2),
+        startTimestamp: at(4 * 24 * 60 + 1),
+        completionTimestamp: at(4 * 24 * 60),
+        message: "data path failed: the volume of the pod could not be read",
+      },
+      { namespace: VIEW_ELSEWHERE },
+    ),
+    backupOf(long, {
+      phase: "InProgress",
+      acceptedTimestamp: at(3),
+      startTimestamp: at(2),
+      progress: { totalBytes: 10 * MEBIBYTE, bytesDone: 5 * MEBIBYTE },
+    }),
+    // Its label names the UID of an earlier backup of the same name; its owner reference, the one that is there.
+    backupOf(
+      daily,
+      {
+        phase: "Completed",
+        acceptedTimestamp: at(30),
+        startTimestamp: at(29),
+        completionTimestamp: at(28),
+        path: volumePath(run, "views-16"),
+        snapshotID: snapshot(16),
+        progress: { totalBytes: 2 * MEBIBYTE, bytesDone: 2 * MEBIBYTE },
+      },
+      { uidLabel: EARLIER_BACKUP_UID },
+    ),
+    restoreOf(mapped, { phase: "New" }),
+    restoreOf(mapped, { phase: "Accepted", acceptedTimestamp: at(9), node: "views-node-1" }),
+    restoreOf(mapped, {
+      phase: "InProgress",
+      acceptedTimestamp: at(9),
+      node: "views-node-1",
+      startTimestamp: at(8),
+      progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 16 * MEBIBYTE },
+    }),
+    restoreOf(mapped, {
+      phase: "Completed",
+      acceptedTimestamp: at(9),
+      node: "views-node-1",
+      startTimestamp: at(8),
+      completionTimestamp: at(6),
+      progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+    }),
+    // The preparing timeout fires on one accepted only, and keeps its acceptance.
+    restoreOf(mapped, {
+      phase: "Failed",
+      acceptedTimestamp: at(45),
+      node: "views-node-1",
+      message: "timeout on preparing PVR",
+    }),
+    restoreOf(mapped, {
+      phase: "Canceled",
+      acceptedTimestamp: at(9),
+      node: "views-node-1",
+      startTimestamp: at(8),
+      completionTimestamp: at(7),
+    }),
+    // The legacy controller of the uploader restic writes the start and the completion, and no node.
+    restoreOf(mapped, { phase: "Completed", startTimestamp: at(8), completionTimestamp: at(6) }, "restic"),
+  ];
+  // The data movement of the views, served under the second version of the group: the data uploads of the backup in
+  // progress and of the backup of a long name, and the data downloads of the mapped restore, in every phase the
+  // release writes, with what the node agent writes in each (SPEC-0014, what the release does). Each carries the
+  // labels the CSI plugin writes: the name and the UID of its owner, the operation ID, `du-` or `dd-` before the UID
+  // of the owner and the one of the claim, and the UID of the claim of an upload. Their claims, snapshots and nodes
+  // are names: nothing of them exists.
+  const operationId = (prefix: "du" | "dd", of: { uid: string }, index: number) =>
+    `${prefix}-${of.uid.slice(0, 8)}.views-pvc-uid-${index}`;
+  const uploadOf = (
+    of: { name: string; uid: string },
+    status: Record<string, unknown> | undefined,
+    more: { mover?: string } = {},
+  ): KubeResource => {
+    const index = made++;
+    const claim = `views-claim-${index}`;
+
+    return {
+      apiVersion: "velero.io/v2alpha1",
+      kind: "DataUpload",
+      metadata: {
+        name: generatedName(run, of.name, index),
+        namespace: names.views,
+        labels: {
+          ...labels,
+          "velero.io/backup-name": of.name,
+          "velero.io/backup-uid": of.uid,
+          "velero.io/pvc-uid": `views-pvc-uid-${index}`,
+          "velero.io/async-operation-id": operationId("du", of, index),
+        },
+        ownerReferences: reference("Backup", of),
+      },
+      spec: {
+        snapshotType: "CSI",
+        csiSnapshot: {
+          volumeSnapshot: `velero-${claim}-${snapshot(index).slice(0, 5)}`,
+          storageClass: "views-standard",
+          snapshotClass: "views-snapshot-class",
+          driver: "views.csi.example",
+        },
+        sourcePVC: claim,
+        ...(more.mover === undefined ? {} : { datamover: more.mover }),
+        backupStorageLocation: "views-available",
+        sourceNamespace: VIEW_WORKLOADS,
+        operationTimeout: "10m0s",
+        ...cancelOf(status),
+      },
+      ...(status ? { status } : {}),
+    };
+  };
+  const downloadOf = (
+    of: { name: string; uid: string },
+    status: Record<string, unknown> | undefined,
+    restored: string,
+  ): KubeResource => {
+    const index = made++;
+
+    return {
+      apiVersion: "velero.io/v2alpha1",
+      kind: "DataDownload",
+      metadata: {
+        name: generatedName(run, of.name, index),
+        namespace: names.views,
+        labels: {
+          ...labels,
+          "velero.io/restore-name": of.name,
+          "velero.io/restore-uid": of.uid,
+          "velero.io/async-operation-id": operationId("dd", of, index),
+        },
+        ownerReferences: reference("Restore", of),
+      },
+      spec: {
+        targetVolume: { pvc: `views-claim-${index}`, pv: "", namespace: `${VIEW_WORKLOADS}-restored` },
+        backupStorageLocation: "views-available",
+        snapshotID: restored,
+        sourceNamespace: VIEW_WORKLOADS,
+        operationTimeout: "10m0s",
+        nodeOS: "linux",
+        snapshotSize: 64 * MEBIBYTE,
+        ...cancelOf(status),
+      },
+      ...(status ? { status } : {}),
+    };
+  };
+  const uploaded = snapshot(1000);
+  const node = (moved: string, accepted = "views-node-1") => ({ node: moved, acceptedByNode: accepted });
+  const movement = [
+    uploadOf(inProgress, undefined),
+    uploadOf(inProgress, { phase: "New" }),
+    uploadOf(inProgress, { phase: "Accepted", acceptedByNode: "views-node-1", acceptedTimestamp: at(9) }),
+    // Prepared by the node agent of the node the pod that reaches the snapshot was placed on, not the one that
+    // accepted it.
+    uploadOf(inProgress, { phase: "Prepared", ...node("views-node-2"), acceptedTimestamp: at(9) }),
+    uploadOf(inProgress, {
+      phase: "InProgress",
+      ...node("views-node-2"),
+      nodeOS: "linux",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      progress: { totalBytes: 512 * MEBIBYTE, bytesDone: 128 * MEBIBYTE },
+    }),
+    uploadOf(inProgress, {
+      phase: "Canceling",
+      ...node("views-node-1"),
+      nodeOS: "linux",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 8 * MEBIBYTE },
+    }),
+    uploadOf(inProgress, {
+      phase: "Completed",
+      ...node("views-node-1"),
+      nodeOS: "linux",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      completionTimestamp: at(6),
+      path: volumePath(run, "views-moved"),
+      snapshotID: uploaded,
+      progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+      incrementalBytes: 4 * MEBIBYTE,
+    }),
+    uploadOf(inProgress, {
+      phase: "Completed",
+      ...node("views-node-1"),
+      nodeOS: "linux",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      completionTimestamp: at(8),
+      path: volumePath(run, "views-empty"),
+      message: "volume was empty so no data was upload",
+    }),
+    uploadOf(inProgress, {
+      phase: "Failed",
+      ...node("views-node-1"),
+      acceptedTimestamp: at(9),
+      startTimestamp: at(7),
+      completionTimestamp: at(7),
+      message: "data path failed: error to run kopia\nunable to read the snapshot\nthe volume was not ready",
+    }),
+    uploadOf(inProgress, {
+      phase: "Failed",
+      acceptedByNode: "views-node-1",
+      acceptedTimestamp: at(45),
+      message: "timeout on preparing data upload",
+    }),
+    uploadOf(inProgress, {
+      phase: "Canceled",
+      ...node("views-node-1"),
+      acceptedTimestamp: at(9),
+      startTimestamp: at(5),
+      completionTimestamp: at(5),
+    }),
+    // A data mover of its own, which the node agent leaves alone: it waits for that data mover.
+    uploadOf(inProgress, undefined, { mover: "views-mover" }),
+    uploadOf(long, {
+      phase: "InProgress",
+      ...node("views-node-1"),
+      nodeOS: "linux",
+      acceptedTimestamp: at(3),
+      startTimestamp: at(2),
+      progress: { totalBytes: 10 * MEBIBYTE, bytesDone: 5 * MEBIBYTE },
+    }),
+    downloadOf(mapped, { phase: "New" }, uploaded),
+    downloadOf(mapped, { phase: "Accepted", acceptedByNode: "views-node-1", acceptedTimestamp: at(9) }, uploaded),
+    downloadOf(mapped, { phase: "Prepared", ...node("views-node-2"), acceptedTimestamp: at(9) }, uploaded),
+    downloadOf(
+      mapped,
+      {
+        phase: "InProgress",
+        ...node("views-node-2"),
+        acceptedTimestamp: at(9),
+        startTimestamp: at(8),
+        progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 32 * MEBIBYTE },
+      },
+      uploaded,
+    ),
+    downloadOf(
+      mapped,
+      {
+        phase: "Completed",
+        ...node("views-node-1"),
+        acceptedTimestamp: at(9),
+        startTimestamp: at(8),
+        completionTimestamp: at(6),
+        progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+      },
+      uploaded,
+    ),
+    downloadOf(
+      mapped,
+      {
+        phase: "Failed",
+        acceptedByNode: "views-node-1",
+        acceptedTimestamp: at(9),
+        completionTimestamp: at(7),
+        message: "error to expose the snapshot\nthe target claim is not bound",
+      },
+      uploaded,
+    ),
+    downloadOf(
+      mapped,
+      {
+        phase: "Canceled",
+        ...node("views-node-1"),
+        acceptedTimestamp: at(9),
+        startTimestamp: at(5),
+        completionTimestamp: at(5),
+      },
+      uploaded,
+    ),
+    // A snapshot no data upload of the installation names: the data upload went with its backup.
+    downloadOf(
+      mapped,
+      {
+        phase: "Failed",
+        acceptedByNode: "views-node-1",
+        acceptedTimestamp: at(45),
+        message: "timeout on preparing data download",
+      },
+      snapshot(1001),
+    ),
+  ];
+  const repository = (
+    volumeNamespace: string,
+    type: "kopia" | "restic",
+    status: Record<string, unknown> | undefined,
+    more: { name?: string; location?: string; frequency?: string } = {},
+  ): KubeResource => {
+    const location = more.location ?? "views-available";
+
+    return {
+      apiVersion: "velero.io/v1",
+      kind: "BackupRepository",
+      metadata: {
+        name: more.name ?? `${volumeNamespace}-${location}-${type}`,
+        namespace: names.views,
+        labels: {
+          ...labels,
+          [REPOSITORY_LABELS.volumeNamespace]: volumeNamespace,
+          [REPOSITORY_LABELS.location]: location,
+          [REPOSITORY_LABELS.type]: type,
+        },
+      },
+      spec: {
+        volumeNamespace,
+        backupStorageLocation: location,
+        repositoryType: type,
+        ...(type === "restic"
+          ? { resticIdentifier: `s3:${STORAGE_ENDPOINT}/${BUCKET}/restic/${volumeNamespace}` }
+          : {}),
+        maintenanceFrequency: more.frequency ?? "87600h0m0s",
+      },
+      ...(status ? { status } : {}),
+    };
+  };
+  const ready = { phase: "Ready", lastMaintenanceTime: at(60) };
+  const repositories = [
+    // Three recent maintenances, the newest failed: the last maintenance is the one before it.
+    repository(VIEW_WORKLOADS, "kopia", {
+      phase: "Ready",
+      lastMaintenanceTime: at(2 * 24 * 60 - 5),
+      recentMaintenance: [
+        { startTimestamp: at(3 * 24 * 60), completeTimestamp: at(3 * 24 * 60 - 5), result: "Succeeded" },
+        { startTimestamp: at(2 * 24 * 60), completeTimestamp: at(2 * 24 * 60 - 5), result: "Succeeded" },
+        {
+          startTimestamp: at(24 * 60),
+          completeTimestamp: at(24 * 60 - 5),
+          result: "Failed",
+          message: "error to run the maintenance of the repository: the lock is held",
+        },
+      ],
+    }),
+    // Ready with no maintenance yet: due.
+    repository(VIEW_WORKLOADS, "restic", { phase: "Ready" }, { frequency: "168h0m0s" }),
+    repository("views-unready", "kopia", {
+      phase: "NotReady",
+      message: "error to connect to the repository\nthe bucket answered 403\nthe credentials were refused",
+    }),
+    repository("views-unreported", "kopia", undefined),
+    repository(
+      "views-due",
+      "kopia",
+      { phase: "Ready", lastMaintenanceTime: at(30 * 24 * 60) },
+      { frequency: "168h0m0s" },
+    ),
+    // Two of the same three labels, which the release refuses.
+    repository("views-twice", "kopia", ready),
+    repository("views-twice", "kopia", ready, { name: "views-twice-views-available-kopia-again" }),
+    // A name of 63 characters, and the one the release makes for a namespace and a location of 63.
+    repository(LONG_NAMESPACE.slice(0, 41), "kopia", ready),
+    repository(`${LONG_NAMESPACE}1`, "kopia", ready, { location: LONG_LOCATION_NAME }),
+  ];
+  const all = [...operations, ...movement, ...repositories];
+
+  requireCondition(
+    new Set(all.map((item) => `${item.kind}/${item.metadata.name}`)).size === all.length,
+    "Two operations or repositories of the views have one name",
+  );
+  return all;
 }
 
 // An identity that reads some kinds of Velero in one namespace, and nothing else: what it is denied is what
@@ -946,13 +1616,31 @@ function placedAt(placed: number): { annotations: Record<string, string> } {
   return { annotations: { [PLACED_ANNOTATION]: new Date(placed).toISOString() } };
 }
 
+// The UID a pod volume backup of the long lists names for its backup before the cluster gave that backup one: the
+// operations made with it are the ones the digest of the long lists is made of, and none is created.
+export function scalePlaceholderUid(index: number): string {
+  return `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+}
+
 // A thousand backups and a thousand restores, spread over the thirty days before they were put in place:
-// every window of the recent operations holds some of them.
+// every window of the recent operations holds some of them. With them the pod volume backups of the first nine
+// hundred backups and of the last one, each owned by its backup as the release writes it: its owner reference
+// names the UID the cluster gave the backup, with `controller: true`, and its labels the name and that UID. Each
+// is accepted a minute after its backup started, the ones of one backup a second apart, in the phases of
+// `SCALE_OPERATION_PHASES` in turn. Without the UIDs of the backups, which the cluster gives when it creates
+// them, each names a placeholder UID: that is what the digest is made of, and none of them is created.
 export function scaleFixtures(
   owner: string,
   run: string,
   placed = Date.parse("2026-09-01T00:00:00Z"),
-): { namespace: KubeResource; backups: KubeResource[]; restores: KubeResource[] } {
+  owners?: Record<string, string>,
+): {
+  namespace: KubeResource;
+  backups: KubeResource[];
+  restores: KubeResource[];
+  operations: KubeResource[];
+  dataUploads: KubeResource[];
+} {
   requireCondition(owner, "Fixture ownership is required");
   const names = fixtureNames(run);
   const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
@@ -960,6 +1648,191 @@ export function scaleFixtures(
   // The last of them started a step before they were put in place: none is of a time that is to come.
   const first = Math.floor(placed / 1000) * 1000 - 30 * DAY;
   const at = placedAt(placed);
+  const MEBIBYTE = 1024 * 1024;
+  const operations: KubeResource[] = [];
+  const dataUploads: KubeResource[] = [];
+  const taken = new Set<string>();
+
+  for (let index = 0; index < SCALE_BACKUPS; index += 1) {
+    const count = index < SCALE_OWNERS_OF_TWO ? 2 : index === SCALE_BACKUPS - 1 ? SCALE_OPERATIONS_OF_THE_LAST : 0;
+    const backup = `backup-${String(index + 1).padStart(4, "0")}`;
+    const uid = owners ? owners[backup] : scalePlaceholderUid(index);
+
+    requireCondition(
+      count === 0 || uid,
+      `The backup ${backup} of ${names.scale} that owns pod volume backups of the long lists is not there`,
+    );
+    for (let place = 0; place < count; place += 1) {
+      const time = first + index * step + 60_000 + place * 1000;
+      const second = (offset: number) => new Date(time + offset * 1000).toISOString().replace(".000Z", "Z");
+      const phase = SCALE_OPERATION_PHASES[operations.length % SCALE_OPERATION_PHASES.length];
+      const pod = `scale-app-${place}`;
+      const podUid = `scale-pod-uid-${index + 1}-${place}`;
+      // A generated name, drawn again when two of one backup would be the same.
+      let name = generatedName(run, backup, place);
+
+      for (let draw = 1; taken.has(name); draw += 1) name = generatedName(run, backup, place + draw * 100_000);
+      taken.add(name);
+      const statuses: Record<(typeof SCALE_OPERATION_PHASES)[number], Record<string, unknown>> = {
+        New: { phase },
+        Accepted: { phase, acceptedTimestamp: second(0) },
+        Prepared: { phase, acceptedTimestamp: second(0) },
+        InProgress: {
+          phase,
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 16 * MEBIBYTE },
+        },
+        Canceling: {
+          phase,
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 32 * MEBIBYTE },
+        },
+        Completed: {
+          phase,
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          completionTimestamp: second(2),
+          path: volumePath(run, name),
+          snapshotID: createHash("sha256").update(`${run}/scale/${name}`).digest("hex").slice(0, 32),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+        },
+        Failed: {
+          phase,
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          completionTimestamp: second(2),
+          message: "data path failed: the volume of the pod could not be read",
+        },
+        // Canceled before it started, as the release writes it: a start when there was none, at the completion.
+        Canceled: { phase, startTimestamp: second(1), completionTimestamp: second(1) },
+      };
+
+      operations.push({
+        apiVersion: "velero.io/v1",
+        kind: "PodVolumeBackup",
+        metadata: {
+          name,
+          namespace: names.scale,
+          labels: { ...labels, "velero.io/backup-name": backup, "velero.io/backup-uid": String(uid) },
+          ownerReferences: [
+            { apiVersion: "velero.io/v1", kind: "Backup", name: backup, uid: String(uid), controller: true },
+          ],
+          ...at,
+        },
+        spec: {
+          node: "scale-node-1",
+          pod: { kind: "Pod", namespace: names.source, name: pod, uid: podUid },
+          volume: `data-${place}`,
+          tags: {
+            backup,
+            "backup-uid": String(uid),
+            pod,
+            "pod-uid": podUid,
+            ns: names.source,
+            volume: `data-${place}`,
+          },
+          backupStorageLocation: `scale-location-${(index % 3) + 1}`,
+          repoIdentifier: "",
+          uploaderType: "kopia",
+          // Canceling and Canceled are written only for one whose cancellation was asked.
+          ...(phase === "Canceling" || phase === "Canceled" ? { cancel: true } : {}),
+        },
+        status: statuses[phase],
+      });
+    }
+    if (index >= SCALE_OWNERS_OF_TWO - SCALE_DATA_UPLOADS && index < SCALE_OWNERS_OF_TWO) {
+      requireCondition(
+        uid,
+        `The backup ${backup} of ${names.scale} that owns a data upload of the long lists is not there`,
+      );
+      const time = first + index * step + 120_000;
+      const second = (offset: number) => new Date(time + offset * 1000).toISOString().replace(".000Z", "Z");
+      const phase = SCALE_OPERATION_PHASES[dataUploads.length % SCALE_OPERATION_PHASES.length];
+      let name = generatedName(run, backup, 1_000_000);
+
+      for (let draw = 1; taken.has(name); draw += 1) name = generatedName(run, backup, 1_000_000 + draw);
+      taken.add(name);
+      const moved = { node: "scale-node-1", acceptedByNode: "scale-node-1" };
+      const statuses: Record<(typeof SCALE_OPERATION_PHASES)[number], Record<string, unknown>> = {
+        New: { phase },
+        Accepted: { phase, acceptedByNode: "scale-node-1", acceptedTimestamp: second(0) },
+        Prepared: { phase, ...moved, acceptedTimestamp: second(0) },
+        InProgress: {
+          phase,
+          ...moved,
+          nodeOS: "linux",
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 16 * MEBIBYTE },
+        },
+        Canceling: {
+          phase,
+          ...moved,
+          nodeOS: "linux",
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 32 * MEBIBYTE },
+        },
+        Completed: {
+          phase,
+          ...moved,
+          nodeOS: "linux",
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          completionTimestamp: second(2),
+          path: volumePath(run, name),
+          snapshotID: createHash("sha256").update(`${run}/scale/${name}`).digest("hex").slice(0, 32),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+        },
+        Failed: {
+          phase,
+          ...moved,
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          completionTimestamp: second(2),
+          message: "data path failed: the snapshot could not be read",
+        },
+        Canceled: { phase, startTimestamp: second(1), completionTimestamp: second(1) },
+      };
+
+      dataUploads.push({
+        apiVersion: "velero.io/v2alpha1",
+        kind: "DataUpload",
+        metadata: {
+          name,
+          namespace: names.scale,
+          labels: {
+            ...labels,
+            "velero.io/backup-name": backup,
+            "velero.io/backup-uid": String(uid),
+            "velero.io/pvc-uid": `scale-pvc-uid-${index + 1}`,
+            "velero.io/async-operation-id": `du-${String(uid).slice(0, 8)}.scale-pvc-uid-${index + 1}`,
+          },
+          ownerReferences: [
+            { apiVersion: "velero.io/v1", kind: "Backup", name: backup, uid: String(uid), controller: true },
+          ],
+          ...at,
+        },
+        spec: {
+          snapshotType: "CSI",
+          csiSnapshot: {
+            volumeSnapshot: `velero-scale-claim-${index + 1}`,
+            storageClass: "scale-standard",
+            snapshotClass: "scale-snapshot-class",
+            driver: "scale.csi.example",
+          },
+          sourcePVC: `scale-claim-${index + 1}`,
+          backupStorageLocation: `scale-location-${(index % 3) + 1}`,
+          sourceNamespace: names.source,
+          operationTimeout: "10m0s",
+          ...(phase === "Canceling" || phase === "Canceled" ? { cancel: true } : {}),
+        },
+        status: statuses[phase],
+      });
+    }
+  }
 
   return {
     namespace: { apiVersion: "v1", kind: "Namespace", metadata: { name: names.scale, labels } },
@@ -994,6 +1867,8 @@ export function scaleFixtures(
         first + index * step + step / 2,
       ),
     })),
+    operations,
+    dataUploads,
   };
 }
 
@@ -1450,6 +2325,15 @@ export interface FixtureRuntime {
   // The objects the journal of the runner records, by which `apply` knows what it may write over, and what
   // keeps a change of them.
   journal?: { entries: Recorded[]; save(): void };
+  // The repository the server made for the volume of the run, recorded with the run as soon as it is found: it
+  // carries no label of the demo, and the cleanup removes it by this identity.
+  repository?: { read(): RunRepository | undefined; keep(found: RunRepository): void; forget(): void };
+}
+
+export interface RunRepository {
+  name: string;
+  uid: string;
+  labels: Record<string, string>;
 }
 
 // How long what was removed is given to be gone, and how often the cluster is asked whether it is.
@@ -1475,7 +2359,9 @@ export function readFixture(runtime: FixtureRuntime, expected: KubeResource): Ku
   return actual;
 }
 
-export function createStaticFixtures(runtime: FixtureRuntime, run: string): KubeResource[] {
+// `controlled` is whether a controller of the release runs on the cluster: where none runs, on the environment of the
+// CRDs alone, there is no scope of one to check.
+export function createStaticFixtures(runtime: FixtureRuntime, run: string, controlled = true): KubeResource[] {
   const schemas = JSON.parse(
     runtime.kubectl(["get", "customresourcedefinitions", "backups.velero.io", "restores.velero.io", "-o", "json"]),
   ) as {
@@ -1506,7 +2392,7 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string): Kube
       "Installed phase/schema contract differs from the reviewed release",
     );
   }
-  for (const name of ["deployment/velero", "daemonset/node-agent"]) {
+  for (const name of controlled ? ["deployment/velero", "daemonset/node-agent"] : []) {
     const workload = JSON.parse(
       runtime.kubectl(["get", name, "--namespace", DEMO_NAMESPACE, "-o", "json"]),
     ) as KubeResource & {
@@ -1527,6 +2413,248 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string): Kube
     );
   }
   return createWithStatus(runtime, staticFixtures(runtime.owner, run));
+}
+
+// The suites of the views and FND-10 that run where no controller does: each of their cases reads what the fixtures
+// wrote, the static counterparts of what the controllers of the installation leave among them, and none what a server
+// made while it ran (velero-e2e-restricted names its two suites). The suites of the artifacts, of the server and of the
+// volumes, and the pre-review, read what only a server makes: the files of the store, its bandwidth, a repository and a
+// volume it backed up.
+export const WITHOUT_A_CONTROLLER = [
+  "extensions",
+  "velero-e2e-actions",
+  "velero-e2e-adherence",
+  "velero-e2e-data-movement",
+  "velero-e2e-gate",
+  "velero-e2e-journey",
+  "velero-e2e-locations",
+  "velero-e2e-overview",
+  "velero-e2e-preferences",
+  "velero-e2e-restores",
+  "velero-e2e-restricted",
+  "velero-e2e-scale",
+  "velero-e2e-schedules",
+];
+
+// The version of the API server of the cluster, as `kubectl version` reports it: the server of the release writes it
+// into every backup it takes.
+export interface ServerVersion {
+  gitVersion: string;
+  major: string;
+  minor: string;
+}
+
+// The label the release writes into every backup it takes or syncs, with the name of its storage location
+// (`pkg/apis/velero/v1/labels_annotations.go:48` of the reviewed release).
+export const STORAGE_LOCATION_LABEL = "velero.io/storage-location";
+// What the server of the release never collects, under the excluded resources of a backup that names the resources
+// it includes (`pkg/controller/backup_controller.go:72-84` and `529-542`).
+export const NEVER_COLLECTED_RESOURCES = [
+  "volumesnapshots.snapshot.storage.k8s.io",
+  "volumesnapshotcontents.snapshot.storage.k8s.io",
+];
+// How the server of the release refuses the backup and the two restores the transport proof asks the artifacts of
+// (`pkg/controller/backup_controller.go:598`, `pkg/controller/restore_controller.go:336`, `381` and `387`).
+export const REFUSALS_OF_THE_SERVER = {
+  backup: ["encountered labelSelector as well as orLabelSelectors in backup spec, only one can be specified"],
+  restore: ["encountered labelSelector as well as orLabelSelectors in restore spec, only one can be specified"],
+  orphan: ["No backups found for schedule", "No completed backups found for schedule"],
+};
+// How long the controllers of the installation took, in milliseconds from the start of the run, as the environment of
+// 2026-11-06 recorded them: the backup of the ConfigMaps started at once and completed in two seconds; its restore
+// started a second later and completed in two; the backup of the volume started eleven seconds after the run and
+// completed in seven, after the backup of the ConfigMaps, which the Overview counts on; its restore started a second
+// later and completed in four. The three operations the server refused came last, there minutes after the run and
+// here seconds after it: only the expiration of the refused backup carries that moment.
+const CONTROLLERS_TOOK = {
+  backup: [0, 2_000],
+  restore: [3_000, 2_000],
+  volumeBackup: [11_000, 7_000],
+  volumeRestore: [19_000, 4_000],
+  refused: 25_000,
+} as const;
+// The items of the backup of the ConfigMaps of the run and of its restore: the twelve payloads and the small one; the
+// backup of the volume holds its one pod, and so does its restore.
+const ITEMS_OF_THE_RUN = { configMaps: 13, volume: 1 };
+
+// The installation of the environment of the CRDs alone, which no installer made and no server reads: its namespace,
+// the storage location the installer makes, with the phase and the two times its server writes into it once a minute,
+// of a validation and of a sync; and the static counterparts of what the controllers of the installation of
+// `pnpm demo:up` leave in it, each as the reviewed release leaves it, read in its source at the lines named: the
+// schedule its controller validates, Enabled, with `skipImmediately` written into its spec
+// (`pkg/controller/schedule_controller.go:113-131`); the backup it took and its restore, the backup of the volume of
+// the run and its restore, completed, with the defaults the server writes into the spec of a backup it prepares, the
+// resources it never collects, the label of its location and the annotations of the cluster it was taken in
+// (`pkg/controller/backup_controller.go:379-428`, `486` and `500-507`), and the spec of a restore as the release keeps
+// it (`pkg/controller/restore_controller.go:249-251` and `310-312`); the backup and the two restores it refused, with
+// its words, and what it writes into a backup before it refuses it; and the two backups its sync creates from the files
+// the store is given, made as `syncedBackups` makes them from the backup it took, with the label of their location
+// (`pkg/controller/backup_sync_controller.go:198-208`). Where Velero runs, its installer and its controllers make their
+// own, and these are never placed. `validated` is when the run was started, which the times of the objects are
+// counted from, and `cluster` the version of its API server. Each counterpart is labelled synthetic: no controller made
+// it, and the suites look for it by the name of the run.
+export function installationFixtures(
+  owner: string,
+  run: string,
+  validated: number,
+  cluster: ServerVersion,
+): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  requireCondition(Number.isFinite(validated), "The time the run was started is required");
+  // A managed cluster reports its minor version with a plus: the server of the release writes it as it is.
+  requireCondition(
+    /^v\d+\.\d+\.\d+/.test(cluster.gitVersion) && /^\d+$/.test(cluster.major) && /^\d+\+?$/.test(cluster.minor),
+    "The version of the API server is required",
+  );
+  const names = fixtureNames(run);
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const metadata = (name: string) => ({ name, namespace: DEMO_NAMESPACE, labels });
+  const time = (at: number) => new Date(at).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const retention = Number.parseInt(LIVE_RETENTION, 10) * 3_600_000;
+  // A backup as the server leaves it after it prepared it, whether it then ran it or refused it: the spec with its
+  // defaults, the label of its location and the annotations of the cluster.
+  const prepared = (submitted: KubeResource, status: Record<string, unknown>): KubeResource => ({
+    apiVersion: "velero.io/v1",
+    kind: "Backup",
+    metadata: {
+      ...metadata(submitted.metadata.name),
+      labels: { ...labels, [STORAGE_LOCATION_LABEL]: "default" },
+      annotations: {
+        "velero.io/resource-timeout": "10m0s",
+        "velero.io/source-cluster-k8s-gitversion": cluster.gitVersion,
+        "velero.io/source-cluster-k8s-major-version": cluster.major,
+        "velero.io/source-cluster-k8s-minor-version": cluster.minor,
+      },
+    },
+    spec: {
+      ...(submitted.spec as Record<string, unknown>),
+      excludedResources: [...NEVER_COLLECTED_RESOURCES],
+      csiSnapshotTimeout: "10m0s",
+      itemOperationTimeout: "4h0m0s",
+      snapshotMoveData: false,
+      volumeGroupSnapshotLabelKey: "velero.io/volume-group",
+    },
+    status,
+  });
+  // What the server writes into the status of a backup it took, that ended with no error: the two times, the
+  // expiration counted from its start, the version of its format in two forms, the status of its hooks with nothing
+  // in it, and its progress, done.
+  const taken = ([started, lasted]: readonly [number, number], items: number) => ({
+    phase: "Completed",
+    startTimestamp: time(validated + started),
+    completionTimestamp: time(validated + started + lasted),
+    expiration: time(validated + started + retention),
+    formatVersion: "1.1.0",
+    version: 1,
+    hookStatus: {},
+    progress: { itemsBackedUp: items, totalItems: items },
+  });
+  // What it writes into the status of a restore it ran, that ended with no error.
+  const restored = ([started, lasted]: readonly [number, number], items: number) => ({
+    phase: "Completed",
+    startTimestamp: time(validated + started),
+    completionTimestamp: time(validated + started + lasted),
+    hookStatus: {},
+    progress: { itemsRestored: items, totalItems: items },
+  });
+  const restore = (submitted: KubeResource, status: Record<string, unknown>): KubeResource => ({
+    ...submitted,
+    metadata: metadata(submitted.metadata.name),
+    spec: restoreSpec(status.phase as string, submitted.spec as Record<string, unknown>),
+    status,
+  });
+  const refused = refusedFixtures(owner, run);
+  const backup = prepared(liveBackup(owner, run), taken(CONTROLLERS_TOOK.backup, ITEMS_OF_THE_RUN.configMaps));
+  const synced = syncedBackups(
+    owner,
+    run,
+    validated,
+    backup,
+    tabExpectations(tabArtifacts({ backup: names.syncedBackup, namespace: DEMO_NAMESPACE, started: validated })),
+  );
+  // The sync creates a backup from the whole of what it read, with the hooks of its spec emptied, so the two parts
+  // of the spec that are structures are written with nothing in them, where the controllers that patch what they
+  // changed leave none (`pkg/apis/velero/v1/backup_types.go:31` and `128`,
+  // `pkg/controller/backup_sync_controller.go:196` and `214`, against `pkg/controller/backup_controller.go:307`).
+  const syncedByTheServer = (made: KubeResource): KubeResource => ({
+    ...made,
+    metadata: {
+      ...made.metadata,
+      labels: { ...made.metadata.labels, [FIXTURE_MODE]: "synthetic", [STORAGE_LOCATION_LABEL]: "default" },
+    },
+    spec: { ...(made.spec as Record<string, unknown>), hooks: {}, metadata: {} },
+  });
+
+  return [
+    { apiVersion: "v1", kind: "Namespace", metadata: { name: DEMO_NAMESPACE, labels } },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "BackupStorageLocation",
+      metadata: metadata("default"),
+      spec: {
+        default: true,
+        provider: "aws",
+        objectStorage: { bucket: BUCKET },
+        config: { region: "us-east-1", s3ForcePathStyle: "true", s3Url: STORAGE_ENDPOINT },
+      },
+      status: { phase: "Available", lastValidationTime: time(validated), lastSyncedTime: time(validated) },
+    },
+    {
+      ...liveSchedule(owner, run),
+      metadata: metadata(names.realSchedule),
+      spec: { ...(liveSchedule(owner, run).spec as Record<string, unknown>), skipImmediately: false },
+      status: { phase: "Enabled" },
+    },
+    backup,
+    restore(liveRestore(owner, run), restored(CONTROLLERS_TOOK.restore, ITEMS_OF_THE_RUN.configMaps)),
+    prepared(liveVolumeBackup(owner, run), taken(CONTROLLERS_TOOK.volumeBackup, ITEMS_OF_THE_RUN.volume)),
+    restore(liveVolumeRestore(owner, run), restored(CONTROLLERS_TOOK.volumeRestore, ITEMS_OF_THE_RUN.volume)),
+    prepared(refused.backup, {
+      phase: "FailedValidation",
+      validationErrors: [...REFUSALS_OF_THE_SERVER.backup],
+      expiration: time(validated + CONTROLLERS_TOOK.refused + retention),
+      formatVersion: "1.1.0",
+      version: 1,
+    }),
+    restore(refused.restore, { phase: "FailedValidation", validationErrors: [...REFUSALS_OF_THE_SERVER.restore] }),
+    restore(refused.orphan, { phase: "FailedValidation", validationErrors: [...REFUSALS_OF_THE_SERVER.orphan] }),
+    syncedByTheServer(synced.synced),
+    syncedByTheServer(synced.withoutLog),
+  ];
+}
+
+// The installation of the environment of the CRDs alone, each object with its status read back as it was asked.
+export function createInstallationFixtures(
+  runtime: FixtureRuntime,
+  run: string,
+  validated: number,
+  cluster: ServerVersion,
+): KubeResource[] {
+  return createWithStatus(runtime, installationFixtures(runtime.owner, run, validated, cluster));
+}
+
+// What the server of the release writes into the storage location of its installation once a minute, and the
+// environment of the CRDs alone has no server to write: the time of a validation
+// (`pkg/controller/backup_storage_location_controller.go:223`, once a minute by default,
+// `pkg/cmd/server/config/config.go:27`) and the time of a sync (`pkg/controller/backup_sync_controller.go:270`, once a
+// minute, `config.go:26`). The runner of the views writes them before the suites start and once a minute while they
+// run, so that the location reads as one a server validates; the guard of the suites leaves the PATCH of the storage
+// locations out of the writes, as it does where the server sends it. Nothing else of the installation is written, which
+// the suites prove by the versions of its objects.
+export function validateTheLocation(runtime: FixtureRuntime, now: number): void {
+  requireCondition(Number.isFinite(now), "The time of the validation is required");
+  const at = new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z");
+
+  runtime.kubectl([
+    "patch",
+    "backupstoragelocations.velero.io",
+    "default",
+    "--namespace",
+    DEMO_NAMESPACE,
+    "--type=merge",
+    "--patch",
+    JSON.stringify({ status: { lastValidationTime: at, lastSyncedTime: at } }),
+  ]);
 }
 
 // An object is created without its status and gets it with a change that names its uid and its version:
@@ -1637,15 +2765,21 @@ export const SUBMISSIONS_AT_ONCE = 50;
 // The phase and the last submission of each schedule created then are read back with the rest: the views read
 // them, and a cluster that did not keep them as they were written is refused, as is a schedule found with no phase
 // at a later call.
+//
+// The long lists are created in two phases by their owners, and nothing else is: the backups and the restores first,
+// then the pod volume backups, made with the UIDs the cluster gave the backups (see `scaleFixtures`), in one create.
+// They are removed first as well, and read until they are gone, before the rest: removed with their owners, they
+// would be left to the collector of the cluster.
 export function placeByTheClock(
   runtime: FixtureRuntime,
   run: string,
   namespace: string,
   now: number,
-  make: (placed: number, submissions?: Submissions) => KubeResource[],
-  twoPhases = false,
+  make: (placed: number, submissions?: Submissions, owners?: Record<string, string>) => KubeResource[],
+  placement: Placement = "one phase",
 ): { placed: number; count: number; again: boolean } {
   const names = fixtureNames(run);
+  const twoPhases = placement === "submissions";
 
   // The other namespaces of the run hold fixtures whose times are fixed, with the labels of the run: they
   // would be removed with what is placed by the clock.
@@ -1653,16 +2787,22 @@ export function placeByTheClock(
     [names.overview, names.scale, names.adherence, names.adherenceSplit, names.adherenceScale].includes(namespace),
     "Refusing to place fixtures outside the namespaces that are placed by the clock",
   );
+  // What is made for now, once: the long lists are four thousand objects.
+  const fixtures = make(now);
+
   requireCondition(
-    make(now).every((resource) => resource.metadata.namespace === namespace),
+    fixtures.every((resource) => resource.metadata.namespace === namespace),
     `Refusing to place in ${namespace} what is made for another namespace`,
   );
+  const adherence = [names.adherence, names.adherenceSplit, names.adherenceScale].includes(namespace);
+
   requireCondition(
-    twoPhases === [names.adherence, names.adherenceSplit, names.adherenceScale].includes(namespace),
-    `Refusing to place ${namespace} in ${twoPhases ? "two phases" : "one phase"}: the installations of the ` +
-      "adherence are placed in two phases, and no other namespace is",
+    placement === (adherence ? "submissions" : namespace === names.scale ? "owners" : "one phase"),
+    `Refusing to place ${namespace} ${PLACEMENTS[placement]}: the installations of the adherence are placed in two ` +
+      "phases by the clock of their submissions, the long lists in two phases by their owners, and no other " +
+      "namespace in two",
   );
-  const submitted = make(now)
+  const submitted = fixtures
     .filter((resource) => resource.kind === "Backup")
     .map((backup) => backup.metadata.labels?.["velero.io/schedule-name"] ?? "");
 
@@ -1693,19 +2833,24 @@ export function placeByTheClock(
       600_000,
       false,
     );
-  const kinds = [...new Set(make(now).map((resource) => `${resource.kind}.velero.io`.toLowerCase()))].sort();
-  const listed = () =>
+  const kinds = [...new Set(fixtures.map((resource) => `${resource.kind}.velero.io`.toLowerCase()))].sort();
+  const listed = (of = kinds) =>
     (
       JSON.parse(
-        runtime.kubectl(["get", kinds.join(","), "--namespace", namespace, "-o", "json"], undefined, undefined, false),
+        runtime.kubectl(["get", of.join(","), "--namespace", namespace, "-o", "json"], undefined, undefined, false),
       ) as { items: (KubeResource & { status?: { phase?: string } })[] }
     ).items;
+  // What is removed first, and read until it is gone, before the rest.
+  const dependents =
+    placement === "owners"
+      ? kinds.filter((kind) => kind === "podvolumebackup.velero.io" || kind === "dataupload.velero.io")
+      : [];
   const times = (items: KubeResource[]) =>
     items.map((item) => Date.parse(item.metadata.annotations?.[PLACED_ANNOTATION] ?? ""));
   const before = listed();
   let made: KubeResource[] = [];
   const good =
-    before.length === make(now).length &&
+    before.length === fixtures.length &&
     before.every((item) => item.metadata.annotations?.[SHAPE_ANNOTATION] === shape) &&
     times(before).every((time) => Number.isFinite(time) && time <= now && now - time <= PLACED_FOR);
 
@@ -1719,13 +2864,13 @@ export function placeByTheClock(
       ),
       "The namespace holds what is not of this run; nothing is removed",
     );
-    if (before.length) {
-      // The client waits for what it removed one object at a time, which is minutes for two thousand:
-      // it is asked not to, and the namespace is read until nothing of it is left.
+    // The client waits for what it removed one object at a time, which is minutes for two thousand:
+    // it is asked not to, and the namespace is read until nothing of it is left.
+    for (const removing of before.length ? (dependents.length ? [dependents, kinds] : [kinds]) : []) {
       runtime.kubectl(
         [
           "delete",
-          kinds.join(","),
+          removing.join(","),
           "--namespace",
           namespace,
           "--selector",
@@ -1738,7 +2883,7 @@ export function placeByTheClock(
       );
       const started = Date.now();
 
-      for (let left = listed().length; left > 0; left = listed().length) {
+      for (let left = listed(removing).length; left > 0; left = listed(removing).length) {
         requireCondition(
           Date.now() - started < REMOVAL_TIMEOUT,
           `${left} fixtures of ${namespace} are still there after they were removed`,
@@ -1747,13 +2892,14 @@ export function placeByTheClock(
       }
     }
     if (twoPhases) made = createInTwoPhases(runtime, namespace, make, create);
-    else create(make(now));
+    else if (placement === "owners") createAfterOwners(runtime, namespace, now, fixtures, make, create);
+    else create(fixtures);
   }
   const found = listed();
   const placed = Math.min(...times(found));
 
   requireCondition(
-    found.length === make(now).length &&
+    found.length === fixtures.length &&
       found.every(
         (item) =>
           item.metadata.labels?.[OWNER_LABEL] === runtime.owner &&
@@ -1784,6 +2930,46 @@ export function placeByTheClock(
     );
   }
   return { placed, count: found.length, again: !good && before.length > 0 };
+}
+
+// How a namespace placed by the clock is created: in one phase; in two by the clock of their submissions, the
+// installations of the adherence; in two by their owners, the long lists.
+export type Placement = "one phase" | "submissions" | "owners";
+
+const PLACEMENTS: Record<Placement, string> = {
+  "one phase": "in one phase",
+  submissions: "in two phases by the clock of their submissions",
+  owners: "in two phases by their owners",
+};
+
+// The two phases of a placement of the long lists, in a namespace that holds nothing of the run: what is not a pod
+// volume backup first, then the pod volume backups, made with the UIDs the cluster gave their backups, which are
+// read back once, in one create. A backup that is not there is refused by what makes them.
+function createAfterOwners(
+  runtime: FixtureRuntime,
+  namespace: string,
+  now: number,
+  fixtures: KubeResource[],
+  make: (placed: number, submissions?: Submissions, owners?: Record<string, string>) => KubeResource[],
+  create: (items: KubeResource[]) => void,
+): void {
+  const isOperation = (resource: KubeResource) => resource.kind === "PodVolumeBackup" || resource.kind === "DataUpload";
+
+  create(fixtures.filter((resource) => !isOperation(resource)));
+  const owners = Object.fromEntries(
+    (
+      JSON.parse(
+        runtime.kubectl(
+          ["get", "backups.velero.io", "--namespace", namespace, "-o", "json"],
+          undefined,
+          undefined,
+          false,
+        ),
+      ) as { items: KubeResource[] }
+    ).items.map((backup) => [backup.metadata.name, String(backup.metadata.uid ?? "")]),
+  );
+
+  create(make(now, undefined, owners).filter(isOperation));
 }
 
 // The two phases of a placement of backups of submissions, in a namespace that holds nothing of the run. Each backup
@@ -1884,7 +3070,7 @@ export function placeAdherenceFixtures(
         namespace,
         clock(),
         (at, submissions) => fixtures(runtime.owner, run, at, submissions),
-        true,
+        "submissions",
       ),
     };
   });
@@ -1905,7 +3091,16 @@ export function createViewFixtures(
   run: string,
   started: number,
   now = started,
-): { views: number; overview: number; scale: number; restores: number; again: string[] } {
+): {
+  views: number;
+  operations: number;
+  overview: number;
+  scale: number;
+  restores: number;
+  scaleOperations: number;
+  scaleDataUploads: number;
+  again: string[];
+} {
   const names = fixtureNames(run);
   // The newest backup of the schedule with a history goes first, after the namespaces: the time it was
   // created is the last submission of its schedule. A second call finds the backup, and asks for the
@@ -1921,6 +3116,8 @@ export function createViewFixtures(
 
   requireCondition(Number.isFinite(submitted), "The newest backup of the history has the time it was created");
   const views = createWithStatus(runtime, viewFixtures(runtime.owner, run, started, submitted));
+  // The pod volume operations of the views go after their owners, with the UIDs the cluster gave them.
+  const operations = createWithStatus(runtime, viewOperationFixtures(runtime.owner, run, started, views));
   const labels = { [OWNER_LABEL]: runtime.owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
 
   runtime.apply(scaleFixtures(runtime.owner, run, now).namespace);
@@ -1928,17 +3125,27 @@ export function createViewFixtures(
   const overview = placeByTheClock(runtime, run, names.overview, now, (placed) =>
     overviewFixtures(runtime.owner, run, placed),
   );
-  const scale = placeByTheClock(runtime, run, names.scale, now, (placed) => {
-    const made = scaleFixtures(runtime.owner, run, placed);
+  const scale = placeByTheClock(
+    runtime,
+    run,
+    names.scale,
+    now,
+    (placed, _submissions, owners) => {
+      const made = scaleFixtures(runtime.owner, run, placed, owners);
 
-    return [...made.backups, ...made.restores];
-  });
+      return [...made.backups, ...made.restores, ...made.operations, ...made.dataUploads];
+    },
+    "owners",
+  );
 
   return {
     views: views.length,
+    operations: operations.length,
     overview: overview.count,
     scale: SCALE_BACKUPS,
-    restores: scale.count - SCALE_BACKUPS,
+    restores: scale.count - SCALE_BACKUPS - SCALE_OPERATIONS - SCALE_DATA_UPLOADS,
+    scaleOperations: SCALE_OPERATIONS,
+    scaleDataUploads: SCALE_DATA_UPLOADS,
     again: [...(overview.again ? [names.overview] : []), ...(scale.again ? [names.scale] : [])],
   };
 }
@@ -2887,9 +4094,10 @@ export function proofIdentities(
 // The identity of the views that may not port-forward, which the runner of the suites makes for as long as
 // they run: an account of the namespace of the installation, of the run, with a role of that namespace. It
 // reads what the views and a download read of the installation at every read, the backup repositories among
-// it, creates and reads a DownloadRequest there, and reads the route to the store, its Service, its endpoint
-// slices and its Pod. It has neither verb of the port-forward, get nor create, and reads no Secret: a load of a
-// log is refused at the port-forward, once its request is in the cluster.
+// it, and the pod volume operations and the data movement, which the view of a backup and of a restore asks
+// when it opens, for the band of its volumes; it creates and reads a DownloadRequest there, and reads the route
+// to the store, its Service, its endpoint slices and its Pod. It has neither verb of the port-forward, get nor
+// create, and reads no Secret: a load of a log is refused at the port-forward, once its request is in the cluster.
 export function viewIdentityWithoutPortForward(owner: string, run: string): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
   fixtureNames(run);
@@ -2916,6 +4124,10 @@ export function viewIdentityWithoutPortForward(owner: string, run: string): Kube
             "backupstoragelocations",
             "volumesnapshotlocations",
             "backuprepositories",
+            "podvolumebackups",
+            "podvolumerestores",
+            "datauploads",
+            "datadownloads",
           ],
           verbs: ["get", "list", "watch"],
         },
@@ -2938,9 +4150,10 @@ export function viewIdentityWithoutPortForward(owner: string, run: string): Kube
 // suites makes for as long as they run: an account of the namespace of the installation, of the run, with a
 // role of that namespace. It has what the documentation lists for the writes and for a download through the
 // cluster: it reads what the views read of the installation at every read, the backup repositories among it,
-// creates and reads the two requests the gate lets through, reads the Service of the store, its endpoint slices
-// and its Pod, and may create a port-forward. It reads no Secret: the storage location of the demo refers to none
-// for its certificate.
+// and the pod volume operations and the data movement, which the view of a backup and of a restore asks when
+// it opens, for the band of its volumes; it creates and reads the two requests the gate lets through, reads the
+// Service of the store, its endpoint slices and its Pod, and may create a port-forward. It reads no Secret: the
+// storage location of the demo refers to none for its certificate.
 export function viewIdentityOfAnExecPlugin(owner: string, run: string): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
   fixtureNames(run);
@@ -2967,6 +4180,10 @@ export function viewIdentityOfAnExecPlugin(owner: string, run: string): KubeReso
             "backupstoragelocations",
             "volumesnapshotlocations",
             "backuprepositories",
+            "podvolumebackups",
+            "podvolumerestores",
+            "datauploads",
+            "datadownloads",
           ],
           verbs: ["get", "list", "watch"],
         },
@@ -2988,6 +4205,208 @@ export function viewIdentityOfAnExecPlugin(owner: string, run: string): KubeReso
       subjects: [{ kind: "ServiceAccount", name, namespace: DEMO_NAMESPACE }],
     },
   ];
+}
+
+// The two roles of the README (REQ-297 of SPEC-0018), each held by an identity of the test environment (REQ-288): the
+// reader, for the views alone, and the operator, for the views, the tabs, a download through the cluster, the version of
+// the server and every action. Each is a Role in the namespace of the installation, for what is namespaced, and a
+// ClusterRole for the one read of the whole cluster, the storage locations, whose namespaces are where an installation
+// may be. No verb is one the code does not send: the views list, and read nothing by its name; the main process reads by
+// name, creates, patches the schedules, lists two kinds by a label, and opens a port-forward through the kubectl of the
+// host. The README writes the roles as `rolesAsWritten` renders them, and a unit case keeps the two equal (DOC-03).
+export const README_READER = "velero-reader";
+export const README_OPERATOR = "velero-operator";
+export type ReadmeRole = "reader" | "operator";
+
+export interface PolicyRule {
+  apiGroups: string[];
+  resources: string[];
+  verbs: string[];
+}
+
+// The families the views list in the namespace of an installation, one request each (`src/common/paths.ts`).
+const LISTED_FAMILIES = [
+  "backups",
+  "restores",
+  "schedules",
+  "backupstoragelocations",
+  "volumesnapshotlocations",
+  "backuprepositories",
+  "podvolumebackups",
+  "podvolumerestores",
+  "datauploads",
+  "datadownloads",
+];
+
+export const ROLE_RULES: Readonly<Record<ReadmeRole, readonly PolicyRule[]>> = {
+  reader: [{ apiGroups: ["velero.io"], resources: LISTED_FAMILIES, verbs: ["list"] }],
+  operator: [
+    // Listed by the views; read by name by the tabs, the actions and the reads after a creation; created by the actions.
+    { apiGroups: ["velero.io"], resources: ["backups", "restores"], verbs: ["get", "list", "create"] },
+    // The same, and patched by Pause and Resume.
+    { apiGroups: ["velero.io"], resources: ["schedules"], verbs: ["get", "list", "create", "patch"] },
+    // The location of a backup a tab reads, and the locations a template names.
+    {
+      apiGroups: ["velero.io"],
+      resources: ["backupstoragelocations", "volumesnapshotlocations"],
+      verbs: ["get", "list"],
+    },
+    {
+      apiGroups: ["velero.io"],
+      resources: ["backuprepositories", "podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"],
+      verbs: ["list"],
+    },
+    // The requests of the tabs and of the version of the server, created and read until the server answers.
+    { apiGroups: ["velero.io"], resources: ["downloadrequests", "serverstatusrequests"], verbs: ["create", "get"] },
+    // Delete backup: the request created, read by its name, and the requests of the backup listed by its labels.
+    { apiGroups: ["velero.io"], resources: ["deletebackuprequests"], verbs: ["create", "get", "list"] },
+    // A download through the cluster: the Service of the store, its Pod, the port-forward of the kubectl of the host to
+    // that Pod, and the endpoint slices of the Service.
+    { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+    { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
+    { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+  ],
+};
+
+// What both roles read in the whole cluster: the storage locations, whose namespaces the views suggest.
+export const CLUSTER_RULES: readonly PolicyRule[] = [
+  { apiGroups: ["velero.io"], resources: ["backupstoragelocations"], verbs: ["list"] },
+];
+
+// An identity of the test environment that holds a role of the README, bound as an operator would bind it: an account of
+// the namespace of the installation, the Role of that namespace and its binding, and the ClusterRole and its binding,
+// all of this run, so that the runner removes each by the identity the cluster gives it. The ClusterRole and its binding
+// are of the whole cluster, and their names carry the run.
+export function readmeIdentity(role: ReadmeRole, owner: string, run: string, namespace: string): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  fixtureNames(run);
+  requireCondition(role === "reader" || role === "operator", "A role of the README is the reader or the operator");
+  requireCondition(
+    typeof namespace === "string" && namespace.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace),
+    "An identity of a role of the README is of the namespace of an installation",
+  );
+  const name = `${role === "reader" ? README_READER : README_OPERATOR}-${run}`;
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+  const rbac = "rbac.authorization.k8s.io";
+  const subject = { kind: "ServiceAccount", name, namespace };
+
+  return [
+    {
+      apiVersion: "v1",
+      kind: "ServiceAccount",
+      metadata: { name, namespace, labels: { ...labels } },
+      automountServiceAccountToken: false,
+    },
+    {
+      apiVersion: `${rbac}/v1`,
+      kind: "Role",
+      metadata: { name, namespace, labels: { ...labels } },
+      rules: structuredClone(ROLE_RULES[role]),
+    },
+    {
+      apiVersion: `${rbac}/v1`,
+      kind: "RoleBinding",
+      metadata: { name, namespace, labels: { ...labels } },
+      roleRef: { apiGroup: rbac, kind: "Role", name },
+      subjects: [{ ...subject }],
+    },
+    {
+      apiVersion: `${rbac}/v1`,
+      kind: "ClusterRole",
+      metadata: { name, labels: { ...labels } },
+      rules: structuredClone(CLUSTER_RULES),
+    },
+    {
+      apiVersion: `${rbac}/v1`,
+      kind: "ClusterRoleBinding",
+      metadata: { name, labels: { ...labels } },
+      roleRef: { apiGroup: rbac, kind: "ClusterRole", name },
+      subjects: [{ ...subject }],
+    },
+  ];
+}
+
+// The path an account, a role or a binding a run applied is removed by: a ServiceAccount, a Role and a RoleBinding of the
+// namespace they name, a ClusterRole and a ClusterRoleBinding of the whole cluster, and nothing else.
+export function accountPath(kind: string, name: string, namespace: string | undefined): string {
+  const rbac = "/apis/rbac.authorization.k8s.io/v1";
+  const word = /^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/;
+
+  requireCondition(typeof name === "string" && word.test(name), `The ${kind} of a run has a name`);
+  if (kind === "ClusterRole" || kind === "ClusterRoleBinding") {
+    requireCondition(namespace === undefined, `The ${kind} ${name} is of the whole cluster, and of no namespace`);
+    return `${rbac}/${kind === "ClusterRole" ? "clusterroles" : "clusterrolebindings"}/${name}`;
+  }
+  requireCondition(
+    typeof namespace === "string" && word.test(namespace),
+    `The ${kind} ${name} of a run names its namespace`,
+  );
+  if (kind === "ServiceAccount") return `/api/v1/namespaces/${namespace}/serviceaccounts/${name}`;
+  requireCondition(
+    kind === "Role" || kind === "RoleBinding",
+    `The ${kind} ${name} is not an account, a role or a binding`,
+  );
+  return `${rbac}/namespaces/${namespace}/${kind === "Role" ? "roles" : "rolebindings"}/${name}`;
+}
+
+// A word of a role as YAML takes it unquoted: a group, a resource or a verb.
+const PLAIN = /^[a-z][a-z0-9./-]*$/;
+
+// The roles of an identity as the README writes them (DOC-03 of SPEC-0018): its Role, in the namespace the README names,
+// then `---` and its ClusterRole, each under the name the README gives the role, with the rules the identity holds, in
+// their order. The groups and the verbs of a rule are a list on one line, and its resources one to a line. Written here
+// and compared as text: no parser of YAML stands between the README and the identities.
+export function rolesAsWritten(identity: KubeResource[], name: string, namespace: string): string {
+  const one = (kind: "Role" | "ClusterRole") => {
+    const found = identity.filter((resource) => resource.kind === kind);
+
+    requireCondition(found.length === 1, `An identity of a role of the README holds one ${kind}`);
+    return found[0] as KubeResource & { rules?: PolicyRule[] };
+  };
+  const listed = (values: string[], groups = false) => {
+    requireCondition(
+      Array.isArray(values) &&
+        values.length > 0 &&
+        values.every((value) => (groups && value === "") || PLAIN.test(value)),
+      "A rule of a role of the README names its groups, its resources and its verbs by plain words",
+    );
+    return `[${values.map((value) => JSON.stringify(value)).join(", ")}]`;
+  };
+  const rules = (written: PolicyRule[] | undefined) => {
+    requireCondition(Array.isArray(written) && written.length > 0, "A role of the README has rules");
+    return written.flatMap((rule) => {
+      const groups = listed(rule.apiGroups, true);
+      const verbs = listed(rule.verbs);
+
+      listed(rule.resources);
+      return [
+        `  - apiGroups: ${groups}`,
+        "    resources:",
+        ...rule.resources.map((resource) => `      - ${resource}`),
+        `    verbs: ${verbs}`,
+      ];
+    });
+  };
+  const role = one("Role");
+  const cluster = one("ClusterRole");
+
+  requireCondition(PLAIN.test(name) && PLAIN.test(namespace), "The README names a role and a namespace by plain words");
+  return [
+    `apiVersion: ${role.apiVersion}`,
+    "kind: Role",
+    "metadata:",
+    `  name: ${name}`,
+    `  namespace: ${namespace}`,
+    "rules:",
+    ...rules(role.rules),
+    "---",
+    `apiVersion: ${cluster.apiVersion}`,
+    "kind: ClusterRole",
+    "metadata:",
+    `  name: ${name}`,
+    "rules:",
+    ...rules(cluster.rules),
+  ].join("\n");
 }
 
 // What the release writes when it refuses each of them, as the controller of each says it.
@@ -3427,7 +4846,7 @@ export function placementWords(
   const again = [...views.again, ...adherence.again];
 
   return [
-    `PASS: ${views.views} objects of the views in ${names.views} and ${names.defaults}, ${views.overview} of the Overview in ${names.overview}, and ${views.scale} backups and ${views.restores} restores of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
+    `PASS: ${views.views} objects of the views in ${names.views} and ${names.defaults}, ${views.overview} of the Overview in ${names.overview}, and ${views.scale} backups, ${views.restores} restores, ${views.scaleOperations} pod volume backups and ${views.scaleDataUploads} data uploads of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
     `PASS: ${adherence.states} objects of the adherence in ${names.adherence}, ${adherence.split} in ${names.adherenceSplit} and ${adherence.budget} in ${names.adherenceScale}, the backups of their submissions named by the clock of their placement, are in place, outside the reach of the controllers.`,
     ...(again.length
       ? [`NOTE: the fixtures that are placed by the clock were put in place again in ${listed(again)}.`]
@@ -3868,6 +5287,8 @@ export function tabFixtureFacts(runtime: FixtureRuntime, run: string, expected: 
 const CLEAR_ROUNDS = 3;
 const DELETION_TIMEOUT = 180_000;
 const DELETION_POLL = 1000;
+// The sync of the repositories, five minutes, and a minute for the check it makes.
+const REPOSITORY_TIMEOUT = 360_000;
 // The phases of a backup the server deletes when it is asked to: the ones it ended in, and the one it was
 // left in by a deletion that did not end, which is asked for again.
 const DELETABLE = ["Completed", "PartiallyFailed", "Failed", "FailedValidation", "Deleting"];
@@ -3976,6 +5397,39 @@ function backupRemoval(
       pause(runtime, DELETION_POLL);
     }
   };
+  // The server forgets the snapshots of the pod volume backups of a backup through the repository of their
+  // volume namespace, and refuses at once a repository that is not Ready (`pkg/repository/ensurer.go:118-141`
+  // and `pkg/repository/backup_repo_op.go:81-83` of the source of Velero v1.18.4); a change of the storage
+  // location makes every repository of that location NotReady until the controller establishes it again
+  // (`pkg/controller/backup_repository_controller.go:114-160` and `579-608`), as the transport proof does
+  // twice. A check that failed is made again by the sync, five minutes later (`repoSyncPeriod`, line 54). So
+  // the repository of that namespace is read again until it is Ready, and nothing else is asked meanwhile, six
+  // minutes at most; one that is not there is left to the server, which makes it.
+  const repositoryReady = (volumeNamespace: string, backups: string[]) => {
+    const since = elapsed();
+    const ofTheVolume = (item: KubeResource) =>
+      item.metadata.labels?.[REPOSITORY_LABELS.volumeNamespace] === volumeNamespace &&
+      item.metadata.labels?.[REPOSITORY_LABELS.location] === "default" &&
+      item.metadata.labels?.[REPOSITORY_LABELS.type] === "kopia";
+
+    for (;;) {
+      const repository = (
+        JSON.parse(
+          runtime.kubectl(["get", "backuprepositories.velero.io", "--namespace", DEMO_NAMESPACE, "-o", "json"]),
+        ) as { items: KubeResource[] }
+      ).items.find(ofTheVolume);
+      const phase = phaseOf(repository);
+
+      if (!repository || phase === "Ready") return;
+      requireCondition(
+        elapsed() - since < REPOSITORY_TIMEOUT,
+        `The repository ${repository.metadata.name} is ${phase ?? "in no phase"}, and the server forgets no ` +
+          `snapshot through a repository that is not Ready: the deletion of ${backups.join(" and ")} was not ` +
+          `asked in ${REPOSITORY_TIMEOUT / 60_000} minutes. Run the command again once the repository is Ready.`,
+      );
+      pause(runtime, DELETION_POLL);
+    }
+  };
   // Has the server delete a backup that is there, and waits until that backup is gone, or until the one of
   // its name is another, which the server created since.
   //
@@ -4062,7 +5516,22 @@ function backupRemoval(
     withdraw(name, found);
   };
 
-  return { down, request, kinds, read, one, phaseOf, ofTheRun, entry, forget, deletable, available, deletes, settle };
+  return {
+    down,
+    request,
+    kinds,
+    read,
+    one,
+    phaseOf,
+    ofTheRun,
+    entry,
+    forget,
+    deletable,
+    available,
+    repositoryReady,
+    deletes,
+    settle,
+  };
 }
 
 // Removes the fixtures of the tabs: the two backups the server created from the store, and with them the
@@ -4395,7 +5864,7 @@ export function removeFixtureBackup(
   const { journal } = runtime;
 
   requireCondition(
-    [names.backup, names.invalidBackup].includes(name),
+    [names.backup, names.invalidBackup, names.volumeBackup].includes(name),
     "Only a backup the scripts created for the run is removed this way",
   );
   requireCondition(
@@ -4437,6 +5906,8 @@ export function removeFixtureBackup(
       carried = now;
       continue;
     }
+    // The pod volume backups of the backup of the volume hold the snapshots the server forgets with it.
+    if (name === names.volumeBackup) removal.repositoryReady(names.source, [name]);
     asked += 1;
     removal.deletes(items, backup, replaced);
   }
@@ -4461,18 +5932,30 @@ export function assertFixtureOperationsRemoved(runtime: FixtureRuntime, run: str
       "journal of the objects of the run",
   );
   const store = runtime.store.bind(runtime);
-  const deletions = [names.backup, names.invalidBackup, names.syncedBackup, names.syncedBackupWithoutLog];
+  const deletions = [
+    names.backup,
+    names.invalidBackup,
+    names.volumeBackup,
+    names.syncedBackup,
+    names.syncedBackupWithoutLog,
+  ];
   const operations = [
     ...deletions.map((name) => ["Backup", name] as const),
-    ...[names.restore, names.invalidRestore, names.orphanRestore].map((name) => ["Restore", name] as const),
+    ...[names.restore, names.invalidRestore, names.orphanRestore, names.volumeRestore].map(
+      (name) => ["Restore", name] as const,
+    ),
     ...deletions.map((name) => ["DeleteBackupRequest", `${name}-delete`] as const),
     ["Schedule", names.realSchedule] as const,
   ];
+  // One read of the installation: the operations of the run by their names, and what the server and the node
+  // agent made for the volume of the run, each by what they write into it, the pod volume operations by the labels
+  // of the names of their owners, and the repository by its three labels.
   const items = (
     JSON.parse(
       runtime.kubectl([
         "get",
-        "backups.velero.io,restores.velero.io,deletebackuprequests.velero.io,schedules.velero.io",
+        "backups.velero.io,restores.velero.io,deletebackuprequests.velero.io,schedules.velero.io," +
+          "podvolumebackups.velero.io,podvolumerestores.velero.io,backuprepositories.velero.io",
         "--namespace",
         DEMO_NAMESPACE,
         "-o",
@@ -4480,7 +5963,20 @@ export function assertFixtureOperationsRemoved(runtime: FixtureRuntime, run: str
       ]),
     ) as { items: KubeResource[] }
   ).items;
+  const made = items.filter((item) => {
+    const labels = item.metadata.labels ?? {};
+
+    return (
+      (item.kind === "PodVolumeBackup" && labels["velero.io/backup-name"] === names.volumeBackup) ||
+      (item.kind === "PodVolumeRestore" && labels["velero.io/restore-name"] === names.volumeRestore) ||
+      (item.kind === "BackupRepository" &&
+        labels[REPOSITORY_LABELS.volumeNamespace] === names.source &&
+        labels[REPOSITORY_LABELS.location] === "default" &&
+        labels[REPOSITORY_LABELS.type] === "kopia")
+    );
+  });
   const there = [
+    ...made.map((item) => `the ${item.kind} ${item.metadata.name}`),
     ...operations
       .filter(([kind, name]) => items.some((item) => item.kind === kind && item.metadata.name === name))
       .map(([kind, name]) => `the ${kind} ${name}`),
@@ -4542,7 +6038,13 @@ async function waitCompleted(runtime: FixtureRuntime, expected: KubeResource): P
 export async function runLiveFixtures(
   runtime: FixtureRuntime,
   run: string,
-): Promise<{ configMaps: number; payloadBytes: number; backup: KubeResource; restore: KubeResource }> {
+): Promise<{
+  configMaps: number;
+  payloadBytes: number;
+  backup: KubeResource;
+  restore: KubeResource;
+  volume: VolumeRecord;
+}> {
   const names = fixtureNames(run);
   const labels = { [OWNER_LABEL]: runtime.owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
 
@@ -4598,5 +6100,585 @@ export async function runLiveFixtures(
       "Large restored fixture content differs",
     );
   }
-  return { configMaps: expected.size + 1, payloadBytes, backup, restore };
+  const volume = runLiveVolume(runtime, run);
+
+  return { configMaps: expected.size + 1, payloadBytes, backup, restore, volume };
+}
+
+// The volume of a run (REQ-195 of SPEC-0014): the bytes its pod writes, the name of its volume, and how long each
+// part of its flow is given, read once a second.
+export const VOLUME_NAME = "data";
+export const VOLUME_BYTES = 1024 * 1024;
+const VOLUME_CONTAINER = "volume";
+const VOLUME_TIMEOUT = 180_000;
+const VOLUME_POLL = 1000;
+// The labels the release writes into the repository of a volume namespace, a storage location and an uploader: the
+// repository is found by them, never by its name, which the release says it may change.
+export const REPOSITORY_LABELS = {
+  volumeNamespace: "velero.io/volume-namespace",
+  location: "velero.io/storage-location",
+  type: "velero.io/repository-type",
+} as const;
+
+// What the container of the volume runs: when the volume holds no bytes it writes a megabyte of random bytes and
+// their checksum, then it prints the checksum written, the checksum of what the volume holds and its size, and
+// waits. The restored pod runs the same command, and prints what the restore put into its volume.
+export const VOLUME_SCRIPT = [
+  "set -eu",
+  "cd /data",
+  `if [ ! -f bytes ]; then head -c ${VOLUME_BYTES} /dev/urandom > bytes; sha256sum bytes | cut -d " " -f 1 > written; fi`,
+  'echo "written $(cat written)"',
+  'echo "held $(sha256sum bytes | cut -d " " -f 1)"',
+  'echo "size $(wc -c < bytes | tr -d " ")"',
+  "while true; do sleep 3600; done",
+].join("; ");
+
+export function liveVolumePod(owner: string, run: string): KubeResource {
+  const names = fixtureNames(run);
+
+  requireCondition(owner, "Fixture ownership is required");
+  return {
+    apiVersion: "v1",
+    kind: "Pod",
+    metadata: {
+      name: names.volumePod,
+      namespace: names.source,
+      labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+      // The volume the file system backup of the release takes from this pod, by the annotation alone: the
+      // backup does not back up every volume by default.
+      annotations: { "backup.velero.io/backup-volumes": VOLUME_NAME },
+    },
+    spec: {
+      automountServiceAccountToken: false,
+      terminationGracePeriodSeconds: 1,
+      containers: [
+        {
+          name: VOLUME_CONTAINER,
+          // The image of the store, which the node holds: it is never pulled.
+          image: preloadedImage(IMAGES.storage),
+          imagePullPolicy: "Never",
+          command: ["sh", "-c", VOLUME_SCRIPT],
+          volumeMounts: [{ name: VOLUME_NAME, mountPath: "/data" }],
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } },
+        },
+      ],
+      volumes: [{ name: VOLUME_NAME, emptyDir: {} }],
+    },
+  };
+}
+
+export function liveVolumeBackup(owner: string, run: string): KubeResource {
+  const names = fixtureNames(run);
+
+  requireCondition(owner, "Fixture ownership is required");
+  return {
+    apiVersion: "velero.io/v1",
+    kind: "Backup",
+    metadata: {
+      name: names.volumeBackup,
+      namespace: DEMO_NAMESPACE,
+      labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+    },
+    spec: {
+      includedNamespaces: [names.source],
+      includedResources: ["pods"],
+      labelSelector: { matchLabels: { [FIXTURE_LABEL]: run } },
+      includeClusterResources: false,
+      storageLocation: "default",
+      snapshotVolumes: false,
+      // The annotation of the pod names the volume.
+      defaultVolumesToFsBackup: false,
+      ttl: LIVE_RETENTION,
+    },
+  };
+}
+
+export function liveVolumeRestore(owner: string, run: string): KubeResource {
+  const names = fixtureNames(run);
+
+  requireCondition(owner, "Fixture ownership is required");
+  return {
+    apiVersion: "velero.io/v1",
+    kind: "Restore",
+    metadata: {
+      name: names.volumeRestore,
+      namespace: DEMO_NAMESPACE,
+      labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+    },
+    // Pods only: the release restores the volumes of a pod it restores whose pod volume backups hold a snapshot,
+    // whatever else the restore leaves out (pkg/restore/restore.go:2046-2055 and pkg/podvolume/util.go:75-102 of
+    // the release; an emptyDir names no claim, pkg/podvolume/restorer.go:174-193).
+    spec: {
+      backupName: names.volumeBackup,
+      includedNamespaces: [names.source],
+      includedResources: ["pods"],
+      namespaceMapping: { [names.source]: names.restored },
+      includeClusterResources: false,
+      existingResourcePolicy: "none",
+    },
+  };
+}
+
+// The checksums and the size the container of the volume printed, or nothing when its log does not hold them yet.
+export function volumeLog(log: string): { written: string; held: string; size: number } | undefined {
+  const line = (word: string) => new RegExp(`^${word} (\\S+)$`, "m").exec(log)?.[1] ?? "";
+  const [written, held, size] = [line("written"), line("held"), Number(line("size"))];
+
+  return /^[a-f0-9]{64}$/.test(written) && /^[a-f0-9]{64}$/.test(held) && Number.isInteger(size) && size > 0
+    ? { written, held, size }
+    : undefined;
+}
+
+// The one repository of a volume namespace, a storage location and an uploader among the ones listed, by the three
+// labels the release writes: two are refused, as the release refuses them, and so is none.
+export function runRepository(items: KubeResource[], volumeNamespace: string, location = "default", type = "kopia") {
+  const found = items.filter(
+    (item) =>
+      item.metadata.labels?.[REPOSITORY_LABELS.volumeNamespace] === volumeNamespace &&
+      item.metadata.labels?.[REPOSITORY_LABELS.location] === location &&
+      item.metadata.labels?.[REPOSITORY_LABELS.type] === type,
+  );
+
+  requireCondition(
+    found.length === 1,
+    found.length
+      ? `More than one repository is labelled for ${volumeNamespace}, ${location} and ${type}: ${found.map((item) => item.metadata.name).join(", ")}`
+      : `No repository is labelled for ${volumeNamespace}, ${location} and ${type} in ${DEMO_NAMESPACE}: bring the environment up again, pnpm demo:down then pnpm demo:up`,
+  );
+  return found[0];
+}
+
+// How far ahead the next maintenance of the repository of the volume must be for the views to be placed: the
+// suites that follow a placement run for hours, and the maintenance Job reads the repository and its location
+// through the API server, in the group of Velero, which their guard counts.
+export const MAINTENANCE_MARGIN = 24 * 3_600_000;
+
+// The next maintenance of the repository of the volume of the run, by the clock of this machine as the views count
+// due: its last maintenance and its frequency. Refused when it is less than a day away, or when the repository says
+// no last maintenance or no frequency, which is due now.
+export function assertMaintenanceAhead(items: KubeResource[], run: string, now: number): { next: number } {
+  const repository = runRepository(items, fixtureNames(run).source);
+  const last = Date.parse(
+    (repository.status as { lastMaintenanceTime?: string } | undefined)?.lastMaintenanceTime ?? "",
+  );
+  const frequency = durationMilliseconds(
+    String((repository.spec as { maintenanceFrequency?: unknown } | undefined)?.maintenanceFrequency ?? ""),
+  );
+  const next = last + (frequency ?? Number.NaN);
+
+  requireCondition(
+    Number.isFinite(next) && next - now >= MAINTENANCE_MARGIN,
+    `The repository ${repository.metadata.name} of the volume of the run is due for its maintenance ` +
+      (Number.isFinite(next)
+        ? `at ${new Date(next).toISOString()}, less than a day from now`
+        : "now, since it names no last maintenance or no frequency") +
+      ": its Job would run while the suites run. Create the environment again with `pnpm demo:down` and " +
+      "`pnpm demo:up`.",
+  );
+  return { next };
+}
+
+export interface VolumeRecord {
+  pod: { name: string; uid: string; node: string };
+  restoredPod: { name: string; uid: string; node: string };
+  backup: { name: string; uid: string };
+  restore: { name: string; uid: string };
+  podVolumeBackup: {
+    name: string;
+    uid: string;
+    node: string;
+    snapshotID: string;
+    bytes: number;
+    started?: string;
+    completed?: string;
+  };
+  podVolumeRestore: { name: string; uid: string; node: string; bytes: number; started?: string; completed?: string };
+  repository: {
+    name: string;
+    uid: string;
+    labels: Record<string, string>;
+    maintenanceFrequency: string;
+    lastMaintenanceTime?: string;
+  };
+  checksum: string;
+  bytes: number;
+}
+
+// How long the pod volume operations of the volume are given to go with their owners once the server deleted the
+// backup of the volume and its restore, and the repository once it was removed.
+const VOLUME_REMOVAL_TIMEOUT = 120_000;
+
+// The pod volume backup and the pod volume restore of the volume, by the labels of the names of their owners: once
+// the server deleted the backup and its restore, the garbage collector removes them with their owners, and they are
+// waited for with a bound of their own. What is left at the bound is named.
+export function awaitVolumeOperationsRemoved(runtime: FixtureRuntime, run: string): { waited: number } {
+  const names = fixtureNames(run);
+
+  requireCondition(runtime.elapsed, "The wait for the pod volume operations needs the clock of the runtime");
+  const elapsed = runtime.elapsed.bind(runtime);
+  const began = elapsed();
+  const left = () =>
+    (
+      [
+        ["podvolumebackups", `velero.io/backup-name=${names.volumeBackup}`],
+        ["podvolumerestores", `velero.io/restore-name=${names.volumeRestore}`],
+      ] as const
+    ).flatMap(([kind, selector]) =>
+      (
+        JSON.parse(
+          runtime.kubectl([
+            "get",
+            `${kind}.velero.io`,
+            "--namespace",
+            DEMO_NAMESPACE,
+            "--selector",
+            selector,
+            "-o",
+            "json",
+          ]),
+        ) as { items: KubeResource[] }
+      ).items.map((item) => `the ${item.kind} ${item.metadata.name}`),
+    );
+
+  for (let there = left(); there.length; there = left()) {
+    requireCondition(
+      elapsed() - began < VOLUME_REMOVAL_TIMEOUT,
+      `The pod volume operations of the volume are still in ${DEMO_NAMESPACE} ${VOLUME_REMOVAL_TIMEOUT / 1000} ` +
+        `seconds after their owners were deleted: ${there.join(", ")}. Run the command again; for what is still ` +
+        "there after it, the way out is to take the environment down, with `pnpm demo:down`.",
+    );
+    pause(runtime, VOLUME_POLL);
+  }
+  return { waited: elapsed() - began };
+}
+
+// The repository the server made for the volume of the run, removed once the backup of the volume is gone, by the
+// identity the run recorded when it found it: the one that carries the three labels of the run, with that name and
+// that UID, is deleted with the UID as a precondition and waited for until it is gone; then the record forgets it.
+// Another UID, another name, two of the labels, or the one of the recorded name with other labels are refused, and
+// so is a removal while the backup of the volume is there. The data of the repository stays in the bucket: nothing
+// here removes a key of the store.
+export function removeRunRepository(runtime: FixtureRuntime, run: string): { removed: boolean; waited: number } {
+  const names = fixtureNames(run);
+
+  requireCondition(
+    runtime.elapsed && runtime.repository,
+    "The removal of the repository of the volume needs the clock of the runtime, and the record of the run",
+  );
+  const elapsed = runtime.elapsed.bind(runtime);
+  const record = runtime.repository;
+  const recorded = record.read();
+  const out = "the way out is to take the environment down, with `pnpm demo:down`.";
+  const expected = {
+    [REPOSITORY_LABELS.volumeNamespace]: names.source,
+    [REPOSITORY_LABELS.location]: "default",
+    [REPOSITORY_LABELS.type]: "kopia",
+  };
+  const read = () =>
+    (
+      JSON.parse(
+        runtime.kubectl([
+          "get",
+          "backuprepositories.velero.io,backups.velero.io",
+          "--namespace",
+          DEMO_NAMESPACE,
+          "-o",
+          "json",
+        ]),
+      ) as { items: KubeResource[] }
+    ).items;
+  const ofTheRun = (item: KubeResource) =>
+    item.kind === "BackupRepository" &&
+    Object.entries(expected).every(([label, value]) => item.metadata.labels?.[label] === value);
+  const items = read();
+  const labelled = items.filter(ofTheRun);
+  const named = recorded
+    ? items.find((item) => item.kind === "BackupRepository" && item.metadata.name === recorded.name)
+    : undefined;
+  const began = elapsed();
+
+  if (!labelled.length && !named) {
+    if (recorded) record.forget();
+    return { removed: false, waited: 0 };
+  }
+  requireCondition(
+    recorded,
+    `The repository ${labelled.map((item) => item.metadata.name).join(", ")} of ${DEMO_NAMESPACE} carries the ` +
+      `labels of the volume of this run, which recorded none: it is not removed, ${out}`,
+  );
+  requireCondition(
+    !items.some((item) => item.kind === "Backup" && item.metadata.name === names.volumeBackup),
+    `The backup ${names.volumeBackup} of the volume is still in ${DEMO_NAMESPACE}: the repository it uses is ` +
+      "removed once the server deleted it. Run the command again.",
+  );
+  const [found] = labelled;
+
+  requireCondition(
+    labelled.length === 1 &&
+      found.metadata.name === recorded.name &&
+      found.metadata.uid === recorded.uid &&
+      (!named || named === found),
+    `The repository ${recorded.name} of ${DEMO_NAMESPACE} is not the one this run recorded, with the UID ` +
+      `${recorded.uid} and the labels of the volume: ` +
+      (labelled.length === 1
+        ? `the one of those labels is ${found.metadata.name}, with the UID ${found.metadata.uid}`
+        : `${labelled.length} carry those labels`) +
+      `. It is not removed: ${out}`,
+  );
+  runtime.kubectl(
+    [
+      "delete",
+      "--raw",
+      `/apis/velero.io/v1/namespaces/${DEMO_NAMESPACE}/backuprepositories/${recorded.name}`,
+      "-f",
+      "-",
+    ],
+    JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: recorded.uid } }),
+  );
+  while (read().some((item) => item.kind === "BackupRepository" && item.metadata.uid === recorded.uid)) {
+    requireCondition(
+      elapsed() - began < VOLUME_REMOVAL_TIMEOUT,
+      `The repository ${recorded.name} of ${DEMO_NAMESPACE} is still there ${VOLUME_REMOVAL_TIMEOUT / 1000} ` +
+        "seconds after it was removed: run the command again.",
+    );
+    pause(runtime, VOLUME_POLL);
+  }
+  record.forget();
+  return { removed: true, waited: elapsed() - began };
+}
+
+// Asks `read` once a second until it answers, within the bound of the volume; `read` refuses what will not change.
+function awaitVolume<Found>(runtime: FixtureRuntime, what: string, read: () => Found | undefined): Found {
+  requireCondition(runtime.elapsed, "The live flow of the volume needs the clock of the runtime");
+  const began = runtime.elapsed();
+
+  for (;;) {
+    const found = read();
+
+    if (found !== undefined) return found;
+    requireCondition(runtime.elapsed() - began < VOLUME_TIMEOUT, `${what} within ${VOLUME_TIMEOUT / 1000} seconds`);
+    pause(runtime, VOLUME_POLL);
+  }
+}
+
+function awaitVolumePod(runtime: FixtureRuntime, name: string, namespace: string): KubeResource {
+  return awaitVolume(runtime, `The pod ${name} of the volume was not Running in ${namespace}`, () => {
+    const pod = readFixture(runtime, { apiVersion: "v1", kind: "Pod", metadata: { name, namespace } });
+    const status = (pod.status ?? {}) as {
+      phase?: string;
+      containerStatuses?: { ready?: boolean; state?: { waiting?: { reason?: string } } }[];
+    };
+    const waiting = (status.containerStatuses ?? []).map((item) => item.state?.waiting?.reason ?? "");
+
+    requireCondition(
+      !waiting.includes("ErrImageNeverPull"),
+      `The pod ${name} of the volume cannot start: the image of the store is not in the node, and it is never pulled`,
+    );
+    requireCondition(
+      !["Failed", "Succeeded"].includes(status.phase ?? ""),
+      `The pod ${name} of the volume ended in ${status.phase}`,
+    );
+    return status.phase === "Running" && (status.containerStatuses ?? []).every((item) => item.ready) ? pod : undefined;
+  });
+}
+
+function awaitVolumeOperation(runtime: FixtureRuntime, expected: KubeResource): KubeResource {
+  return awaitVolume(runtime, `The ${expected.kind} ${expected.metadata.name} of the volume did not complete`, () => {
+    const actual = readFixture(runtime, expected);
+    const status = actual.status as { phase?: string; errors?: number } | undefined;
+
+    requireCondition(
+      !["Failed", "FailedValidation", "PartiallyFailed"].includes(status?.phase ?? ""),
+      `The ${expected.kind} ${expected.metadata.name} of the volume ended in ${status?.phase}`,
+    );
+    if (status?.phase !== "Completed") return undefined;
+    requireCondition(!status.errors, `The ${expected.kind} ${expected.metadata.name} of the volume reported errors`);
+    return actual;
+  });
+}
+
+// The one pod volume operation of an operation of the volume, by the labels of the name and the UID of its owner,
+// which the release writes; refused when it is not Completed, since its owner is.
+function volumeOperationOf(
+  runtime: FixtureRuntime,
+  kind: "podvolumebackups" | "podvolumerestores",
+  owner: KubeResource,
+) {
+  const of = kind === "podvolumebackups" ? "backup" : "restore";
+  const selector = `velero.io/${of}-name=${owner.metadata.name},velero.io/${of}-uid=${owner.metadata.uid}`;
+  const items = (
+    JSON.parse(
+      runtime.kubectl([
+        "get",
+        `${kind}.velero.io`,
+        "--namespace",
+        DEMO_NAMESPACE,
+        "--selector",
+        selector,
+        "-o",
+        "json",
+      ]),
+    ) as { items: KubeResource[] }
+  ).items;
+  const [operation] = items;
+  const status = (operation?.status ?? {}) as { phase?: string; message?: string };
+
+  requireCondition(
+    items.length === 1,
+    `The ${of} ${owner.metadata.name} of the volume has ${items.length} pod volume ${of}s, not one`,
+  );
+  requireCondition(
+    status.phase === "Completed",
+    `The pod volume ${of} ${operation.metadata.name} of the ${of} ${owner.metadata.name} is ${status.phase ?? "without a phase"}` +
+      (status.message ? `: ${status.message}` : ""),
+  );
+  return operation;
+}
+
+// The live flow of the volume, after the one of the ConfigMaps: the pod, the backup of its volume by the node agent,
+// the repository it made, the restore of the pod and its volume into the destination namespace, and the checksum of
+// the restored bytes against the one of the bytes written. Each waited for with its bound, each refused with words
+// when it ends otherwise, and every object of Velero found by what the release writes into it.
+export function runLiveVolume(runtime: FixtureRuntime, run: string): VolumeRecord {
+  const names = fixtureNames(run);
+  const podManifest = liveVolumePod(runtime.owner, run);
+
+  runtime.apply(podManifest);
+  const pod = awaitVolumePod(runtime, names.volumePod, names.source);
+  const source = awaitVolume(runtime, `The pod ${names.volumePod} printed no checksum`, () =>
+    volumeLog(runtime.kubectl(["logs", names.volumePod, "--namespace", names.source, "--container", VOLUME_CONTAINER])),
+  );
+
+  requireCondition(
+    source.written === source.held && source.size === VOLUME_BYTES,
+    `The pod ${names.volumePod} holds other bytes than it wrote`,
+  );
+  const backupManifest = liveVolumeBackup(runtime.owner, run);
+  const labelled = () =>
+    (
+      JSON.parse(
+        runtime.kubectl([
+          "get",
+          "backuprepositories.velero.io",
+          "--namespace",
+          DEMO_NAMESPACE,
+          "--selector",
+          `${REPOSITORY_LABELS.volumeNamespace}=${names.source},${REPOSITORY_LABELS.location}=default,${REPOSITORY_LABELS.type}=kopia`,
+          "-o",
+          "json",
+        ]),
+      ) as { items: KubeResource[] }
+    ).items;
+  const labelsOf = (found: KubeResource) =>
+    Object.fromEntries(Object.values(REPOSITORY_LABELS).map((label) => [label, found.metadata.labels?.[label] ?? ""]));
+  const keep = (found: KubeResource) =>
+    runtime.repository?.keep({ name: found.metadata.name, uid: String(found.metadata.uid), labels: labelsOf(found) });
+  // The server makes the repository before the pod volume backup, so a backup of the volume that fails after it
+  // leaves the repository labelled for the run: it is recorded all the same, for the cleanup to remove it, and a
+  // read that fails then is passed over, so that the failure of the backup is the one that is told.
+  const { backup, podVolumeBackup, repository } = (() => {
+    let kept = false;
+
+    try {
+      runtime.apply(backupManifest);
+      const backup = awaitVolumeOperation(runtime, backupManifest);
+      const podVolumeBackup = volumeOperationOf(runtime, "podvolumebackups", backup);
+      const repository = runRepository(labelled(), names.source);
+
+      keep(repository);
+      kept = true;
+      return { backup, podVolumeBackup, repository };
+    } finally {
+      if (!kept) {
+        try {
+          const found = labelled();
+
+          if (found.length === 1) keep(found[0]);
+        } catch {
+          // The failure of the backup is the one that is told.
+        }
+      }
+    }
+  })();
+  const repositoryLabels = labelsOf(repository);
+  const repositoryStatus = (repository.status ?? {}) as {
+    phase?: string;
+    message?: string;
+    lastMaintenanceTime?: string;
+  };
+  const frequency = String(
+    (repository.spec as { maintenanceFrequency?: unknown } | undefined)?.maintenanceFrequency ?? "",
+  );
+
+  requireCondition(
+    repositoryStatus.phase === "Ready",
+    `The repository ${repository.metadata.name} of the volume is ${repositoryStatus.phase ?? "without a phase"}` +
+      (repositoryStatus.message ? `: ${repositoryStatus.message}` : ""),
+  );
+  requireCondition(
+    durationMilliseconds(frequency) === MAINTAIN_FREQUENCY_HOURS * 3_600_000,
+    `The repository ${repository.metadata.name} is maintained every ${frequency || "period the release chooses"}, not every ${MAINTAIN_FREQUENCY_HOURS} hours: bring the environment up again, pnpm demo:down then pnpm demo:up`,
+  );
+  const restoreManifest = liveVolumeRestore(runtime.owner, run);
+
+  runtime.apply(restoreManifest);
+  const restore = awaitVolumeOperation(runtime, restoreManifest);
+  const podVolumeRestore = volumeOperationOf(runtime, "podvolumerestores", restore);
+  const restoredPod = awaitVolumePod(runtime, names.volumePod, names.restored);
+  const restored = awaitVolume(runtime, `The restored pod ${names.volumePod} printed no checksum`, () =>
+    volumeLog(
+      runtime.kubectl(["logs", names.volumePod, "--namespace", names.restored, "--container", VOLUME_CONTAINER]),
+    ),
+  );
+
+  requireCondition(
+    restored.held === source.written && restored.size === VOLUME_BYTES,
+    `The restored volume of ${names.volumePod} holds other bytes than the pod wrote`,
+  );
+  const backupStatus = (podVolumeBackup.status ?? {}) as {
+    snapshotID?: string;
+    progress?: { bytesDone?: number };
+    startTimestamp?: string;
+    completionTimestamp?: string;
+  };
+  const restoreStatus = (podVolumeRestore.status ?? {}) as {
+    node?: string;
+    progress?: { bytesDone?: number };
+    startTimestamp?: string;
+    completionTimestamp?: string;
+  };
+  const nodeOf = (item: KubeResource) => String((item.spec as { nodeName?: string } | undefined)?.nodeName ?? "");
+
+  return {
+    pod: { name: pod.metadata.name, uid: String(pod.metadata.uid), node: nodeOf(pod) },
+    restoredPod: { name: restoredPod.metadata.name, uid: String(restoredPod.metadata.uid), node: nodeOf(restoredPod) },
+    backup: { name: backup.metadata.name, uid: String(backup.metadata.uid) },
+    restore: { name: restore.metadata.name, uid: String(restore.metadata.uid) },
+    podVolumeBackup: {
+      name: podVolumeBackup.metadata.name,
+      uid: String(podVolumeBackup.metadata.uid),
+      node: String((podVolumeBackup.spec as { node?: string } | undefined)?.node ?? ""),
+      snapshotID: backupStatus.snapshotID ?? "",
+      bytes: backupStatus.progress?.bytesDone ?? 0,
+      started: backupStatus.startTimestamp,
+      completed: backupStatus.completionTimestamp,
+    },
+    podVolumeRestore: {
+      name: podVolumeRestore.metadata.name,
+      uid: String(podVolumeRestore.metadata.uid),
+      node: restoreStatus.node ?? "",
+      bytes: restoreStatus.progress?.bytesDone ?? 0,
+      started: restoreStatus.startTimestamp,
+      completed: restoreStatus.completionTimestamp,
+    },
+    repository: {
+      name: repository.metadata.name,
+      uid: String(repository.metadata.uid),
+      labels: repositoryLabels,
+      maintenanceFrequency: frequency,
+      lastMaintenanceTime: repositoryStatus.lastMaintenanceTime,
+    },
+    checksum: source.written,
+    bytes: source.size,
+  };
 }

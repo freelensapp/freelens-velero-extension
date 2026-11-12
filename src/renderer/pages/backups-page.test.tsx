@@ -2,9 +2,11 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { hostObject } from "../../../test/freelens-extensions";
 import { drawerNames, drawerValue, listProps } from "../../../test/host-components";
-import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences } from "../../common/discovery";
+import { PATHS } from "../../common/paths";
 import { BACKUP_PHASES } from "../../common/phases";
 import { Backup } from "../api/kinds";
 import { BackupDetails } from "../details/backup-details";
@@ -18,6 +20,8 @@ import type { Answer, Family, Preferences } from "../../common/discovery";
 import type { ArtifactClient, GateClient, WriteClient } from "../api/ipc";
 
 const DISCOVERY = "/apis/velero.io/v1";
+// The discovery of the second version of the group, which serves the data movement.
+const SECOND = "/apis/velero.io/v2alpha1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
 const A = "velero-a";
 const B = "velero-b";
@@ -25,7 +29,7 @@ const B = "velero-b";
 type Answers = Record<string, Answer | (() => Promise<Answer>)>;
 
 function path(family: Family, namespace: string): string {
-  return `/apis/velero.io/v1/namespaces/${namespace}/${RESOURCES[family]}`;
+  return PATHS.family(family, namespace);
 }
 
 function list(...items: unknown[]): Answer {
@@ -66,11 +70,12 @@ const completed = backup("nightly-2", A, {
   completionTimestamp: "2026-09-01T10:01:00Z",
   progress: { totalItems: 10, itemsBackedUp: 10 },
 });
-const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } };
+const served: Answer = { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } };
 
 function answers(more: Answers = {}): Answers {
   return {
     [DISCOVERY]: served,
+    [SECOND]: { status: 200, body: { resources: [{ name: "datauploads" }, { name: "datadownloads" }] } },
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }, { metadata: { name: "default", namespace: B } }),
     [path("backups", A)]: list(finalizing, completed),
     [path("backups", B)]: list(backup("nightly-1", B, { phase: "Completed" })),
@@ -80,6 +85,10 @@ function answers(more: Answers = {}): Answers {
         [path("schedules", namespace), list()],
         [path("storageLocations", namespace), list({ metadata: { name: "default", namespace, uid: "location" } })],
         [path("snapshotLocations", namespace), list()],
+        [path("podVolumeBackups", namespace), list()],
+        [path("podVolumeRestores", namespace), list()],
+        [path("dataUploads", namespace), list()],
+        [path("dataDownloads", namespace), list()],
       ]),
     ),
     ...more,
@@ -124,7 +133,7 @@ describe("page of the backups", () => {
 
     await screen.findByTestId("velero-state-choose");
     expect(screen.queryByTestId("velero-backups")).toBeNull();
-    expect(asked).toEqual([DISCOVERY, LOCATIONS]);
+    expect(asked).toEqual([DISCOVERY, SECOND, LOCATIONS]);
     fireEvent.click(screen.getByTestId(`velero-choice-${B}`));
     await waitFor(() => expect(rows()).toEqual(["nightly-1"]));
     expect(written).toEqual([chosen(B)]);
@@ -300,8 +309,16 @@ describe("workspace of a backup", () => {
     expect(within(workspace).getByTestId("velero-backup-counts-note").textContent).toContain(
       "The status reports 1 error and 0 warnings and does not say what they are: that is in the log and in the results of the backup, which the Log and Results tabs load when they are asked.",
     );
-    // Opening a backup asks nothing: what it shows was read with the installation.
-    expect(asked).toHaveLength(before);
+    // Opening a backup asks the pod volume backups and the data uploads of its installation at once, which its band
+    // is made of, and nothing else: what else it shows was read with the installation.
+    await waitFor(() =>
+      expect(
+        within(workspace)
+          .getAllByTestId("velero-volume-half")
+          .map((half) => half.getAttribute("data-state")),
+      ).toEqual(["rows", "rows"]),
+    );
+    expect(asked.slice(before)).toEqual([path("podVolumeBackups", A), path("dataUploads", A)]);
     expect(asked.every((address) => !/request/i.test(address))).toBe(true);
     expect(document.activeElement).toBe(screen.getByTestId("velero-back"));
     // The list is behind the workspace, as it was.

@@ -4,6 +4,7 @@
 import { sizeText } from "./artifact-volumes";
 import { formatDuration } from "./duration";
 
+import type { OperationKind, OperationState } from "./phases";
 import type { ItemProgress } from "./progress";
 import type { VolumeKind, VolumeOperationState } from "./volume-phases";
 import type { VolumeSpan } from "./volume-time";
@@ -75,13 +76,18 @@ export function axesText(state: VolumeOperationState): string {
   ].join(", ");
 }
 
-// What waits for what, when an operation has not started: the release needs a node agent where the volume is, which
-// the extension does not read.
+// What waits for what, when an operation has not started: the release needs a node agent where the volume is for a
+// pod volume operation, and any node agent of the installation for a data movement, which the extension does not
+// read.
 export const NODE_AGENT_WORDS: Record<VolumeKind, string> = {
   PodVolumeBackup:
     "It waits for the node agent of the node of its pod to accept it. Whether one runs there is not read by the extension, and waiting is not a failure.",
   PodVolumeRestore:
     "It waits for the node agent of the node of the restored pod, which takes it when the init container restore-wait of that pod runs. Whether one runs there is not read by the extension, and waiting is not a failure.",
+  DataUpload:
+    "It waits for any node agent of the installation to accept it. Whether one runs is not read by the extension, and waiting is not a failure.",
+  DataDownload:
+    "It waits for its target claim to exist and for any node agent of the installation to accept it. Whether either is there is not read by the extension, and waiting is not a failure.",
 };
 
 // What the view says of each phase (SPEC-0014, the phases), beside the times and the bytes.
@@ -103,7 +109,7 @@ export function phaseSentence(state: VolumeOperationState): string {
     case "Completed":
       return "The data path ended.";
     case "Failed":
-      return "The operation failed: the message says why. A start equal to the completion is one the failure wrote; no time at all is one the preparing timeout wrote.";
+      return "The operation failed: the message says why. A start equal to the completion is one the failure wrote; no start and no completion is one the preparing timeout wrote.";
     default:
       return "The operation was canceled: neither a success nor a failure. The release cancels one when its backup or restore times out, when the server or the node agent restarts, or when its pod cannot run.";
   }
@@ -174,6 +180,9 @@ export const NOT_REPORTED = "Not reported";
 // A pod an operation does not name.
 export const POD_NOT_NAMED = "Pod not named";
 
+// A claim a data movement does not name.
+export const CLAIM_NOT_NAMED = "Claim not named";
+
 // The bytes of an operation as the release writes them: done of total, with the percentage only when it can be
 // given. A progress the object does not carry is not reported, and is not zero.
 export function bytesText(progress: ItemProgress): string {
@@ -210,7 +219,10 @@ export function incrementalText(value: unknown): string {
 export const INCREMENTAL_NOTE =
   "The release writes no incremental size of zero: one that is not written is not reported.";
 
-export const SNAPSHOT_SIZE_NOTE = "The logical size of the snapshot, taken from the pod volume backup it restores.";
+export const SNAPSHOT_SIZE_NOTE: Record<"PodVolumeRestore" | "DataDownload", string> = {
+  PodVolumeRestore: "The logical size of the snapshot, taken from the pod volume backup it restores.",
+  DataDownload: "The logical size of the snapshot, taken from the result of the data upload it restores.",
+};
 
 // The uploader of a pod volume operation: what it names, or that it names none, which the release reads as restic.
 // Built-in is the data mover of the data movement, not an uploader.
@@ -219,6 +231,14 @@ export function uploaderText(value: string | undefined): string {
 }
 
 export const UPLOADER_NOT_SET_NOTE = "The release reads an uploader that is not set as restic.";
+
+// The data mover of a data movement: what it names, or that it names none, which is the built-in one.
+export function moverText(value: string | undefined): string {
+  return value ?? "Built-in";
+}
+
+export const MOVER_NOTE =
+  "A data mover that is not set, or velero, is the built-in one, which the node agent runs. The release ignores any other, which a data mover of its own takes.";
 
 // What the mark of a value the reviewed release does not write says: beside the value as it is written, to who does
 // not see the mark and in the tip of a cell, and in the note of a view.
@@ -231,6 +251,9 @@ export const NOT_WRITTEN = {
 export const LIST_NOTES: Record<VolumeKind, string> = {
   PodVolumeBackup: "These are the pod volume backups the installation holds now: they go with their backups.",
   PodVolumeRestore: "These are the pod volume restores the installation holds now: they go with their restores.",
+  DataUpload:
+    "These are the data uploads the installation holds now: the deletion of a backup deletes its data uploads.",
+  DataDownload: "These are the data downloads the installation holds now: they go with their restores.",
 };
 
 // The words of a backup repository.
@@ -248,6 +271,8 @@ export const REPOSITORY_WORDS = {
   readOnly: "The storage location is read-only: the server runs no maintenance of a repository of it.",
   accessUnknown:
     "Not known: the storage location of the repository is not known, and the server runs no maintenance of a repository of a read-only one.",
+  locationsBeingRead:
+    "Not known yet: the storage locations of the installation are being read, and the server runs no maintenance of a repository of a read-only one.",
   frequencyNotSet:
     "No frequency is set: the server fills it with its own, or with the one of the type, at its next look. Nothing is computed until it does.",
   frequencyUnreadable: (written: string) =>
@@ -274,16 +299,30 @@ export const VOLUME_WORDS = {
   none: "None",
   notStarted: "Not started",
   noOwner: (noun: string) => `The operation names no ${noun}: neither its labels nor an owner reference do`,
-  repositoryNote:
-    "Found by the three labels the release names a repository with: the namespace of the volume, the storage location and the type of the uploader.",
+  // How the repository of an operation is found: by the type of its uploader for a pod volume operation, and by the
+  // type kopia for a data movement, whatever its data mover.
+  repositoryNote: {
+    pod: "Found by the three labels the release names a repository with: the namespace of the volume, the storage location and the type of the uploader.",
+    moved:
+      "Found by the three labels the release names a repository with: the namespace the volume was backed up from, the storage location and the type kopia, the one of the data movement.",
+  },
   hostResolves:
     "The details of the host read the pod when they open: the extension does not read it, and does not say whether it is there.",
   nodeNote: {
     PodVolumeBackup:
       "The node of the pod, from the spec: the release writes no node into the status of a pod volume backup.",
     PodVolumeRestore: "The node whose node agent accepted it, from the status.",
+    DataUpload:
+      "The node whose node agent prepared it, where its data path runs, from the status. Any node agent may accept a data upload.",
+    DataDownload:
+      "The node whose node agent prepared it, where its data path runs, from the status. Any node agent may accept a data download.",
   } satisfies Record<VolumeKind, string>,
+  acceptedBy: "The node whose node agent accepted it, which is not the node its data path runs on.",
   noClaim: "No claim named",
+  snapshotNote: "The snapshot of CSI whose data was moved, by its name and its classes, as the data upload names them.",
+  uploadNote: "The data upload of the installation whose snapshot is the one this data download restores.",
+  timeoutNote: "How long the node agent waits for the internal operations of the data movement, as Go writes it.",
+  resultNote: "What the data mover wrote of its result, by key.",
   cancelNote: "A cancellation is asked by a write, which the views do not make.",
   cancelAsked: "Asked",
   cancelNotAsked: "Not asked",
@@ -293,4 +332,109 @@ export const VOLUME_WORDS = {
     `The views read the ${plural} of another installation: whether this one is there is not known here.`,
   unknownFields: (names: string[]) =>
     `The object carries fields the reviewed release does not write, which are not read: ${names.join(", ")}.`,
+};
+
+// What the band of the volume operations of a backup or of a restore says of one kind of them, by the state of the
+// read of its family (SPEC-0014, what is not known): what was not read is not known, and is not none.
+export const BAND_WORDS = {
+  title: "Volumes",
+  loading: (plural: string) => `The ${plural} of the installation are being read.`,
+  none: (owner: string, noun: string) => `This ${owner} has no ${noun} among the ones the installation holds.`,
+  denied: (plural: string, owner: string) =>
+    `The ${plural} of this installation cannot be read: access is denied. How many this ${owner} has is not known.`,
+  "not-served": (plural: string) => `The cluster does not serve the ${plural} of Velero.`,
+  failed: (plural: string, owner: string) =>
+    `The ${plural} of this installation could not be read. How many this ${owner} has is not known.`,
+  "not-read": (plural: string, owner: string) =>
+    `The ${plural} of this installation were not read yet: how many this ${owner} has is not known.`,
+  stale: (plural: string, at: string) => `The ${plural} could not be read again: these are the ones read at ${at}.`,
+  count: (count: number, noun: string, plural: string) => `${count} ${count === 1 ? noun : plural}, from the newest`,
+  groups: (plural: string) => `The ${plural} by phase`,
+  more: "Show ten more",
+  way: (noun: string, name: string) => `Open the ${noun} ${name}`,
+  // The name of the way of a row: its volume first, which is what the column shows, then the operation it opens.
+  rowWay: (volume: string, noun: string, name: string) => `${volume}: ${BAND_WORDS.way(noun, name)}`,
+};
+
+type BandSentence = "waiting" | "validation" | "running" | "plugins" | "finalizing" | "ended" | "unknown";
+
+// A restore has no sentence of its deletion: the release writes no phase Deleting for a restore, and one that reports
+// it reports a phase the release does not write.
+const BAND_SENTENCES: { Backup: Record<BandSentence | "deleting", string>; Restore: Record<BandSentence, string> } = {
+  Backup: {
+    waiting:
+      "The pod volume backups and the data uploads of a backup are made while it is InProgress, the data uploads as the CSI plugin snapshots each claim: this one has not started.",
+    validation:
+      "The pod volume backups and the data uploads of a backup are made once it runs: this one failed its validation, and did not run.",
+    running:
+      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel. Its data uploads are made as the CSI plugin snapshots each claim, and it waits for them in its plugin operations.",
+    plugins:
+      "The pod volume backups ran while the backup was InProgress, and its data uploads were made then. It waits for its plugin operations, among them its data uploads.",
+    finalizing:
+      "The pod volume backups ran while the backup was InProgress, and it waited for its data uploads among its plugin operations.",
+    ended:
+      "The pod volume backups the installation holds of this backup are the ones its run made, or the ones a sync from the store made, in the phase they were stored in. Its data uploads are the ones its run made: a sync makes none.",
+    deleting: "The backup is being deleted: its pod volume backups go with it, and its data uploads are deleted.",
+    unknown:
+      "The backup reports a phase the release does not write: what the release does with its pod volume backups and its data uploads is not known.",
+  },
+  Restore: {
+    waiting:
+      "The pod volume restores and the data downloads of a restore are made while it is InProgress, the data downloads as the CSI plugin restores each claim: this one has not started.",
+    validation:
+      "The pod volume restores and the data downloads of a restore are made once it runs: this one failed its validation, and did not run.",
+    running:
+      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs. Its data downloads are made as the CSI plugin restores each claim, and it waits for them in its plugin operations.",
+    plugins:
+      "The data downloads of the restore were made while it was InProgress. It waits for its plugin operations, among them its data downloads.",
+    finalizing:
+      "The pod volume restores and the data downloads the installation holds of this restore are the ones its run made.",
+    ended:
+      "The pod volume restores and the data downloads the installation holds of this restore are the ones its run made.",
+    unknown:
+      "The restore reports a phase the release does not write: what the release does with its pod volume restores and its data downloads is not known.",
+  },
+};
+
+// What the release does with the volume operations of a backup or a restore, by the phase of the backup or the
+// restore (SPEC-0014, what the release does). One that reports no phase is taken by the release as a new one.
+export function bandSentence(kind: OperationKind, state: OperationState): string {
+  const sentences: Record<BandSentence, string> & { deleting?: string } = BAND_SENTENCES[kind];
+
+  if (state.reported === undefined) return sentences.waiting;
+  if (!state.recognized) return sentences.unknown;
+  if (state.lifecycle === "deleting" && sentences.deleting) return sentences.deleting;
+  if (state.failure === "validation") return sentences.validation;
+  if (state.execution === "not-started") return sentences.waiting;
+  if (state.reported === "InProgress") return sentences.running;
+  if (state.reported?.startsWith("WaitingForPluginOperations")) return sentences.plugins;
+  if (state.reported?.startsWith("Finalizing")) return sentences.finalizing;
+  return state.lifecycle === "terminal" ? sentences.ended : sentences.unknown;
+}
+
+// What the view of a repository says of what used it (SPEC-0014, REQ-187): the kinds it could read are counted, and
+// the ones it could not are named. It says nothing of what it does not read.
+export const USED_BY_WORDS = {
+  title: "Used by",
+  nothing: "No pod volume operation and no data movement of the installation used it.",
+  none: (plural: string) => `None of the ${plural} of the installation names it.`,
+  loading: (plural: string) => `The ${plural} of the installation are being read.`,
+  denied: (plural: string) =>
+    `The ${plural} of this installation cannot be read: access is denied. What used it among them is not known.`,
+  "not-served": (plural: string) =>
+    `The cluster does not serve the ${plural} of Velero: what used it among them is not known.`,
+  failed: (plural: string) =>
+    `The ${plural} of this installation could not be read. What used it among them is not known.`,
+  "not-read": (plural: string) =>
+    `The ${plural} of this installation were not read yet: what used it among them is not known.`,
+  count: (count: number, noun: string, plural: string) => `${count} ${count === 1 ? noun : plural}`,
+  newest: "The newest",
+  owners: (plural: string) => `Of the ${plural}`,
+};
+
+// The way from a row of the Volumes tab to the operation of the installation it was made by (REQ-188): a pod volume
+// operation, or the data upload or the data download that moved the volume.
+export const TAB_WAY_WORDS = {
+  title: "Operation",
+  open: (noun: string, name: string) => `Open the ${noun} ${name}`,
 };

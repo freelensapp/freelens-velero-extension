@@ -52,6 +52,9 @@ export interface ListDefinition<View extends { name: string }> {
   // What is to be said of the list as a whole, which no row says: over the list, in words, with the clock of
   // the rows.
   notes?(installation: Installation, now: number): string[];
+  // The command of the header of the list, when the kind has one: the workspace of an action it opens over the list
+  // (SPEC-0017, REQ-252), there with writes on or off.
+  command?(installation: Installation): ReactNode;
 }
 
 export { useNow } from "./views-frame";
@@ -118,7 +121,7 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
       ))}
       <KubeObjectListLayout
         tableId={tableId}
-        className={styles.list}
+        className={definition.command ? `${styles.list} ${styles.listWithCommand}` : styles.list}
         data-testid={`velero-${id}`}
         store={store}
         getItems={() => store.items}
@@ -130,7 +133,9 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
           ...placeholders,
           // The host counts what the list holds: a list that was not read holds nothing, which is not none.
           info: hasItems(read) ? info : <span data-testid={`velero-${id}-not-counted`}>{LIST_WORDS.notCounted}</span>,
-          filters: <></>,
+          // The command of the list, in the place of the filters of the host, after the count and before the search:
+          // the count keeps its panel to itself, which is what it says.
+          filters: <>{definition.command?.(installation)}</>,
         })}
         onDetails={(item: HostObject) => openView({ kind, name: item.getName() })}
         sortingCallbacks={sortingCallbacks}

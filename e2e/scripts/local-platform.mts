@@ -146,6 +146,40 @@ export function assertBinary(name: BinaryName, target: BinaryTarget, content: Ui
   );
 }
 
+// The waits before a release or a registry is asked again: the hosted runners met the releases of GitHub and the
+// blobs of Docker Hub failing for a minute or so, and a run that stops at the first failure loses its whole job.
+export const ASKED_AGAIN_AFTER = [10_000, 30_000, 60_000] as const;
+
+// The answers a wait may change: a timeout of the request, too many requests, and a failure of the server. A
+// release that is not there, or that answers what was not asked, is not asked again.
+export function worthAskingAgain(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+// Asks once, and again after each wait while the asking throws or its result is worth asking again; the result
+// of the last time is the one given, and the error of the last time the one thrown. The wait is given to `sleep`,
+// so nothing here reads a clock. A checksum or an identity is checked on what comes back, never asked again.
+export async function askAgain<T>(
+  ask: () => Promise<T>,
+  again: (result: T) => boolean,
+  waits: readonly number[],
+  sleep: (milliseconds: number) => Promise<void>,
+): Promise<T> {
+  for (let time = 0; ; time += 1) {
+    let result: T;
+
+    try {
+      result = await ask();
+    } catch (error) {
+      if (time >= waits.length) throw error;
+      await sleep(waits[time]);
+      continue;
+    }
+    if (time >= waits.length || !again(result)) return result;
+    await sleep(waits[time]);
+  }
+}
+
 // What a child process may inherit. Everything else of the caller stays with the caller.
 const INHERITED = ["PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TERM", "TMPDIR"];
 

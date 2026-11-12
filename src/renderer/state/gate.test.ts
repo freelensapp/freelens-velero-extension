@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { anExtension, ipcHandlers, resetIpc, Main as StubMain } from "../../../test/freelens-extensions";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
-import { CHANNELS } from "../../common/ipc";
+import { CHANNELS, readWriteConfirmRequest, readWriteRunRequest } from "../../common/ipc";
 import { VeleroIpcRenderer } from "../api/ipc";
 import { currentInstallation } from "./context";
 import { Installation } from "./installation";
@@ -26,7 +27,7 @@ function path(family: Family, namespace: string): string {
 }
 
 const answers: Record<string, Answer> = {
-  [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+  [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
   [LOCATIONS]: list(object("default", "velero-a"), object("default", "velero-b")),
   ...Object.fromEntries(
     ["velero-a", "velero-b"].flatMap((namespace) => [
@@ -400,6 +401,285 @@ describe("the frame of a cluster", () => {
     main.broadcast(CHANNELS.gateChanged, { cluster: "synthetic-cluster" });
     await vi.waitFor(() => expect(state.gate?.writes).toEqual({ on: true, namespace: "velero", since: 1 }));
     expect(asked).toEqual([{ cluster: "synthetic-cluster" }, { cluster: "synthetic-cluster" }]);
+  });
+
+  it("asks the main process for the review and the run of a backup asked from a schedule, with what each carries", async () => {
+    resetIpc();
+    const asked: [string, unknown][] = [];
+    const token = "00000000-0000-4000-8000-000000000001";
+    const text = '{"kind":"Backup","metadata":{"labels":{}}}';
+
+    ipcHandlers.set(CHANNELS.writeConfirm, (_frame, request) => {
+      asked.push([CHANNELS.writeConfirm, request]);
+      return { ok: true, value: { token, expires: 1, text } };
+    });
+    ipcHandlers.set(CHANNELS.writeRun, (_frame, request) => {
+      asked.push([CHANNELS.writeRun, request]);
+      return { ok: true, value: { name: "nightly-1", uid: "backup-uid", found: true } };
+    });
+    const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
+    const schedule = { name: "nightly", uid: "schedule-uid" };
+    const target = { kind: "Schedule", name: "nightly", uid: "schedule-uid" };
+
+    expect(await ipc.confirmBackupNow("synthetic-cluster", "velero", schedule, "nightly-1")).toEqual({
+      ok: true,
+      value: { token, expires: 1, text },
+    });
+    expect(
+      await ipc.runBackupNow("synthetic-cluster", "velero", schedule, "nightly-1", token, "request-identifier"),
+    ).toEqual({ ok: true, value: { name: "nightly-1", uid: "backup-uid", found: true } });
+    expect(asked).toEqual([
+      [
+        CHANNELS.writeConfirm,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "backup-from-schedule",
+          target,
+          backup: "nightly-1",
+        },
+      ],
+      [
+        CHANNELS.writeRun,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "backup-from-schedule",
+          target,
+          backup: "nightly-1",
+          token,
+          request: "request-identifier",
+        },
+      ],
+    ]);
+  });
+
+  it("asks the main process for the review and the run of the deletion of a backup, with what each carries, which the contract reads whole", async () => {
+    resetIpc();
+    const asked: [string, unknown][] = [];
+    const token = "00000000-0000-4000-8000-000000000001";
+    const text = '{"kind":"DeleteBackupRequest","spec":{"backupName":"nightly"}}';
+
+    ipcHandlers.set(CHANNELS.writeConfirm, (_frame, request) => {
+      asked.push([CHANNELS.writeConfirm, request]);
+      return { ok: true, value: { token, expires: 1, text, others: 2 } };
+    });
+    ipcHandlers.set(CHANNELS.writeRun, (_frame, request) => {
+      asked.push([CHANNELS.writeRun, request]);
+      return { ok: true, value: { end: "refused", phase: "Completed", errors: ["refused"] } };
+    });
+    const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
+    const target = { kind: "Backup" as const, name: "nightly", uid: "backup-uid" };
+
+    expect(await ipc.confirmBackupDelete("synthetic-cluster", "velero", target)).toEqual({
+      ok: true,
+      value: { token, expires: 1, text, others: 2 },
+    });
+    expect(
+      await ipc.runBackupDelete("synthetic-cluster", "velero", target, "nightly", token, "request-identifier"),
+    ).toEqual({ ok: true, value: { end: "refused", phase: "Completed", errors: ["refused"] } });
+    expect(asked).toEqual([
+      [CHANNELS.writeConfirm, { cluster: "synthetic-cluster", namespace: "velero", kind: "delete-backup", target }],
+      [
+        CHANNELS.writeRun,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "delete-backup",
+          target,
+          typed: "nightly",
+          token,
+          request: "request-identifier",
+        },
+      ],
+    ]);
+    // An answer of a deletion that is not one the contract reads is not taken.
+    ipcHandlers.set(CHANNELS.writeRun, () => ({ ok: true, value: { end: "deleted" } }));
+    expect(
+      await ipc.runBackupDelete("synthetic-cluster", "velero", target, "nightly", token, "request-identifier"),
+    ).toMatchObject({ ok: false });
+  });
+
+  it("asks the main process for the review and the run of a restore, with what each carries, which the contract reads whole", async () => {
+    resetIpc();
+    const asked: [string, unknown][] = [];
+    const token = "00000000-0000-4000-8000-000000000001";
+    const text = '{"kind":"Restore","metadata":{},"spec":{"backupName":"nightly"}}';
+
+    ipcHandlers.set(CHANNELS.writeConfirm, (_frame, request) => {
+      asked.push([CHANNELS.writeConfirm, request]);
+      return { ok: true, value: { token, expires: 1, text } };
+    });
+    ipcHandlers.set(CHANNELS.writeRun, (_frame, request) => {
+      asked.push([CHANNELS.writeRun, request]);
+      return { ok: true, value: { name: "nightly-1", uid: "restore-uid", phase: "InProgress" } };
+    });
+    const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
+    const target = { kind: "Backup" as const, name: "nightly", uid: "backup-uid" };
+    const form = {
+      includedNamespaces: ["shop"],
+      namespaceMapping: [["shop", "shop-2"]] as [string, string][],
+      clusterResources: "none" as const,
+      restorePVs: false,
+      existingResourcePolicy: "update" as const,
+    };
+
+    expect(await ipc.confirmRestoreCreate("synthetic-cluster", "velero", target, "nightly-1", form)).toEqual({
+      ok: true,
+      value: { token, expires: 1, text },
+    });
+    expect(
+      await ipc.runRestoreCreate(
+        "synthetic-cluster",
+        "velero",
+        target,
+        "nightly-1",
+        "nightly",
+        token,
+        "request-identifier",
+      ),
+    ).toEqual({ ok: true, value: { name: "nightly-1", uid: "restore-uid", phase: "InProgress" } });
+    expect(asked).toEqual([
+      [
+        CHANNELS.writeConfirm,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "restore",
+          target,
+          restore: "nightly-1",
+          restoreForm: form,
+        },
+      ],
+      [
+        CHANNELS.writeRun,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "restore",
+          target,
+          restore: "nightly-1",
+          typed: "nightly",
+          token,
+          request: "request-identifier",
+        },
+      ],
+    ]);
+    // What the views send is what the main process reads, the form and the name typed among it.
+    expect(readWriteConfirmRequest(asked[0][1])).toEqual(asked[0][1]);
+    expect(
+      readWriteRunRequest({ ...(asked[1][1] as object), request: "00000000-0000-4000-8000-000000000002" }),
+    ).toEqual({
+      ...(asked[1][1] as object),
+      request: "00000000-0000-4000-8000-000000000002",
+    });
+  });
+
+  it("asks the main process for the review and the run of a pause and of a resume, with what each carries, which the contract reads whole", async () => {
+    resetIpc();
+    const asked: [string, unknown][] = [];
+    const token = "00000000-0000-4000-8000-000000000001";
+    const text = '[{"op":"test","path":"/metadata/uid","value":"nightly-uid"}]';
+
+    ipcHandlers.set(CHANNELS.writeConfirm, (_frame, request) => {
+      asked.push([CHANNELS.writeConfirm, request]);
+      return { ok: true, value: { token, expires: 1, text } };
+    });
+    ipcHandlers.set(CHANNELS.writeRun, (_frame, request) => {
+      asked.push([CHANNELS.writeRun, request]);
+      return { ok: true, value: { name: "nightly", uid: "nightly-uid", paused: false, skipImmediately: true } };
+    });
+    const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
+    const schedule = { name: "nightly", uid: "nightly-uid" };
+    const target = { kind: "Schedule" as const, ...schedule };
+    const resume = { expression: "0 3 * * *", skipImmediately: true };
+
+    expect(await ipc.confirmSchedulePatch("synthetic-cluster", "velero", "schedule-pause", schedule)).toEqual({
+      ok: true,
+      value: { token, expires: 1, text },
+    });
+    await ipc.confirmSchedulePatch("synthetic-cluster", "velero", "schedule-resume", schedule, resume);
+    expect(
+      await ipc.runSchedulePatch(
+        "synthetic-cluster",
+        "velero",
+        "schedule-resume",
+        schedule,
+        token,
+        "request-identifier",
+      ),
+    ).toEqual({ ok: true, value: { name: "nightly", uid: "nightly-uid", paused: false, skipImmediately: true } });
+    expect(asked).toEqual([
+      [CHANNELS.writeConfirm, { cluster: "synthetic-cluster", namespace: "velero", kind: "schedule-pause", target }],
+      [
+        CHANNELS.writeConfirm,
+        { cluster: "synthetic-cluster", namespace: "velero", kind: "schedule-resume", target, resume },
+      ],
+      [
+        CHANNELS.writeRun,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "schedule-resume",
+          target,
+          token,
+          request: "request-identifier",
+        },
+      ],
+    ]);
+    // What the views send is what the main process reads: the resume with the confirmation alone.
+    for (const [, request] of asked.slice(0, 2)) expect(readWriteConfirmRequest(request)).toEqual(request);
+    expect(
+      readWriteRunRequest({ ...(asked[2][1] as object), request: "00000000-0000-4000-8000-000000000002" }),
+    ).toEqual({ ...(asked[2][1] as object), request: "00000000-0000-4000-8000-000000000002" });
+    // An answer that is not what a schedule is after its patch is a failure of the way, never a value.
+    ipcHandlers.set(CHANNELS.writeRun, () => ({ ok: true, value: { name: "nightly", uid: "nightly-uid" } }));
+    expect(
+      await ipc.runSchedulePatch(
+        "synthetic-cluster",
+        "velero",
+        "schedule-pause",
+        schedule,
+        token,
+        "request-identifier",
+      ),
+    ).toMatchObject({ ok: false });
+  });
+
+  it("asks the main process for the ends of its cluster and says which one it showed, through the way of the context", async () => {
+    resetIpc();
+    const asked: [string, unknown][] = [];
+    const end = {
+      request: "00000000-0000-4000-8000-0000000000aa",
+      kind: "backup-from-schedule",
+      namespace: "velero",
+      context: "kind-synthetic",
+      name: "nightly-1",
+      schedule: "nightly",
+      outcome: { created: true },
+      at: 1,
+    };
+
+    ipcHandlers.set(CHANNELS.writeEnds, (_frame, request) => {
+      asked.push([CHANNELS.writeEnds, request]);
+      return { ok: true, value: [end] };
+    });
+    ipcHandlers.set(CHANNELS.writeShown, (_frame, request) => {
+      asked.push([CHANNELS.writeShown, request]);
+      return { ok: true, value: null };
+    });
+    VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
+    const installation = currentInstallation();
+
+    await installation.readEnds();
+    expect(installation.ends).toEqual([end]);
+    installation.showEnd(end.request);
+    await vi.waitFor(() => expect(asked).toHaveLength(2));
+    expect(asked).toEqual([
+      [CHANNELS.writeEnds, { cluster: "synthetic-cluster" }],
+      [CHANNELS.writeShown, { cluster: "synthetic-cluster", request: end.request }],
+    ]);
+    expect(installation.ends).toEqual([]);
   });
 
   it("hears the arguments of a broadcast of the main process, and never reads the event it is given with them", () => {

@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M2 / T1.4
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-28, as drafted
 
@@ -343,3 +343,19 @@ five restores opened and closed; the response at 82 ms at the 95th percentile,
 against the budget of 250 ms, 30 ms at the median and 82 ms the slowest, and 322 ms
 at the 95th percentile from the key or the click. The deviations recorded above hold
 on v2 as they are; v2 brings no other.
+
+### 2026-11-08: The Restores Of A Deleted Backup (T4.6 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says, approved
+with it, the second pull request of T4.6 restates one requirement and its check, and the
+rest of this spec is read with it:
+
+| Requirement and check | Restated |
+| --- | --- |
+| REQ-057, REST-08 | No surface offers to edit, delete or select a restore by itself; Delete backup of SPEC-0017 deletes, through Velero, the restores of the backup it deletes, and its review says so |
+
+Nothing of the views of the restores changes: the review of the deletion of a backup
+says that Velero deletes every restore of the backup, with the files of each, even when
+a step after the one of the plugins failed, as
+[`backup-delete-words.test.ts`](../../src/common/backup-delete-words.test.ts) proves.

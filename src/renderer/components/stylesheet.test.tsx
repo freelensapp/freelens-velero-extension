@@ -3,11 +3,14 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { addressSearch, Renderer as Host, hostObject } from "../../../test/freelens-extensions";
-import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences, RESOURCES, versionOf } from "../../common/discovery";
+import { PATHS } from "../../common/paths";
 import {
   Backup,
   BackupRepository,
   BackupStorageLocation,
+  DataDownload,
+  DataUpload,
   PodVolumeBackup,
   PodVolumeRestore,
   Restore,
@@ -23,6 +26,8 @@ import { StorageLocationDetails } from "../details/storage-location-details";
 import { VolumeOperationDetails } from "../details/volume-operation-details";
 import { closeViews, openView } from "../navigation";
 import { BackupsPage } from "../pages/backups-page";
+import { DataDownloadsPage } from "../pages/data-downloads-page";
+import { DataUploadsPage } from "../pages/data-uploads-page";
 import { OverviewPage } from "../pages/overview-page";
 import { PodVolumeBackupsPage } from "../pages/pod-volume-backups-page";
 import { PodVolumeRestoresPage } from "../pages/pod-volume-restores-page";
@@ -55,7 +60,7 @@ const extension = { name: "@freelensapp/velero-extension" } as unknown as Render
 
 function object(kind: string, name: string, spec: object, status: object) {
   return {
-    apiVersion: "velero.io/v1",
+    apiVersion: kind === "DataUpload" || kind === "DataDownload" ? "velero.io/v2alpha1" : "velero.io/v1",
     kind,
     metadata: {
       name,
@@ -99,15 +104,38 @@ const OBJECTS: Record<Family, ReturnType<typeof object>> = {
     { pod: { namespace: "shop", name: "cart-0" }, volume: "data", uploaderType: "kopia" },
     { phase: "Completed", node: "worker" },
   ),
+  dataUploads: object(
+    "DataUpload",
+    "nightly-d4m8s",
+    { snapshotType: "CSI", sourcePVC: "orders-0", sourceNamespace: "shop", backupStorageLocation: "default" },
+    { phase: "Completed", node: "worker", progress: { bytesDone: 2048, totalBytes: 2048 } },
+  ),
+  dataDownloads: object(
+    "DataDownload",
+    "monday-r2t6v",
+    { targetVolume: { pvc: "orders-0", namespace: "shop" }, sourceNamespace: "shop", snapshotID: "a1b2c3" },
+    { phase: "Completed", node: "worker" },
+  ),
 };
 
 function installation(): Installation {
   const answers: Record<string, Answer> = {
-    "/apis/velero.io/v1": { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    "/apis/velero.io/v1": {
+      status: 200,
+      body: {
+        resources: (Object.keys(RESOURCES) as Family[])
+          .filter((family) => versionOf(family) === "v1")
+          .map((family) => ({ name: RESOURCES[family] })),
+      },
+    },
+    "/apis/velero.io/v2alpha1": {
+      status: 200,
+      body: { resources: [{ name: "datauploads" }, { name: "datadownloads" }] },
+    },
     "/apis/velero.io/v1/backupstoragelocations": { status: 200, body: { items: [OBJECTS.storageLocations] } },
     ...Object.fromEntries(
       (Object.keys(RESOURCES) as Family[]).map((family) => [
-        `/apis/velero.io/v1/namespaces/${A}/${RESOURCES[family]}`,
+        PATHS.family(family, A),
         { status: 200, body: { items: [OBJECTS[family]] } },
       ]),
     ),
@@ -170,6 +198,18 @@ describe("the rules of the views", () => {
         "pod-volume-restore",
         "monday-q9w3e",
       ],
+      [
+        "data-uploads",
+        (installation) => <DataUploadsPage installation={installation} />,
+        "data-upload",
+        "nightly-d4m8s",
+      ],
+      [
+        "data-downloads",
+        (installation) => <DataDownloadsPage installation={installation} />,
+        "data-download",
+        "monday-r2t6v",
+      ],
     ];
 
     for (const [id, page, kind, name] of pages) {
@@ -184,7 +224,8 @@ describe("the rules of the views", () => {
       }
       cleanup();
     }
-  });
+    // Eleven pages and ten views, each drawn whole: more than the time of a case on a machine at work.
+  }, 20_000);
 
   it("are carried by no viewer of an artifact and by no section of the details", () => {
     const shown = installation();
@@ -223,6 +264,18 @@ describe("the rules of the views", () => {
         <VolumeOperationDetails
           volume="PodVolumeRestore"
           object={hostObject(PodVolumeRestore, OBJECTS.podVolumeRestores)}
+          extension={extension}
+          installation={shown}
+        />
+        <VolumeOperationDetails
+          volume="DataUpload"
+          object={hostObject(DataUpload, OBJECTS.dataUploads)}
+          extension={extension}
+          installation={shown}
+        />
+        <VolumeOperationDetails
+          volume="DataDownload"
+          object={hostObject(DataDownload, OBJECTS.dataDownloads)}
           extension={extension}
           installation={shown}
         />

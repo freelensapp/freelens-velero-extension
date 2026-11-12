@@ -37,7 +37,7 @@ export interface RepositoryView {
   message?: { value: string; shortened: boolean };
   // The time of the last maintenance that succeeded, which is what the release writes there.
   lastMaintenance?: number;
-  // The recent maintenances, the newest first by their start, whatever their order in the object.
+  // The recent maintenances, the newest first by their start, then by their place in the object.
   maintenances: Maintenance[];
   // The newest of them failed: a mark beside the time of the last one that succeeded.
   newestFailed: boolean;
@@ -48,12 +48,25 @@ function text(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-// Newest first, by the start; what has no start goes after what has one.
-function newestFirst(one: Maintenance, other: Maintenance): number {
-  if (one.started === undefined || other.started === undefined) {
-    return one.started === other.started ? 0 : one.started === undefined ? 1 : -1;
+interface Listed {
+  maintenance: Maintenance;
+  // Its place in the list of the object.
+  place: number;
+}
+
+// Newest first, by the start; what has no start goes after what has one. Of two with the same start, or with none,
+// the later in the list is the newer: Velero appends each maintenance to the list and keeps the last three, and lists
+// them from the oldest when it gathers them again (`updateRepoMaintenanceHistory` and `consolidateHistory` of the
+// release). Every maintenance the release writes has a start; the place decides for an object it did not write.
+function newestFirst(one: Listed, other: Listed): number {
+  const [first, second] = [one.maintenance.started, other.maintenance.started];
+
+  if (first !== second) {
+    if (first === undefined) return 1;
+    if (second === undefined) return -1;
+    return second - first;
   }
-  return other.started - one.started;
+  return other.place - one.place;
 }
 
 export function repositoryView(repository: BackupRepositoryResource): RepositoryView {
@@ -61,11 +74,11 @@ export function repositoryView(repository: BackupRepositoryResource): Repository
   const recent = Array.isArray(status?.recentMaintenance) ? status.recentMaintenance : [];
   const maintenances = recent
     .filter((entry) => entry !== null && typeof entry === "object")
-    .map((entry): Maintenance => {
+    .map((entry, place): Listed => {
       const started = timestamp(entry.startTimestamp);
       const completed = timestamp(entry.completeTimestamp);
 
-      return {
+      const maintenance: Maintenance = {
         result: maintenanceResult(entry.result),
         ...(started === undefined ? {} : { started }),
         ...(completed === undefined ? {} : { completed }),
@@ -74,8 +87,11 @@ export function repositoryView(repository: BackupRepositoryResource): Repository
           : {}),
         ...(text(entry.message) ? { message: shownText(entry.message ?? "") } : {}),
       };
+
+      return { maintenance, place };
     })
-    .sort(newestFirst);
+    .sort(newestFirst)
+    .map((listed) => listed.maintenance);
   const config = spec?.repositoryConfig && typeof spec.repositoryConfig === "object" ? spec.repositoryConfig : {};
   const last = timestamp(status?.lastMaintenanceTime);
   const created = timestamp(repository.metadata.creationTimestamp);
@@ -115,11 +131,14 @@ export type Due =
   | { state: "not-ready" }
   // The server runs no maintenance of a repository of a read-only location.
   | { state: "read-only" }
-  // Whether the location is read-only is not known: it is not read, denied, or not there.
-  | { state: "access-unknown" };
+  // Whether the location is read-only is not known: it is denied, failed, not served or not there.
+  | { state: "access-unknown" }
+  // The storage locations were never answered yet: whether the location is read-only is not known until they are.
+  | { state: "locations-being-read" };
 
-// `readOnly` is undefined when the location of the repository is not known.
-export function maintenanceDue(view: RepositoryView, now: number, readOnly: boolean | undefined): Due {
+// `readOnly` is undefined when the location of the repository is not known, and `answered` says whether the storage
+// locations were answered once: before they are, the location is not known to be absent or denied.
+export function maintenanceDue(view: RepositoryView, now: number, readOnly: boolean | undefined, answered = true): Due {
   const { frequency } = view;
 
   if (!frequency.read) {
@@ -129,7 +148,7 @@ export function maintenanceDue(view: RepositoryView, now: number, readOnly: bool
   }
   if (view.readiness.readiness !== "ready") return { state: "not-ready" };
   if (readOnly) return { state: "read-only" };
-  if (readOnly === undefined) return { state: "access-unknown" };
+  if (readOnly === undefined) return answered ? { state: "access-unknown" } : { state: "locations-being-read" };
   if (view.lastMaintenance === undefined) return { state: "due-no-time" };
   const at = view.lastMaintenance + frequency.milliseconds;
 
@@ -152,6 +171,8 @@ export function dueText(due: Due): string {
       return REPOSITORY_WORDS.notReadyNoMaintenance;
     case "access-unknown":
       return REPOSITORY_WORDS.accessUnknown;
+    case "locations-being-read":
+      return REPOSITORY_WORDS.locationsBeingRead;
     default:
       return REPOSITORY_WORDS.readOnly;
   }

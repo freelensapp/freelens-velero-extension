@@ -3,13 +3,19 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-// What the sessions of the integration test share: one session for each of the five kinds of the first
-// milestones, Backup, Restore, Schedule, BackupStorageLocation and VolumeSnapshotLocation, as the integration
-// test of the template has one for each version of its kind. The three kinds of the backup repositories and
-// of the pod volume operations have pages of their own and no session yet: the amendment of SPEC-0015 for
-// them says why. A session puts one object of its kind in a namespace of its own on the cluster of the test
-// environment, and removes the namespace with the object when it ends. The namespace is not the one of a
-// server of Velero, so no controller reads the object: it stays as it was written. The session needs neither
+// What the sessions of the integration test share: one session for each of the ten kinds the extension
+// shows, as the integration test of the template has one for each version of its kind. Five are the kinds of
+// the first milestones, Backup, Restore, Schedule, BackupStorageLocation and VolumeSnapshotLocation; three are
+// the kinds of SPEC-0014 under `velero.io/v1`, BackupRepository, PodVolumeBackup and PodVolumeRestore, whose
+// sessions the amendment of SPEC-0015 of 2026-10-27 left to the last pull request of T5.1; two are the kinds of
+// the data movement under `velero.io/v2alpha1`, DataUpload and DataDownload, whose sessions came with their
+// fixtures in the second pull request of T5.2. A session puts one
+// object of its kind in a namespace of its own on the cluster of the test environment, and removes the
+// namespace with the object when it ends. The namespace is not the one of a server of Velero, so no
+// controller reads the object: the cache of the server holds its own namespace only, and the node agent
+// selects the pod volume operations and the data movement of its namespace by a field (v1.18.4,
+// pkg/cmd/server/server.go:272-276,
+// pkg/cmd/cli/nodeagent/server.go:183-199). The object stays as it was written. The session needs neither
 // the fixtures of the views nor another file having run, and it writes nothing but its namespace and its
 // object.
 //
@@ -30,10 +36,20 @@ export const SESSION_LABEL = "freelensapp.io/velero-integration-session";
 const ELEMENT_TIMEOUT = 60 * 1000;
 const KUBECTL_TIMEOUT = 5 * 60 * 1000;
 
-/** One of the five sessions: the kind, how the extension and the host show it, and the object of the session. */
+/** One of the ten sessions: the kind, how the extension and the host show it, and the object of the session. */
 export interface KindSession {
   /** The kind, as the API names it. */
-  kind: "Backup" | "Restore" | "Schedule" | "BackupStorageLocation" | "VolumeSnapshotLocation";
+  kind:
+    | "Backup"
+    | "Restore"
+    | "Schedule"
+    | "BackupStorageLocation"
+    | "VolumeSnapshotLocation"
+    | "BackupRepository"
+    | "PodVolumeBackup"
+    | "PodVolumeRestore"
+    | "DataUpload"
+    | "DataDownload";
   /** Its plural, by which the API and the list of the host name it. */
   resource: string;
   /** The list of the extension that shows it. */
@@ -50,7 +66,18 @@ function session(kind: KindSession["kind"], resource: string, list: cluster.List
   return { kind, resource, list, namespace: `velero-integration-${list.id}`, name: `integration-${list.kind}`, spec };
 }
 
-/** The five sessions, by the list of the extension each one opens. */
+/**
+ * The pod of the pod volume operations of the sessions: a reference of the shape the release writes, to a pod no
+ * namespace of the cluster holds, as no node agent reads the operations.
+ */
+const SESSION_POD = {
+  kind: "Pod",
+  namespace: "integration-source",
+  name: "integration-pod",
+  uid: "integration-pod-uid",
+};
+
+/** The ten sessions, by the list of the extension each one opens. */
 export const SESSIONS = {
   backups: session("Backup", "backups", cluster.BACKUPS, {
     includedNamespaces: ["integration-source"],
@@ -74,7 +101,58 @@ export const SESSIONS = {
     provider: "aws",
     config: { region: "us-east-1" },
   }),
+  repositories: session("BackupRepository", "backuprepositories", cluster.REPOSITORIES, {
+    volumeNamespace: "integration-source",
+    backupStorageLocation: "integration-location",
+    repositoryType: "kopia",
+    maintenanceFrequency: "168h0m0s",
+  }),
+  podVolumeBackups: session("PodVolumeBackup", "podvolumebackups", cluster.POD_VOLUME_BACKUPS, {
+    node: "integration-node",
+    pod: SESSION_POD,
+    volume: "integration-volume",
+    tags: {
+      backup: "integration-backup",
+      pod: SESSION_POD.name,
+      ns: SESSION_POD.namespace,
+      volume: "integration-volume",
+    },
+    backupStorageLocation: "integration-location",
+    repoIdentifier: "",
+    uploaderType: "kopia",
+  }),
+  podVolumeRestores: session("PodVolumeRestore", "podvolumerestores", cluster.POD_VOLUME_RESTORES, {
+    pod: SESSION_POD,
+    volume: "integration-volume",
+    backupStorageLocation: "integration-location",
+    repoIdentifier: "",
+    uploaderType: "kopia",
+    snapshotID: "integration-snapshot",
+    sourceNamespace: SESSION_POD.namespace,
+  }),
+  // The data movement of a claim of the namespace of the source, which no node agent takes: none reads the namespace
+  // of the session.
+  dataUploads: session("DataUpload", "datauploads", cluster.DATA_UPLOADS, {
+    snapshotType: "CSI",
+    csiSnapshot: { volumeSnapshot: "integration-snapshot", storageClass: "integration-storage" },
+    sourcePVC: "integration-claim",
+    backupStorageLocation: "integration-location",
+    sourceNamespace: SESSION_POD.namespace,
+    operationTimeout: "10m0s",
+  }),
+  dataDownloads: session("DataDownload", "datadownloads", cluster.DATA_DOWNLOADS, {
+    targetVolume: { pvc: "integration-claim", pv: "", namespace: "integration-restored" },
+    backupStorageLocation: "integration-location",
+    snapshotID: "integration-snapshot",
+    sourceNamespace: SESSION_POD.namespace,
+    operationTimeout: "10m0s",
+  }),
 } satisfies Record<string, KindSession>;
+
+// The version of the group a kind is served under: the data movement under the second.
+function versionOf(of: KindSession): string {
+  return of.kind === "DataUpload" || of.kind === "DataDownload" ? "velero.io/v2alpha1" : "velero.io/v1";
+}
 
 function required(name: string): string {
   const value = process.env[name];
@@ -127,7 +205,7 @@ export function placeObject(of: KindSession): void {
       items: [
         { apiVersion: "v1", kind: "Namespace", metadata: { name: of.namespace, labels } },
         {
-          apiVersion: "velero.io/v1",
+          apiVersion: versionOf(of),
           kind: of.kind,
           metadata: { name: of.name, namespace: of.namespace, labels },
           spec: of.spec,
@@ -177,7 +255,7 @@ export async function openList(frame: Frame, of: KindSession): Promise<Locator> 
 
 /** The address of the object, as the host names it in the address of its details and in its menu. */
 function selfLink(of: KindSession): string {
-  return `/apis/velero.io/v1/namespaces/${of.namespace}/${of.resource}/${of.name}`;
+  return `/apis/${versionOf(of)}/namespaces/${of.namespace}/${of.resource}/${of.name}`;
 }
 
 /**

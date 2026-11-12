@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M3 / T5.3
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [the write gate](SPEC-0009-write-gate.md), [the Overview](SPEC-0008-overview.md), [locations](SPEC-0007-locations-read-only.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-30, as drafted
 
@@ -264,3 +264,19 @@ above describes for it, at the layers it names, which at `b5834444` are in
 band of the server in the views run. Green on v2: SERV-01 to SERV-06 at the unit and
 component layers; SERV-01 to SERV-03 and SERV-05 to SERV-08 in the packaged
 application. The deviation recorded above holds on v2 as it is; v2 brings no other.
+
+**2026-11-09: a credential the cluster did not take, corrected.** The review of the
+accuracy of the README of 1.0.0 ([SPEC-0018](SPEC-0018-release-readiness.md)) found
+that the band said a 401 of the API server as a refusal: at the creation, that the
+identity needs the verb create on serverstatusrequests, and at the wait, that the
+cluster refused to read the request, although a credential the cluster does not
+take says nothing of what the identity may do. The band now says that the cluster
+did not take the credential of the context, that it may have expired, and to sign
+in again, then ask again, with nothing created at the creation and the request
+staying at the wait, as the actions of [SPEC-0017](SPEC-0017-write-actions.md) and
+the tabs of [SPEC-0010](SPEC-0010-diagnostic-request-and-transport.md) say it. The
+code stays `forbidden`, so what the request left is read as before. A unit case of
+`src/main/server-status.test.ts` reads both stages, and the refusal of a 403 beside
+them; it failed on the code before the correction. SERV-06 holds as written:
+REQ-157 asks the kind and the verb for an identity the API refuses, and the words
+of its code for every other way the request ends.

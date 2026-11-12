@@ -48,3 +48,136 @@ export function duration(value: unknown): Duration {
   if (at === 0 || !Number.isFinite(total) || total > LONGEST) return { read: false, written: value };
   return { read: true, milliseconds: sign * total + 0, written: value };
 }
+
+// The nanoseconds of each unit the parser of Go takes, as `time.ParseDuration` of the release reads them.
+const NANOSECONDS: Record<string, bigint> = {
+  ns: 1n,
+  us: 1_000n,
+  µs: 1_000n,
+  μs: 1_000n,
+  ms: 1_000_000n,
+  s: 1_000_000_000n,
+  m: 60_000_000_000n,
+  h: 3_600_000_000_000n,
+};
+// The largest magnitude of a duration of Go: the nanoseconds of a number of 63 bits.
+const LIMIT = 1n << 63n;
+
+// The nanoseconds of a text as `time.ParseDuration` of Go reads it, with its rounding of a fraction, or nothing when
+// Go refuses the text. A field of a backup that holds a duration is read with it, and the API server keeps the text as
+// it was sent.
+export function goDurationNanoseconds(text: string): bigint | undefined {
+  let rest = text;
+  let negative = false;
+
+  if (rest.startsWith("-") || rest.startsWith("+")) {
+    negative = rest.startsWith("-");
+    rest = rest.slice(1);
+  }
+  if (rest === "0") return 0n;
+  if (rest === "") return undefined;
+  let total = 0n;
+
+  while (rest !== "") {
+    if (!/^[0-9.]/.test(rest)) return undefined;
+    const whole = /^[0-9]*/.exec(rest)?.[0] ?? "";
+    let value = 0n;
+
+    for (const digit of whole) {
+      // Go refuses a whole part that does not fit 63 bits.
+      if (value > LIMIT / 10n) return undefined;
+      value = value * 10n + BigInt(digit);
+      if (value > LIMIT) return undefined;
+    }
+    rest = rest.slice(whole.length);
+    let fraction = 0n;
+    let scale = 1;
+    let fractionDigits = "";
+
+    if (rest.startsWith(".")) {
+      rest = rest.slice(1);
+      fractionDigits = /^[0-9]*/.exec(rest)?.[0] ?? "";
+      let overflow = false;
+
+      for (const digit of fractionDigits) {
+        if (overflow) continue;
+        if (fraction > (LIMIT - 1n) / 10n) {
+          overflow = true;
+          continue;
+        }
+        const next = fraction * 10n + BigInt(digit);
+
+        if (next > LIMIT) {
+          overflow = true;
+          continue;
+        }
+        fraction = next;
+        scale *= 10;
+      }
+      rest = rest.slice(fractionDigits.length);
+    }
+    // No digit before or after the point, as `.s`.
+    if (whole === "" && fractionDigits === "") return undefined;
+    const unit = /^[^0-9.]*/.exec(rest)?.[0] ?? "";
+
+    if (unit === "") return undefined;
+    rest = rest.slice(unit.length);
+    // A unit is one of the table, and nothing an object inherits.
+    const nanoseconds = Object.hasOwn(NANOSECONDS, unit) ? NANOSECONDS[unit] : undefined;
+
+    if (nanoseconds === undefined || value > LIMIT / nanoseconds) return undefined;
+    value *= nanoseconds;
+    if (fraction > 0n) {
+      // Go takes the fraction through a number of 64 bits of floating point, and keeps its whole part.
+      value += BigInt(Math.trunc(Number(fraction) * (Number(nanoseconds) / scale)));
+      if (value > LIMIT) return undefined;
+    }
+    total += value;
+    if (total > LIMIT) return undefined;
+  }
+  if (negative) return -total;
+  return total > LIMIT - 1n ? undefined : total;
+}
+
+// The digits of the fraction of a value of `precision` digits, without the zeros at its end, and the whole part, as
+// `fmtFrac` of Go writes them.
+function fraction(value: bigint, precision: number): { text: string; whole: bigint } {
+  let digits = "";
+  let printing = false;
+  let rest = value;
+
+  for (let index = 0; index < precision; index += 1) {
+    const digit = rest % 10n;
+
+    printing = printing || digit !== 0n;
+    if (printing) digits = `${digit}${digits}`;
+    rest /= 10n;
+  }
+  return { text: printing ? `.${digits}` : "", whole: rest };
+}
+
+// A duration as `Duration.String` of Go writes it: `720h0m0s`, `1m30s`, `1.5s`, `300ms`, `0s`. A field of a backup
+// that holds a duration is written so.
+export function goDurationText(nanoseconds: bigint): string {
+  const negative = nanoseconds < 0n;
+  const magnitude = negative ? -nanoseconds : nanoseconds;
+  let text: string;
+
+  if (magnitude < 1_000_000_000n) {
+    if (magnitude === 0n) return "0s";
+    const [precision, unit] =
+      magnitude < 1_000n ? [0, "ns"] : magnitude < 1_000_000n ? [3, "µs"] : ([6, "ms"] as const);
+    const { text: digits, whole } = fraction(magnitude, precision);
+
+    text = `${whole}${digits}${unit}`;
+  } else {
+    const { text: digits, whole: seconds } = fraction(magnitude, 9);
+    const minutes = seconds / 60n;
+    const hours = minutes / 60n;
+
+    text = `${seconds % 60n}${digits}s`;
+    if (minutes > 0n) text = `${minutes % 60n}m${text}`;
+    if (hours > 0n) text = `${hours}h${text}`;
+  }
+  return negative ? `-${text}` : text;
+}

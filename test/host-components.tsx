@@ -1,5 +1,5 @@
 // What stands for the components of the host in the tests of the views, written from their source at the
-// validation target, freelensapp/freelens at 7801fb10a5f20af308093b39e5f79cd6e8c3461d. Each draws the markup
+// validation target, freelensapp/freelens at b9b53e16056578c5407312eba5823a089972f6d5. Each draws the markup
 // the component of the host draws for the props the extension gives it, with the classes the host gives,
 // and does what it does with the events a test sends; each names the file and the lines it follows. What a
 // component does that no test can see, its styles and its layout, is not drawn, and what it would do with a
@@ -396,15 +396,21 @@ interface Option {
 // `Select` (packages/core/src/renderer/components/select/select.tsx lines 127 to 280), the select of react-select
 // of the host, drawn as the select of the document: the same choice by the value of an option, the option given
 // to what it was given for a change, its words while nothing is chosen, and the identifier of its field, which
-// the host takes from `id` and from nothing else (lines 218, 246 and 247), with the classes of its theme. The
-// menu of react-select, its search and its keys are not drawn.
+// the host takes from `id` and from nothing else (lines 218, 246 and 247), with the classes of its theme. A choice
+// that can be taken back, `isClearable`, is the option of its words, which gives nothing for a change, as the cross
+// of react-select does. The menu of react-select, its search and its keys are not drawn.
 function Select({ options, value, onChange, placeholder, isDisabled, id, themeName, className, ...rest }: Passed) {
+  // react-select gives its field the notes of its own, and takes no aria-describedby of the props (Select of
+  // react-select 5.10.2, the props of its input): the double drops it as well, so that a field described only that
+  // way is not described here either.
   const {
     inputId: _taken,
     isMulti,
+    isClearable: _clearable,
     menuClass: _menuClass,
     menuPortalTarget: _portal,
     menuPlacement: _placement,
+    "aria-describedby": _described,
     ...passed
   } = rest;
 

@@ -8,9 +8,11 @@ import { AdherenceCell, NextRunText } from "../components/adherence";
 import { FamilyPage } from "../components/family-page";
 import { Signal, time } from "../components/status";
 import styles from "../components/views.module.css";
+import { openView } from "../navigation";
 import { adherenceOf, backupsAnswered } from "../state/adherence";
 import { currentInstallation } from "../state/context";
 import { OpenView } from "./open-view";
+import { SCHEDULE_CREATE_VIEW_NAME } from "./schedule-create-workspace";
 import { ValidationMark } from "./schedule-workspace";
 
 import type { HistoryItem } from "../../common/schedule-history";
@@ -21,7 +23,7 @@ import type { ListDefinition } from "../components/family-page";
 import type { Installation } from "../state/installation";
 
 const {
-  Component: { KubeObjectAge, WithTooltip },
+  Component: { Button, Icon, KubeObjectAge, WithTooltip },
 } = Renderer;
 
 // What a row of the list shows: the schedule, and the newest of its backups that exist, or that its backups
@@ -144,6 +146,21 @@ export const SCHEDULES: ListDefinition<ScheduleRow> = {
     <ValidationMark key="validation" state={row.state} />,
     <KubeObjectAge key="age" object={item} />,
   ],
+  // Create schedule, the one command of the list (SPEC-0016, REQ-221): it opens the form, which writes nothing by
+  // itself, a new one once the schedule of the form before was created.
+  command: (installation) => (
+    <Button
+      primary
+      data-testid="velero-schedules-create"
+      onClick={() => {
+        installation.scheduleCreate.start();
+        openView({ kind: "schedule-create", name: SCHEDULE_CREATE_VIEW_NAME });
+      }}
+    >
+      <Icon material="add" small aria-hidden />
+      Create schedule
+    </Button>
+  ),
 };
 
 // The Schedules of the selected installation: the list and, over it, the view of what is open.

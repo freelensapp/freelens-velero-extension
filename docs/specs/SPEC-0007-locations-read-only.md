@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M2 / T1.6
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-28, as drafted
 
@@ -310,3 +310,13 @@ LOC-01 to LOC-13 and LOC-15 at the unit and component layers; LOC-01 to LOC-12,
 LOC-14 and LOC-15 in the packaged application, LOC-09, LOC-10 and LOC-15 with the
 two readers, and LOC-14 in the pre-review as well. The two deviations recorded above
 hold on v2 as they are; v2 brings no other.
+
+**T5.2 of [SPEC-0014](SPEC-0014-repositories-and-data-movement.md), 2026-11-08: LOC-09
+with the second version of the group.** The reader takes the paths of the kinds of
+Velero under `velero.io/v1` as before, and under `velero.io/v2alpha1` the discovery
+of the version and the lists of the data uploads and of the data downloads in one
+namespace, and nothing else of it: not a kind of the first version, not a list of the
+whole cluster, not an object by its name, not another version
+(`src/renderer/api/reader.ts`). Its unit test asks both versions' paths of the
+families and refuses those, beside the Secrets, the dots and the queries of before;
+every path the views have is still under `/apis/velero.io/`.

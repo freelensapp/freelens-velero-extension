@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { addressChanges, addressSearch, Renderer } from "../../../test/freelens-extensions";
 import { confirmDialogs, listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
@@ -92,7 +93,7 @@ const tuesday = object(
 
 function answers(more: Record<string, Answer> = {}): Record<string, Answer> {
   return {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }, { metadata: { name: "default", namespace: B } }),
     [path("backups", A)]: list(nightly(), stopped),
     [path("restores", A)]: list(monday()),
@@ -338,11 +339,14 @@ describe("the tabs in the workspace of a backup", () => {
   });
 
   it("asks nothing and creates nothing when a tab is opened, with writes off and with writes on", async () => {
-    const { main, asked } = mount();
+    const { main, asked, installation } = mount();
 
     await listed("backup", 2);
     act(() => openView({ kind: "backup", name: "nightly" }));
     await screen.findByTestId("velero-backup-workspace");
+    // The view asks the family of its band at once when it opens: what the tabs ask is counted after that read.
+    await waitFor(() => expect(installation.read("podVolumeBackups").status).not.toBe("loading"));
+    await waitFor(() => expect(installation.reading).toBe(false));
     const read = asked.length;
 
     for (const title of ["Log", "Results", "Resources", "Volumes", "Summary"]) fireEvent.click(tab(title));

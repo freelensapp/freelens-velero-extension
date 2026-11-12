@@ -13,8 +13,9 @@ kinds of `velero.io`) inside Freelens, with their logs and results, the
 adherence of the schedules and guarded recovery actions. It was scaffolded from
 freelens-example-extension and is developed spec by spec.
 
-The foundation, the first milestone and the second milestone are in place and
-reviewed. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
+1.0.0, the agreed scope of the six milestones, was released on 2026-11-10, after
+the review of each milestone. Scope and progress are in
+`docs/development/ROADMAP.md`.
 
 - **Language**: TypeScript 7.0.2
 - **Runtime**: Freelens >= 2.0.0, the extension API v2 (`engines.freelens` `^2.0.0`)
@@ -63,14 +64,14 @@ reviewed. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
   must not delay a ready release or justify omitted requirements.
 - The validation target is the one of
   [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md): Freelens v2 at
-  freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the
-  nightly v2.0.0-0-nightly-2026-10-25, with the SDK `@freelensapp/extensions`
-  2.0.0-0-nightly-2026-10-25 pinned exactly, the version the tests build against.
-  `engines.freelens` is `^2.0.0`. Until Freelens 2.0.0 is released the target moves
-  with the [host drift watch](docs/development/PROCESS.md#host-drift-watch), read
-  before every slice and before every merge; then the pin of the SDK becomes a
-  range. Another major version of Freelens needs its own spec and its own
-  verification.
+  freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the
+  tag v2.0.0 of the release Freelens 2.0.0, with the SDK `@freelensapp/extensions`
+  taken by the range `^2.0.0` and resolved to 2.0.0, the version the tests build
+  against. `engines.freelens` is `^2.0.0`. The target moved with the
+  [host drift watch](docs/development/PROCESS.md#host-drift-watch) until Freelens
+  2.0.0 was released; since the watch ended it moves with each release of
+  Freelens, in the pull request that brings the release. Another major version of
+  Freelens needs its own spec and its own verification.
 - Optimize for an excellent operational UI: truthful status, fast diagnosis,
   efficient navigation, and safe actions, integrated with Freelens.
 - Do not mention individuals or include comparisons with other software in any
@@ -93,8 +94,9 @@ This repository is developed spec-first. Before implementing anything, read:
 
 - `docs/development/PROCESS.md`: the spec-driven workflow (spec before code,
   docs updated in the same PR, manual-testing escalation to the lead maintainer,
-  milestone review gate, the upstream drift watch of Velero and the host drift
-  watch of Freelens and of the template).
+  milestone review gate, the upstream drift watch of Velero, and the host drift
+  watch, ended with Freelens 2.0.0, with the move of the target at each release
+  of Freelens).
 - `docs/development/ROADMAP.md`: scope and progress toward v1.0.0. It is the
   single source of truth for both.
 - `docs/development/ARCHITECTURE.md`: process ownership, target identity, the
@@ -225,13 +227,14 @@ pnpm knip:check           # Unused files, unused and unlisted dependencies (knip
 # Tests
 pnpm test:unit            # Builds first, then vitest, then the measures alone
 pnpm e2e:cluster:up       # Disposable kind cluster with Velero and S3 (needs Docker)
+pnpm e2e:cluster:up:definitions  # The same cluster with the CRDs alone (integration, views without a controller)
 pnpm e2e                  # Fixtures and transport proof against that cluster
 pnpm e2e:cluster:down     # Removes the cluster, its network and its state
 pnpm demo:up              # The cluster with the fixtures left in place
 pnpm demo:views           # What the views need beside them, and where the kubeconfigs of the demo are
 pnpm e2e:views            # The suites of the views in the Freelens FREELENS_APP names, against the fixtures
 pnpm pre-review           # Both themes, the sizes of the window, the zoom and the keyboard
-pnpm e2e:integration      # FND-10 and a session for each of the five kinds, in the Freelens FREELENS_APP names
+pnpm e2e:integration      # FND-10 and a session for each of the ten kinds, in the Freelens FREELENS_APP names
 
 # Build
 pnpm build                # Both Vite runs, renderer then main, without the type check
@@ -263,7 +266,7 @@ src/
   common/                   # Pure helpers on plain data, and the store of the preferences
 build/                      # Vite plugins of the template: modules of the host, standard decorators, CSS module declarations
 environment-tests/          # Probes of the programs of each process, which fail on an API of another environment
-integration/                # FND-10, a session for each of the five kinds, and the helpers of the suites of the views
+integration/                # FND-10, a session for each of the ten kinds, and the helpers of the suites of the views
 test/                       # The stub of the SDK, the doubles of the host, the build and environment tests, the measures
 e2e/scripts/                # Disposable kind cluster with Velero and S3, fixtures, transport proof, stand-ins of the host
 e2e/__tests__/              # The suites of the views, run in the Freelens that FREELENS_APP names
@@ -366,8 +369,8 @@ test environment and of the process of this repository.
   of the same environment; the proxy refuses with 403 a request that carries no
   token, as read in the source at the target
   (`packages/core/src/main/kubeconfig-manager/kubeconfig-manager.ts`, lines 177 to
-  191; `packages/core/src/main/kube-tools/kube-tools.ts`, lines 119 to 122;
-  `packages/core/src/main/freelens-proxy/freelens-proxy.ts`, lines 447 to 461). The
+  191; `packages/core/src/main/kube-tools/kube-tools.ts`, lines 124 to 127;
+  `packages/core/src/main/freelens-proxy/freelens-proxy.ts`, lines 455 to 473). The
   tunnel gives kubectl that environment whole: the plugin of the kubeconfig of a
   cluster runs in freelens-k8s-proxy alone, as the suite of the tabs proves with the
   identity of an `exec` plugin.
@@ -392,17 +395,22 @@ test environment and of the process of this repository.
   controller of the test environment wrote before trusting a synthetic one.
 - No controller validates a synthetic storage location. Give it a validation
   that is days old, and take the fresh one from the location the controller of
-  the test environment validates: what a suite expects must not depend on how
-  old the environment is.
+  the test environment validates, which on the CRDs of the release alone the
+  runner of the views writes once a minute, standing in for the server: what a
+  suite expects must not depend on how old the environment is.
 - A family that is asked again keeps the status of its last read, with
   `reading` beside it. Do not show a state from `loading` alone: it is the state
   of a family that was never answered.
-- The pod volume backups and the pod volume restores are read only while a view
-  that shows them is open: a holder says what it needs in one call that replaces
-  what it needed before, the frame of a page with what its page and the view that
-  is open read, and lets go when it is gone. A family needed and never read is asked
-  at once, alone, in the generation; one no holder needs is not asked at the read
-  after, and what was read of it goes then. The Overview, the other lists and the
+- The pod volume backups, the pod volume restores, the data uploads and the data
+  downloads are read only while a view that shows them is open, the data movement
+  under `velero.io/v2alpha1` and never where the API does not serve that version:
+  a holder says what it needs in one call that replaces what it needed before, the
+  frame of a page with what its page and every view of the way that is open read,
+  and lets go when it is gone. A family needed and never read is asked at once,
+  alone, in the generation; one no holder needs is not asked at the read after,
+  and what was read of it goes then. The views of a backup and of a restore hold
+  their two families, the view of a repository the four, the view of a data
+  download the data uploads beside its own; the Overview, the other lists and the
   sections of the details hold none: a test of what a page asks counts them.
 - The list layout of the host takes its rows from the `items` it is given, or from
   the `contextItems` of its store, and not from the `getItems` it is given, as read
@@ -455,31 +463,44 @@ test environment and of the process of this repository.
   of this machine, would give the views no offset, and they would say "not known"
   with nothing to tell why.
 - The verification of the test environment refuses an installation that holds a
-  schedule, and the hosted job runs it after the cleanup of the fixtures: the
-  schedule the controller of the installation validates, a fixture of the
-  adherence, goes with that cleanup, by its identity, before it. That controller
-  sends a PATCH of the schedule at each of its looks with nothing changed, once a
-  minute (measured on 2026-10-26), which every suite would count as a write: the
-  helpers leave out of the writes the PATCH of a schedule by name, no more of them
-  than the whole minutes between the two readings of the counters and two
-  (`SCHEDULE_PATCHED_AT_EVERY_LOOK`, `writesOf`), so `writes` takes two readings
-  of `apiRequests`, which keep the moment they were asked; the version and the
-  status of the schedule in the snapshot prove that nothing changed it.
+  schedule, and each part of the hosted job on that environment runs it after the
+  cleanup of the fixtures: the schedule the controller of the installation
+  validates, a fixture of the adherence, goes with that cleanup, by its identity,
+  before it. That controller sends a PATCH of the schedule at each of its looks
+  with nothing changed, once a minute (measured on 2026-10-26), which every suite
+  would count as a write: the helpers leave out of the writes the PATCH of a
+  schedule by name, no more of them than the whole minutes between the two
+  readings of the counters and two (`SCHEDULE_PATCHED_AT_EVERY_LOOK`, `writesOf`),
+  so `writes` takes two readings of `apiRequests`, which keep the moment they were
+  asked; the version and the status of the schedule in the snapshot prove that
+  nothing changed it.
+- The live fixtures back up and restore a pod volume: the pod runs the image of
+  the store, preloaded, never pulled (its shell ran the command of the volume in
+  the sandbox of the probe of the images when it was checked once, on 2026-11-02;
+  the probe itself checks the flags of the installer only); the server is installed with `--default-repo-maintain-frequency=168h`
+  and `verify` refuses an environment without it; the repository the server makes
+  carries no label of the demo, so the record of the run keeps its identity and the
+  cleanup removes it by its UID; the pod volume operations go with their owners
+  (they carry no finalizer, seen on 2026-11-02). What the server sends to the repository at
+  its pass and what the controllers list of the operations are measured and set as
+  `REPOSITORY_WRITTEN_AT_EACH_PASS` and `OPERATIONS_LISTED_BY_A_CONTROLLER`
+  (measured on 2026-11-02: neither happens, so both keep their defaults).
 - What the suite of the adherence expects of a fixture is computed by the helper
   of the suites, `integration/helpers/velero-adherence.ts`, from the objects as
   the cluster holds them and from the clock, at the clock before a read of the
-  page less twenty seconds and after it plus a second, and never with the code
-  of the extension: the helper runs in Node, and the page in the Electron of the
+  page less twenty seconds and after it plus a second, and never with the code of
+  the extension: the helper runs in Node, and the page in the Electron of the
   host. That `Intl` knows `America/Argentina/Buenos_Aires`, the zone of the
   schedule with a name of 63 characters, in the nightly
   v2.0.0-0-nightly-2026-10-25 (runs of 2026-10-26); an application that did not
   would show that schedule not known, and the suite says which in one constant.
   The suite took 133 to 138 seconds alone on the machine of the runs, about four
-  minutes with the build, the pack and the start of its runner, and the hosted
-  job runs it in the run of the pattern `velero-e2e`. The list of three hundred
-  schedules ordered by a column of the host answers in 100 to 113 ms, alike for
-  each column and direction, and a search of it in 62 to 309 ms, about a quarter
-  of a second more from the key, which the host waits before it searches.
+  minutes with the build, the pack and the start of its runner, and the hosted job
+  runs it in its part without a controller, by the name `velero-e2e-adherence`. The
+  list of three hundred schedules ordered by a column of the host answers in 100
+  to 113 ms, alike for each column and direction, and a search of it in 62 to 309
+  ms, about a quarter of a second more from the key, which the host waits before
+  it searches.
 - A mark of the views, `.status`, is an inline box in the middle of its line: in
   a table cell at the top of a row of plain words its word sits about a pixel
   under the others, past the pixel the pre-review allows at twice the zoom. The
@@ -527,7 +548,12 @@ test environment and of the process of this repository.
   the whole cluster least of all: the guard of a suite counts on the API server
   the reads of the kinds of Velero, whoever sends them. A read of the requests of
   every namespace, once a minute, made beside the suites to watch them, failed
-  the guard of one.
+  the guard of one. The one exception is the runner of the views on the CRDs of
+  the release alone, which stands in for the server at the storage location of
+  the installation: once a minute a read of that location by its name and a
+  PATCH of it, which the guard leaves out as it leaves out the ones of the
+  server, and which a window that compares reads takes again, as it takes a read
+  anything else asked in the same time.
 - The sync of the reviewed release looks at a storage location once a minute, and
   passes over it until its period, a minute by default, went by since its last
   pass ended: a backup made from files given to the store comes at the first pass
@@ -614,16 +640,18 @@ test environment and of the process of this repository.
   is the one of the API server, as read in the source at the target and in what it
   bundles. The proxy of the main process takes a read of the frame on `/api-kube` to
   the freelens-k8s-proxy of the cluster (`packages/core/src/main/freelens-proxy/freelens-proxy.ts`,
-  lines 463 to 522), on the fetch path of http-proxy-3 2.0.2, the version its
+  lines 475 to 534), on the fetch path of http-proxy-3 2.0.2, the version its
   lockfile resolves, with the `fetch` of undici 8.12.3 and its pool of HTTP/2 to that
-  proxy (`packages/core/src/main/cluster/freelens-k8s-proxy-target.ts`, lines 112 to
-  124 and 154 to 168). http-proxy-3 passes on every header of the answer of `fetch`
+  proxy (`packages/core/src/main/cluster/freelens-k8s-proxy-target.ts`, lines 111 to
+  123 and 152 to 166). http-proxy-3 passes on every header of the answer of `fetch`
   (`dist/lib/http-proxy/passes/web-incoming.js`, lines 350 to 356 and 369 to 374)
   but the hop-by-hop `transfer-encoding`, and `connection` and `keep-alive` on
   HTTP/2 (`web-outgoing.js`, lines 56 to 61 and 139 to 149), and the host changes no
-  header of an answer but the `location` of a redirect (`freelens-proxy.ts`, lines
-  359 to 373 and 420 to 434). Node, 24.22.0 in the Electron 43.8.3 of the target, as
-  the packaged application reports it, writes a Date only for an answer that has
+  header of an answer but the `location` of a redirect and `cache-control`, which it
+  sets to `no-store` on every answer of the API (`freelens-proxy.ts`, lines 93 to 98,
+  366 to 381, 428 to 442 and 455 to 458). Node, 24.22.1 in the Electron 44.10.0 of
+  the target, as the `DEPS` of Electron v44.10.0 names it, and with the same two
+  files as Node 24.22.0, writes a Date only for an answer that has
   none (`lib/internal/http2/core.js`, lines 2690 to 2701, and
   `lib/_http_outgoing.js`, lines 503 and 504, for HTTP/1.1). freelens-k8s-proxy
   2.0.0 passes the answer of the API server on with the proxy handler of kubectl
@@ -746,7 +774,8 @@ the same helpers. So:
 
 - **Metadata**: `static readonly` `kind`, `namespaced`, `apiBase` and `crd`, with
   `crd.apiVersions` listing every version the cluster serves, `velero.io/v1` for
-  the eight kinds of today.
+  eight kinds of today and `velero.io/v2alpha1` for the data uploads and the data
+  downloads.
 - **Instance type**: `declare kind` and `declare apiVersion`, with the kind and the
   version as literals, which tie a section of the details made with `detailsFor`,
   and a menu item made with `menuItemFor`, to its kind. `declare` emits nothing: a
@@ -788,7 +817,7 @@ export class Backup extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, Ba
 `src/renderer/index.tsx` registers the section of the details of each kind with
 `Renderer.K8sApi.detailsFor(<class>, { priority, Details })`, which takes the kind
 and the versions from the class and checks the section against it, and lists the
-eight classes in `customResources`: while the extension is enabled the Custom
+ten classes in `customResources`: while the extension is enabled the Custom
 Resources tree of the cluster leaves them out, where they would be listed a second
 time beside the pages of the group of Velero, and lists them again once it is
 disabled. A kind with a page of its own joins `customResources` with its page; a
@@ -885,8 +914,9 @@ must not be mapped.
 
 The libraries of the host are devDependencies at the versions of the catalog of
 the host, React and its DOM 19.3.1, MobX 7.0.6, the bindings 10.0.2, with their
-types, and `electron` 43.8.3 for its types alone; `@freelensapp/extensions` is
-pinned exactly to the nightly of the validation target. pnpm runs with
+types, and `electron` 44.10.0 for its types alone; `@freelensapp/extensions` is
+taken by the range `^2.0.0`, resolved to the version of the validation target,
+which the build test ties to the header of SPEC-0015. pnpm runs with
 `strictPeerDependencies`: a library shared with the host outside the peer range of
 the SDK fails the install.
 
@@ -903,33 +933,54 @@ file is saved. What the package bundles is in
 
 ## Workflows
 
-The hosted checks run on every pull request and on main, on synthetic data only:
+The hosted checks run on main and on every pull request, on synthetic data only;
+the views and the end to end tests also every night, and on a pull request only
+for the changes that reach them:
 
 - `check.yaml`: the build, the type check of the nine programs, lint and Knip.
 - `trunk-check.yaml`: Trunk on every file.
 - `unit-tests.yaml`: `pnpm test:unit`, the build first, then the tests and the
   measures alone.
-- `integration-tests.yaml`: FND-10 and the five sessions of the integration test,
+- `integration-tests.yaml`: FND-10 and the ten sessions of the integration test,
   in Freelens built from source at the commit of the validation target, on the
-  disposable kind cluster `pnpm e2e:cluster:up` makes, taken down whatever happens.
-- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in one
-  run of the runner of `pnpm e2e:views`, in Freelens built at the same commit,
-  against the fixtures of `pnpm demo:up`; then the cleanup of the fixtures and the
-  verification of the environment.
+  disposable kind cluster with the CRDs of the release alone that
+  `pnpm e2e:cluster:up:definitions` makes, taken down whatever happens.
+  Freelens is built through `.github/actions/build-freelens`, the composite
+  action it shares with `views-tests.yaml`; a change of that action runs every
+  part of the views.
+- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in six
+  parts side by side, each a job with an environment of its own and one run of the
+  runner of `pnpm e2e:views`, in Freelens built at the same commit: three on the
+  environment and the fixtures of `pnpm demo:up`, for the suites that read what
+  only a server makes (the artifacts, the pre-review, the volumes, the server and
+  the repositories),
+  each then with the cleanup of the fixtures and the verification of the
+  environment; and three on the CRDs of the release alone with the static fixtures
+  and the counterparts of what the controllers leave in the installation, for the
+  twelve other suites, the one of the actions among them, and FND-10. A first job
+  decides the parts by the rules of `e2e/views-parts.json`: every part on main, every night and on demand; on a pull
+  request, the parts its changed files reach, every part for a file no rule knows
+  and none for documents and unit tests alone. The job `views in Freelens v2`
+  passes when the parts it chose passed, or when it chose none, and unit tests
+  check the rules and that the parts name every suite once.
 - `e2e-tests.yaml`: the environment brought up, the fixtures and the transport
-  proof, and the environment taken down.
+  proof, and the environment taken down; on main, every night, and on a pull
+  request that changes something besides the renderer, the suites of the views,
+  the documents, the unit tests and the configuration of the linters.
 - `osv-scanner.yaml`, and `mise-lock-check.yaml` for a pull request that changes
   `.nvmrc`, `mise.toml` or `mise.lock`.
 
 The two workflows that build Freelens name the commit once, in `freelens_ref`,
 and cache the build by it and by nothing else; a unit test ties that line to the
 header of [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md), so the pin moves
-in both places with the host drift watch. A release is `npm-version.yaml`, which
-opens the pull request of the version, `tag.yaml`, which tags the version `X.Y.Z`
-or `X.Y.Z-N` once that pull request is merged, and `release.yaml`, which builds
-the tag and publishes a version with a hyphen on the npm tag `next`, released on
-GitHub as a prerelease, and any other on `latest`. The daily maintenance workflows
-and Renovate open their pull requests on branches named `automated/*`.
+in both places when the target moves with a release of Freelens. A release is
+`npm-version.yaml`, which opens the pull request of the version, `tag.yaml`, which
+tags the version `X.Y.Z`, or a prerelease `X.Y.Z-` followed by letters, digits,
+dots and hyphens, once that pull request is merged, and
+`release.yaml`, which builds the tag and publishes a version with a hyphen on the
+npm tag `next`, released on GitHub as a prerelease, and any other on `latest`. The
+daily maintenance workflows open their pull requests on branches named
+`automated/*`, and Renovate on `renovate/*`.
 
 ## Code Style
 
@@ -1003,7 +1054,7 @@ Code shared between both processes goes to `src/common/`.
 2. **Test changes** before committing
 3. **Run validation before committing:** `pnpm lint:fix && pnpm type:check && pnpm test:unit`
 4. **For Markdown and YAML:** run `pnpm trunk:fix`
-5. **Read the host drift watch** before a slice and before a merge, until Freelens 2.0.0 is released: see `docs/development/PROCESS.md`
+5. **Move the target with each release of Freelens**, in the pull request of Renovate that brings it, and read the main branch of the host before a slice and a merge only while a change of the extension API is coming: see the host drift watch in `docs/development/PROCESS.md`
 
 ## GitHub Actions (Claude Code Action) Rules
 

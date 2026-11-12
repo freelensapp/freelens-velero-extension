@@ -4,12 +4,35 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+// The openssl the certificates are made with, the first on the PATH: OpenSSL 3 or later, whose `x509 -req`
+// knows `-copy_extensions`. Another one, as the LibreSSL of macOS at /usr/bin/openssl, would fail later with
+// a usage of its own: it is named here, with what is needed, before anything is made.
+async function requireOpenSsl3(
+  execute: (file: string, args: string[], options: object) => Promise<{ stdout: string }>,
+) {
+  let found: string;
+
+  try {
+    found = (await execute("openssl", ["version"], { timeout: 30_000 })).stdout.trim();
+  } catch (error) {
+    found = `no openssl that runs (${(error as Error).message})`;
+  }
+  const major = /^OpenSSL (\d+)\./.exec(found)?.[1];
+
+  if (!major || Number(major) < 3)
+    throw new Error(
+      `The certificates of the tests are made with OpenSSL 3 or later, the first openssl on the PATH, and found ${found || "an openssl that says no version"}: put an OpenSSL 3 first on the PATH`,
+    );
+}
+
 // A certificate of an authority made for the test, for a name and for the other names it is given.
 export async function createTlsFixture(hostname = "storage.example.invalid", also: string[] = []) {
   for (const name of [hostname, ...also])
     if (!/^[a-z0-9.-]+$/.test(name) || name.length > 253) throw new Error("Invalid synthetic TLS hostname");
-  const directory = await mkdtemp(join(tmpdir(), "velero-tls-"));
   const execute = promisify(execFile);
+
+  await requireOpenSsl3(execute);
+  const directory = await mkdtemp(join(tmpdir(), "velero-tls-"));
   const caKey = join(directory, "ca.key");
   const caFile = join(directory, "ca.crt");
   const keyFile = join(directory, "server.key");

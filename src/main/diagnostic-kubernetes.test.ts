@@ -14,8 +14,10 @@ import {
   statusOf,
 } from "../../test/host-client";
 import { createTlsFixture } from "../../test/tls-fixture";
+import { deleteRequestOf, deleteRequestText } from "../common/delete-request";
 import { CLUSTER_WORDS, downloadFailure } from "../common/diagnostic-text";
 import { DIAGNOSTIC_REQUEST_LABEL } from "../common/ipc";
+import { patchText, pausePatch, resumePatch } from "../common/schedule-patch";
 import {
   DiagnosticKubernetes,
   type DiagnosticObject,
@@ -102,21 +104,83 @@ const ended = (promise: Promise<unknown>) =>
   );
 
 describe("the create-only adapter, through the client of the host", () => {
-  it("has a way to read and a way to create, and none to change or to remove an object", () => {
+  it("has a way to read, a way to create and the two patches of a schedule, and none to remove an object", () => {
     // What the adapter can do, by name: a method added to it is looked at here, against the rule that the
     // extension deletes no request.
     expect(Object.getOwnPropertyNames(DiagnosticKubernetes.prototype).sort()).toEqual([
       "assertCurrent",
       "certificate",
       "constructor",
+      "createBackup",
+      "createDeleteBackupRequest",
       "createDownload",
       "createGenerated",
+      "createRestore",
+      "createSchedule",
+      "deleteRequestsOf",
       "list",
+      "patchSchedule",
       "path",
       "read",
       "refusal",
       "send",
     ]);
+  });
+
+  it("patches a schedule with the text of a pause or of a resume as it is, byte for byte, with the method in capitals and the media type of a JSON patch, and sends no other patch", async () => {
+    const { api, host, signal } = fixture((request) =>
+      answered(200, objectOf(request.path.split("/").pop() ?? "", "velero", { spec: { paused: true } })),
+    );
+    const pause = patchText(pausePatch("nightly-uid"));
+    const resume = patchText(resumePatch("nightly-uid", { expression: "0 3 * * *", skipImmediately: true }));
+
+    await api.patchSchedule("velero", "nightly", pause, signal);
+    await api.patchSchedule("velero", "nightly", resume, signal);
+    expect(host.requests.map((item) => [item.method, item.path, item.headers["content-type"], item.text])).toEqual([
+      ["PATCH", `${API}/schedules/nightly`, "application/json-patch+json", pause],
+      ["PATCH", `${API}/schedules/nightly`, "application/json-patch+json", resume],
+    ]);
+    const refused = (text: string) => () => api.patchSchedule("velero", "nightly", text, signal);
+    const operations = JSON.parse(resume) as Record<string, unknown>[];
+
+    for (const text of [
+      "not json",
+      "[]",
+      JSON.stringify(JSON.parse(pause).slice(1)),
+      JSON.stringify([...JSON.parse(pause), { op: "add", path: "/spec/schedule", value: "* * * * *" }]),
+      JSON.stringify([{ op: "add", path: "/spec/paused", value: true }, ...JSON.parse(pause).slice(0, 1)]),
+      JSON.stringify(JSON.parse(pause).map((operation: Record<string, unknown>) => ({ ...operation, op: "replace" }))),
+      JSON.stringify([...operations.slice(0, 2), ...operations.slice(3)]),
+      JSON.stringify(operations.map((operation, at) => (at === 4 ? { ...operation, value: "true" } : operation))),
+      JSON.stringify(
+        operations.map((operation, at) => (at === 3 ? { ...operation, path: "/spec/schedule" } : operation)),
+      ),
+      JSON.stringify(operations.map((operation, at) => (at === 0 ? { ...operation, value: "" } : operation))),
+      JSON.stringify(operations.map((operation, at) => (at === 1 ? { ...operation, extra: 1 } : operation))),
+      JSON.stringify({ op: "add", path: "/spec/paused", value: true }),
+    ])
+      expect(refused(text)).toThrow("validation");
+    expect(() => api.patchSchedule("velero", "", pause, signal)).toThrow("validation");
+    expect(host.requests).toHaveLength(2);
+  });
+
+  it("says a patch whose answer is lost not known, as a creation, and a test of a patch the API server refused a refusal", async () => {
+    for (const [reply, code] of [
+      [{ reject: new Error("fetch failed") }, "submission-unknown"],
+      [{ status: 503, body: {} }, "submission-unknown"],
+      [{ status: 422, body: { kind: "Status", code: 422 } }, "validation"],
+      [{ status: 403, body: { kind: "Status", code: 403 } }, "forbidden"],
+      [{ status: 404, body: { kind: "Status", code: 404 } }, "not-found"],
+    ] as const) {
+      const { api, signal } = fixture(() => reply as HostReply);
+
+      expect(
+        await api.patchSchedule("velero", "nightly", patchText(pausePatch("nightly-uid")), signal).then(
+          () => "answered",
+          (error: DiagnosticError) => error.code,
+        ),
+      ).toBe(code);
+    }
   });
 
   it("sends every request through the client of the host for its cluster, with getResponse and nothing else", async () => {
@@ -136,6 +200,17 @@ describe("the create-only adapter, through the client of the host", () => {
       ["cluster-a", "getResponse", "GET", "/apis/discovery.k8s.io/v1/namespaces/velero/endpointslices"],
     ]);
     expect(clients).toEqual(["cluster-a", "cluster-a", "cluster-a", "cluster-a", "cluster-a"]);
+  });
+
+  it("reads a storage location and a snapshot location by their names, which a backup of the form names", async () => {
+    const { api, host, signal } = fixture();
+
+    await api.read("BackupStorageLocation", "velero", "default", signal);
+    await api.read("VolumeSnapshotLocation", "velero", "aws", signal);
+    expect(host.requests.map((item) => [item.method, item.path])).toEqual([
+      ["GET", `${API}/backupstoragelocations/default`],
+      ["GET", `${API}/volumesnapshotlocations/aws`],
+    ]);
   });
 
   it("writes every header name in lowercase, sends a creation as JSON, and gives every request a signal of its own", async () => {
@@ -262,6 +337,20 @@ describe("the create-only adapter, through the client of the host", () => {
       verdict: undefined,
     });
     expect(value.host.requests).toHaveLength(1);
+    // A creation the cluster answered is said apart: it may have been made.
+    value.catalog.entry = ENTRY;
+    const text = JSON.stringify({
+      apiVersion: "velero.io/v1",
+      kind: "Backup",
+      metadata: { name: "daily-1", namespace: "velero" },
+      spec: {},
+    });
+
+    await expect(value.api.createBackup("velero", text, value.signal)).rejects.toMatchObject({
+      code: "target-changed",
+      verdict: "answered",
+    });
+    expect(value.host.requests.map((item) => item.method)).toEqual(["GET", "POST"]);
   });
 
   it("reads every answer by its status, which the client gives whatever it is", async () => {
@@ -292,8 +381,13 @@ describe("the create-only adapter, through the client of the host", () => {
       ],
       [404, expect.objectContaining({ code: "not-found" }), expect.objectContaining({ code: "not-found" })],
       [409, expect.objectContaining({ code: "conflict" }), expect.objectContaining({ code: "conflict" })],
-      // A creation the server refused for its content was not made; one it failed may have been.
-      [422, expect.objectContaining({ code: "request-failed" }), expect.objectContaining({ code: "request-failed" })],
+      // A creation the server refused for its content was not made, which is said as such; one it failed may have
+      // been.
+      [
+        422,
+        expect.objectContaining({ code: "validation", verdict: "refused" }),
+        expect.objectContaining({ code: "validation", verdict: "refused" }),
+      ],
       [
         500,
         expect.objectContaining({ code: "request-failed" }),
@@ -339,13 +433,13 @@ describe("the create-only adapter, through the client of the host", () => {
       [403, "forbidden"],
       [404, "not-found"],
       [409, "conflict"],
-      [422, "request-failed"],
+      [422, "validation"],
       [500, "submission-unknown"],
     ]);
     expect(parsedGets.map(([code, error]) => [code, rejectionOf(error, false).code])).toEqual([
       [404, "not-found"],
       [409, "conflict"],
-      [422, "request-failed"],
+      [422, "validation"],
       [500, "request-failed"],
     ]);
     // The error of a fetch that got no answer: a read did not reach the server, a creation may have.
@@ -584,6 +678,149 @@ describe("the create-only adapter, through the client of the host", () => {
     expect(host.requests[2].body).toMatchObject({ metadata: { generateName: "status-" }, spec: {} });
   });
 
+  it("creates the backup of a text as it is, byte for byte, and sends nothing of a text that is not a backup of the namespace", async () => {
+    const { api, host, signal } = fixture();
+    const text = JSON.stringify(
+      { apiVersion: "velero.io/v1", kind: "Backup", metadata: { name: "daily-1", namespace: "velero" }, spec: {} },
+      null,
+      2,
+    );
+
+    await api.createBackup("velero", text, signal);
+    expect(host.requests.map((item) => [item.method, item.path, item.text])).toEqual([
+      ["POST", `${API}/backups`, text],
+    ]);
+    const refused = (body: Record<string, unknown> | string) => () =>
+      api.createBackup("velero", typeof body === "string" ? body : JSON.stringify(body), signal);
+    const backup = { apiVersion: "velero.io/v1", kind: "Backup", metadata: { name: "daily-1", namespace: "velero" } };
+
+    for (const body of [
+      "not json",
+      { ...backup, kind: "Restore" },
+      { ...backup, apiVersion: "velero.io/v2alpha1" },
+      { ...backup, metadata: { name: "daily-1", namespace: "elsewhere" } },
+      { ...backup, metadata: { generateName: "daily-", namespace: "velero" } },
+      { ...backup, metadata: { name: "daily-1", namespace: "velero", generateName: "daily-" } },
+      { ...backup, metadata: { name: "Daily", namespace: "velero" } },
+      { ...backup, metadata: { name: "a".repeat(217), namespace: "velero" } },
+      // A name the form of the backup refuses: no "." next to another "." or to a "-".
+      { ...backup, metadata: { name: "a..b", namespace: "velero" } },
+      { ...backup, metadata: { name: "a-.b", namespace: "velero" } },
+      { ...backup, status: { phase: "Completed" } },
+      { ...backup, spec: {}, status: { phase: "Completed" } },
+      // A backup with no spec, and one with a key the kind does not have.
+      backup,
+      { ...backup, spec: {}, extra: 1 },
+    ])
+      expect(refused(body)).toThrow("validation");
+    expect(host.requests).toHaveLength(1);
+  });
+
+  it("creates the schedule of a text as it is, byte for byte, and sends nothing of a text that is not a schedule of the namespace, of its name and its namespace alone", async () => {
+    const { api, host, signal } = fixture();
+    const schedule = {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: { name: "nightly", namespace: "velero" },
+      spec: { schedule: "0 3 * * *", template: { storageLocation: "default" } },
+    };
+    const text = JSON.stringify(schedule, null, 2);
+
+    await api.createSchedule("velero", text, signal);
+    expect(host.requests.map((item) => [item.method, item.path, item.text])).toEqual([
+      ["POST", `${API}/schedules`, text],
+    ]);
+    const refused = (body: Record<string, unknown> | string) => () =>
+      api.createSchedule("velero", typeof body === "string" ? body : JSON.stringify(body), signal);
+
+    for (const body of [
+      "not json",
+      { ...schedule, kind: "Backup" },
+      { ...schedule, apiVersion: "velero.io/v2alpha1" },
+      { ...schedule, metadata: { name: "nightly", namespace: "elsewhere" } },
+      { ...schedule, metadata: { generateName: "nightly-", namespace: "velero" } },
+      { ...schedule, metadata: { name: "nightly", namespace: "velero", labels: { app: "web" } } },
+      { ...schedule, metadata: { name: "nightly", namespace: "velero", annotations: { note: "x" } } },
+      { ...schedule, metadata: { name: "Nightly", namespace: "velero" } },
+      // A name every backup of the schedule cannot carry in its label.
+      { ...schedule, metadata: { name: "a".repeat(64), namespace: "velero" } },
+      { ...schedule, spec: undefined },
+      { ...schedule, status: { phase: "Enabled" } },
+      { ...schedule, extra: 1 },
+    ])
+      expect(refused(body)).toThrow("validation");
+    expect(host.requests).toHaveLength(1);
+  });
+
+  it("creates the restore of a text as it is, byte for byte, and sends nothing of a text that is not a restore of a backup of the namespace", async () => {
+    const { api, host, signal } = fixture();
+    const restore = {
+      apiVersion: "velero.io/v1",
+      kind: "Restore",
+      metadata: { name: "nightly-20261108120000", namespace: "velero" },
+      spec: { backupName: "nightly", existingResourcePolicy: "none" },
+    };
+    const text = JSON.stringify(restore, null, 2);
+
+    await api.createRestore("velero", text, signal);
+    expect(host.requests.map((item) => [item.method, item.path, item.text])).toEqual([
+      ["POST", `${API}/restores`, text],
+    ]);
+    const refused = (body: Record<string, unknown> | string) => () =>
+      api.createRestore("velero", typeof body === "string" ? body : JSON.stringify(body), signal);
+
+    for (const body of [
+      "not json",
+      { ...restore, kind: "Backup" },
+      { ...restore, apiVersion: "velero.io/v2alpha1" },
+      { ...restore, metadata: { name: "nightly-1", namespace: "elsewhere" } },
+      { ...restore, metadata: { generateName: "nightly-", namespace: "velero" } },
+      { ...restore, metadata: { name: "nightly-1", namespace: "velero", labels: { app: "web" } } },
+      { ...restore, metadata: { name: "Nightly", namespace: "velero" } },
+      { ...restore, metadata: { name: "a".repeat(217), namespace: "velero" } },
+      // A restore names its backup, and never a schedule.
+      { ...restore, spec: { existingResourcePolicy: "none" } },
+      { ...restore, spec: { backupName: "", existingResourcePolicy: "none" } },
+      { ...restore, spec: { backupName: "nightly", scheduleName: "nightly" } },
+      { ...restore, spec: undefined },
+      { ...restore, status: { phase: "Completed" } },
+      { ...restore, extra: 1 },
+      // Only the fields the form offers, and a policy for the resources that exist the form offers (REQ-273).
+      ...[
+        "hooks",
+        "resourcePolicy",
+        "resourceModifier",
+        "itemOperationTimeout",
+        "uploaderConfig",
+        "preserveNodePorts",
+      ].map((field) => ({ ...restore, spec: { ...restore.spec, [field]: {} } })),
+      { ...restore, spec: { ...restore.spec, existingResourcePolicy: "replace" } },
+      { ...restore, spec: { backupName: "nightly" } },
+    ])
+      expect(refused(body)).toThrow("validation");
+    expect(host.requests).toHaveLength(1);
+    // Every field the form offers, and the other policy.
+    const whole = {
+      ...restore,
+      spec: {
+        backupName: "nightly",
+        includedNamespaces: ["shop"],
+        excludedNamespaces: ["web-test"],
+        includedResources: ["configmaps"],
+        excludedResources: ["secrets"],
+        namespaceMapping: { shop: "shop-2" },
+        labelSelector: { matchLabels: { app: "web" } },
+        orLabelSelectors: [{ matchLabels: { tier: "db" } }],
+        restorePVs: false,
+        includeClusterResources: false,
+        existingResourcePolicy: "update",
+      },
+    };
+
+    await api.createRestore("velero", JSON.stringify(whole), signal);
+    expect(host.requests).toHaveLength(2);
+  });
+
   it("creates a request for one of the eight artifacts, and sends nothing for any other target", async () => {
     const { api, host, signal } = fixture();
 
@@ -598,31 +835,128 @@ describe("the create-only adapter, through the client of the host", () => {
     expect(host.requests).toEqual([]);
   });
 
-  it("labels the deletion of a backup with its name, cut as Velero cuts it beyond 63 characters", async () => {
+  it("creates the request to delete a backup of its text as it is, byte for byte, and sends nothing of a text that is not exactly the request of a backup of the namespace", async () => {
     const { api, host, signal } = fixture();
-    // Each name with the value the release gives the label: a name of 63 characters whole, a longer one as
-    // its first 57 characters and the first 6 hexadecimal characters of its SHA-256, computed with shasum.
-    const cases = [
-      [`${"a".repeat(59)}.b63`, `${"a".repeat(59)}.b63`],
-      [`${"a".repeat(60)}.b64`, `${"a".repeat(57)}8665a0`],
-      [
-        "nightly-cluster-wide-backup-of-every-namespace-2026-10-04-03-00-00.070",
-        "nightly-cluster-wide-backup-of-every-namespace-2026-10-04c32264",
-      ],
-    ];
+    const backup = { name: "nightly-20261108030000", uid: "8f14e45f-ceea-4e7a-9f5f-0b1c2d3e4f50" };
+    const text = deleteRequestText(deleteRequestOf("velero", backup));
 
-    for (const [backup] of cases)
-      await api.createGenerated("DeleteBackupRequest", "velero", "delete-", signal, {
-        name: backup,
-        uid: "backup-uid",
-      });
-    // The request names the backup whole: only the label is cut.
-    expect(host.requests.map((item) => item.body)).toMatchObject(
-      cases.map(([backup, label]) => ({
-        metadata: { labels: { "velero.io/backup-name": label, "velero.io/backup-uid": "backup-uid" } },
-        spec: { backupName: backup },
-      })),
+    await api.createDeleteBackupRequest("velero", text, signal);
+    expect(host.requests.map((item) => [item.method, item.path, item.text])).toEqual([
+      ["POST", `${API}/deletebackuprequests`, text],
+    ]);
+    const request = JSON.parse(text) as { metadata: Record<string, unknown> & { labels: Record<string, string> } };
+    const refused = (body: unknown) => () =>
+      api.createDeleteBackupRequest("velero", typeof body === "string" ? body : JSON.stringify(body, null, 2), signal);
+
+    for (const body of [
+      "not json",
+      // The same request written otherwise: the text is compared whole.
+      JSON.stringify(request),
+      `${text}\n`,
+      { ...request, kind: "Backup" },
+      { ...request, metadata: { ...request.metadata, namespace: "elsewhere" } },
+      { ...request, metadata: { ...request.metadata, name: "nightly-1" } },
+      { ...request, metadata: { ...request.metadata, generateName: "proof-delete-" } },
+      { ...request, metadata: { ...request.metadata, labels: { ...request.metadata.labels, app: "web" } } },
+      { ...request, metadata: { ...request.metadata, annotations: { note: "kept" } } },
+      { ...request, spec: { backupName: "another" } },
+      { ...request, status: { phase: "New" } },
+    ])
+      expect(refused(body)).toThrow("validation");
+    // The request of another namespace than the one asked, and of a backup whose name is not one.
+    expect(() => api.createDeleteBackupRequest("another", text, signal)).toThrow("validation");
+    // The creation of a generated name is not a way to it either.
+    expect(() => api.createGenerated("DeleteBackupRequest" as never, "velero", "nightly-", signal)).toThrow(
+      "validation",
     );
+    expect(() =>
+      api.createDeleteBackupRequest(
+        "velero",
+        deleteRequestText(deleteRequestOf("velero", { name: "Nightly", uid: backup.uid })),
+        signal,
+      ),
+    ).toThrow("validation");
+    expect(host.requests).toHaveLength(1);
+  });
+
+  it("lists the requests to delete a backup by the labels of its name, cut as Velero cuts it, and of its UID, or of its name alone, and takes none that is not of them", async () => {
+    const labels = (name: string, uid: string) => ({ "velero.io/backup-name": name, "velero.io/backup-uid": uid });
+    const request = (name: string, namespace: string, labelled: Record<string, string>) => ({
+      metadata: { name, namespace, uid: `${name}-uid`, labels: labelled },
+    });
+    const long = `${"a".repeat(60)}.b64`;
+    const cut = `${"a".repeat(57)}8665a0`;
+    const lists: Record<string, unknown> = {
+      "velero.io/backup-name=nightly,velero.io/backup-uid=nightly-uid": [
+        request("nightly-abcde", "velero", labels("nightly", "nightly-uid")),
+        request("nightly-fghij", "velero", labels("nightly", "nightly-uid")),
+      ],
+      [`velero.io/backup-name=${cut},velero.io/backup-uid=long-uid`]: [
+        request("long-abcde", "velero", labels(cut, "long-uid")),
+      ],
+      "velero.io/backup-name=empty,velero.io/backup-uid=empty-uid": [],
+      "velero.io/backup-name=elsewhere,velero.io/backup-uid=elsewhere-uid": [
+        request("elsewhere-abcde", "another", labels("elsewhere", "elsewhere-uid")),
+      ],
+      "velero.io/backup-name=mislabelled,velero.io/backup-uid=mislabelled-uid": [
+        request("mislabelled-abcde", "velero", labels("mislabelled", "another-uid")),
+      ],
+      "velero.io/backup-name=misnamed,velero.io/backup-uid=misnamed-uid": [
+        request("misnamed-abcde", "velero", labels("another", "misnamed-uid")),
+      ],
+      "velero.io/backup-name=shapeless,velero.io/backup-uid=shapeless-uid": "not-a-list",
+      "velero.io/backup-name=nightly": [
+        request("nightly-abcde", "velero", labels("nightly", "nightly-uid")),
+        request("nightly-older", "velero", labels("nightly", "nightly-before")),
+      ],
+      "velero.io/backup-name=misnamed": [request("misnamed-abcde", "velero", labels("another", "misnamed-uid"))],
+    };
+    const { api, host, signal } = fixture((asked) => {
+      const selector = String(asked.query?.labelSelector);
+
+      return selector.startsWith("velero.io/backup-name=refused,")
+        ? answered(403, statusOf(403, "Forbidden"))
+        : answered(200, {
+            kind: "DeleteBackupRequestList",
+            metadata: { resourceVersion: "7" },
+            items: lists[selector],
+          });
+    });
+    const of = (name: string) => ({ name, uid: `${name}-uid` });
+
+    expect((await api.deleteRequestsOf("velero", of("nightly"), signal)).map((item) => item.metadata.name)).toEqual([
+      "nightly-abcde",
+      "nightly-fghij",
+    ]);
+    // A name of more than 63 characters is found by its label, cut as the release cuts it.
+    expect(
+      (await api.deleteRequestsOf("velero", { name: long, uid: "long-uid" }, signal)).map((item) => item.metadata.name),
+    ).toEqual(["long-abcde"]);
+    expect(await api.deleteRequestsOf("velero", of("empty"), signal)).toEqual([]);
+    // Without the UID, every request of a backup of the name, by the label of the name alone, as Velero deletes the
+    // others of a request; one of another name is not taken.
+    expect(
+      (await api.deleteRequestsOf("velero", { name: "nightly" }, signal)).map((item) => item.metadata.name),
+    ).toEqual(["nightly-abcde", "nightly-older"]);
+    await expect(api.deleteRequestsOf("velero", { name: "misnamed" }, signal)).rejects.toMatchObject({
+      code: "request-failed",
+    });
+    for (const name of ["elsewhere", "mislabelled", "misnamed", "shapeless"])
+      await expect(api.deleteRequestsOf("velero", of(name), signal)).rejects.toMatchObject({
+        code: "request-failed",
+      });
+    await expect(api.deleteRequestsOf("velero", of("refused"), signal)).rejects.toMatchObject({ code: "forbidden" });
+    expect(host.requests.every((item) => item.method === "GET" && item.path === `${API}/deletebackuprequests`)).toBe(
+      true,
+    );
+    // A UID that is not the value of a label, which would add a term to the selector, and a name that is not one of a
+    // backup, ask nothing.
+    const asked = host.requests.length;
+
+    for (const uid of ["nightly-uid,velero.io/backup-name=other", "a b", "", "-uid"])
+      expect(() => api.deleteRequestsOf("velero", { name: "nightly", uid }, signal)).toThrow("validation");
+    expect(() => api.deleteRequestsOf("velero", { name: "Nightly", uid: "nightly-uid" }, signal)).toThrow("validation");
+    expect(host.requests).toHaveLength(asked);
   });
 
   it("lists the endpoint slices of a Service by the label that names it, and takes none that is not of it", async () => {

@@ -249,6 +249,9 @@ describe("the volume information of an operation", () => {
     );
 
     expect(rows?.[0]).toMatchObject({ method: { text: "PodVolumeRestore", known: true }, moved: false, size: 4096 });
+    // The pod and the volume the operation that made it is found by.
+    expect(rows?.[0].podVolume).toEqual({ podNamespace: "shop", pod: "cart-0", volume: "cache" });
+    expect(rows?.[1].podVolume).toBeUndefined();
     expect(rows?.[0].details.map((detail) => detail.title)).toEqual(["Pod volume restore"]);
     expect(rows?.[1]).toMatchObject({ method: { text: "CSISnapshot", known: true }, moved: true });
     for (const row of rows ?? []) {
@@ -280,6 +283,55 @@ describe("the volume information of an operation", () => {
     ).toMatchObject({
       others: [{ name: "backupMethod", value: "NativeSnapshot" }],
     });
+  });
+
+  it("reads the pod and the volume of a pod volume backup as texts, and none when one of the three is not one", () => {
+    const entry = (info: Record<string, unknown>) =>
+      parseVolumes(JSON.stringify([{ backupMethod: "PodVolumeBackup", pvbInfo: { size: 1, ...info } }]), "Backup")?.[0];
+    const whole = { volumeName: "data", podName: "synthetic-pod-22", podNamespace: "synthetic-ns-17" };
+
+    expect(entry(whole)?.podVolume).toEqual({
+      podNamespace: "synthetic-ns-17",
+      pod: "synthetic-pod-22",
+      volume: "data",
+    });
+    // What the release leaves out when it is empty, or a field that is not a text, names no pod: the row has no way,
+    // and is shown as it is.
+    for (const other of [{ podName: "" }, { volumeName: 7 }, { podNamespace: undefined }])
+      expect(entry({ ...whole, ...other })).toMatchObject({ method: { text: "PodVolumeBackup" } });
+    for (const other of [{ podName: "" }, { volumeName: 7 }, { podNamespace: undefined }])
+      expect(entry({ ...whole, ...other })?.podVolume).toBeUndefined();
+    // The detail of a restore is not read in a backup.
+    expect(
+      parseVolumes(JSON.stringify([{ backupMethod: "PodVolumeBackup", pvrInfo: whole }]), "Backup")?.[0].podVolume,
+    ).toBeUndefined();
+  });
+
+  it("reads the operation ID of a moved volume, of a backup and of a restore, and none that is not a text", () => {
+    const entry = (of: "Backup" | "Restore", movement: unknown) =>
+      parseVolumes(
+        JSON.stringify([
+          {
+            [of === "Backup" ? "backupMethod" : "restoreMethod"]: "CSISnapshot",
+            snapshotDataMoved: true,
+            snapshotDataMovementInfo: movement,
+          },
+        ]),
+        of,
+      )?.[0];
+
+    expect(entry("Backup", { dataMover: "velero", operationID: "du-backup-uid.pvc-uid" })?.operationId).toBe(
+      "du-backup-uid.pvc-uid",
+    );
+    expect(entry("Restore", { dataMover: "velero", operationID: "dd-restore-uid.pvc-uid" })?.operationId).toBe(
+      "dd-restore-uid.pvc-uid",
+    );
+    // What the release leaves out when it is empty, or a value that is not a text, names no operation: the row is
+    // shown as it is, with its detail.
+    for (const movement of [{ operationID: "" }, { operationID: 7 }, {}]) {
+      expect(entry("Backup", movement)?.operationId).toBeUndefined();
+      expect(entry("Backup", movement)?.details.map((detail) => detail.key)).toEqual(["snapshotDataMovementInfo"]);
+    }
   });
 
   it("keeps the text of a method and of a result the release does not write, marked as not known", () => {

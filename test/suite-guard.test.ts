@@ -1,7 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { realScheduleSubmission, writesOf } from "../integration/helpers/velero-guard";
+import {
+  codeWritesOf,
+  countedAs,
+  installedVersion,
+  OPERATION_KINDS,
+  operationListsOf,
+  realScheduleSubmission,
+  workloadCountsOf,
+  workloadReadsOf,
+  writesOf,
+} from "../integration/helpers/velero-guard";
 
 describe("the guard of the suites", () => {
+  it("counts the codes of the writes of a kind, the reads left out, and the PATCH of a schedule above the looks of its controller alone", () => {
+    const codes = { "GET 200": 4, "POST 201": 1, "PATCH 200": 3, "POST 409": 1 };
+
+    expect(codeWritesOf("backups", codes, true, 0.5)).toEqual({ "POST 201": 1, "PATCH 200": 3, "POST 409": 1 });
+    expect(codeWritesOf("schedules", codes, false, 0.5)).toEqual({ "POST 201": 1, "PATCH 200": 3, "POST 409": 1 });
+    // Its controller patches the real schedule at every look: the whole minutes of the window and two are left out.
+    expect(codeWritesOf("schedules", codes, true, 0.5)).toEqual({ "POST 201": 1, "PATCH 200": 1, "POST 409": 1 });
+    expect(codeWritesOf("schedules", codes, true, 1.2)).toEqual({ "POST 201": 1, "POST 409": 1 });
+    expect(codeWritesOf("schedules", { "PATCH 404": 1 }, true, 5)).toEqual({ "PATCH 404": 1 });
+    for (const minutes of [-1, Number.NaN]) expect(() => codeWritesOf("schedules", codes, true, minutes)).toThrow();
+  });
+
+  it("leaves out the PATCH of the storage locations, which the server sends at every validation and the runner of the views sends where no server runs, and nothing else that writes", () => {
+    expect(
+      writesOf({ "PATCH backupstoragelocations resource": 3, "GET backupstoragelocations resource": 3 }, false, 0),
+    ).toEqual({});
+    expect(writesOf({ "PATCH backupstoragelocations resource": 3, "PATCH backups resource": 1 }, false, 0)).toEqual({
+      "PATCH backups resource": 1,
+    });
+  });
+
   // What the API server counted, by verb, kind and scope, as the helpers read it from its counters.
   const counts = {
     "LIST backups namespace": 4,
@@ -44,6 +75,92 @@ describe("the guard of the suites", () => {
     for (const minutes of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() => writesOf(counts, true, minutes)).toThrow(/window of minutes/);
     }
+  });
+
+  it("counts every write of a repository as a write while the server sends none at its pass, and leaves out the one verb it sends when it does", () => {
+    const always = {
+      "POST backups namespace": 1,
+      "DELETE schedules resource": 1,
+      "POST downloadrequests namespace": 1,
+      "PATCH schedules namespace": 1,
+      "PATCH schedules resource": 2,
+    };
+    const repositories = {
+      ...counts,
+      "PATCH backuprepositories resource": 4,
+      "PUT backuprepositories resource": 1,
+      "POST backuprepositories namespace": 1,
+      "LIST backuprepositories namespace": 2,
+      "WATCH backuprepositories namespace": 1,
+    };
+    const written = {
+      "PATCH backuprepositories resource": 4,
+      "PUT backuprepositories resource": 1,
+      "POST backuprepositories namespace": 1,
+    };
+
+    // The server sends nothing to the real repository at its pass: every write of a repository is a write.
+    expect(writesOf(repositories, false, 15)).toEqual({ ...always, ...written });
+    expect(writesOf(repositories, false, 15, undefined)).toEqual({ ...always, ...written });
+    // It sends a PATCH: the PATCH of the repositories is left out at every scope, as the one of the locations is,
+    // and every other verb of the repositories is a write.
+    expect(writesOf(repositories, false, 15, "PATCH")).toEqual({
+      ...always,
+      "PUT backuprepositories resource": 1,
+      "POST backuprepositories namespace": 1,
+    });
+    expect(writesOf(repositories, false, 15, "PUT")).toEqual({
+      ...always,
+      "PATCH backuprepositories resource": 4,
+      "POST backuprepositories namespace": 1,
+    });
+    // The verb of the repositories leaves out nothing of another kind.
+    expect(writesOf({ "PATCH podvolumebackups resource": 1 }, false, 0, "PATCH")).toEqual({
+      "PATCH podvolumebackups resource": 1,
+    });
+  });
+
+  it("holds the version and the status of a repository of the installation, or its status alone while the server writes it at each pass, beside the schedule", () => {
+    const status = { phase: "Ready", lastMaintenanceTime: "2026-10-29T20:00:00Z" };
+    const item = { metadata: { resourceVersion: "41" }, status };
+
+    expect(installedVersion("backuprepositories", item)).toBe(`41 ${JSON.stringify(status)}`);
+    expect(installedVersion("backuprepositories", item, "PATCH")).toBe(JSON.stringify(status));
+    expect(installedVersion("backuprepositories", { metadata: { resourceVersion: "42" } }, "PATCH")).toBe("{}");
+    // The schedule the controller validated keeps its version whatever the server sends to a repository.
+    expect(installedVersion("schedules", item)).toBe(`41 ${JSON.stringify(status)}`);
+    expect(installedVersion("schedules", item, "PATCH")).toBe(`41 ${JSON.stringify(status)}`);
+    // The other kinds of the installation are compared by their identities alone.
+    for (const kind of ["backups", "restores", "backupstoragelocations", "podvolumebackups", "podvolumerestores"]) {
+      expect([kind, installedVersion(kind, item)]).toEqual([kind, undefined]);
+      expect([kind, installedVersion(kind, item, "PATCH")]).toEqual([kind, undefined]);
+    }
+  });
+
+  it("names the lists of the operations a view asked: every one while no controller lists them, the ones above a window with no view open when one does", () => {
+    const during = {
+      "LIST podvolumebackups namespace": 3,
+      "LIST podvolumerestores namespace": 1,
+      "LIST datauploads namespace": 2,
+      "WATCH podvolumebackups namespace": 2,
+      "LIST backups namespace": 5,
+      "LIST datadownloads cluster": 1,
+    };
+    const without = { "LIST podvolumebackups namespace": 3, "LIST datauploads namespace": 1 };
+
+    expect(OPERATION_KINDS).toEqual(["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"]);
+    // No controller lists them: every list of a namespace is of the view, and a window with none is not asked.
+    expect(operationListsOf(during, false)).toEqual({ podvolumebackups: 3, podvolumerestores: 1, datauploads: 2 });
+    expect(operationListsOf(during, false, without)).toEqual({
+      podvolumebackups: 3,
+      podvolumerestores: 1,
+      datauploads: 2,
+    });
+    expect(operationListsOf({ "LIST backups namespace": 2 }, false)).toEqual({});
+    // One does: what the window with the view open counted above the one with none.
+    expect(operationListsOf(during, true, without)).toEqual({ podvolumerestores: 1, datauploads: 1 });
+    expect(operationListsOf(without, true, during)).toEqual({});
+    expect(() => operationListsOf(during, true)).toThrow(/window of the same length with no view open/);
   });
 
   it("says that the schedule the controller validated submitted a backup, by its last submission and by each backup that carries its label, and says nothing of one that submitted none", () => {
@@ -90,5 +207,47 @@ describe("the guard of the suites", () => {
     );
     // A backup with the label of a schedule that is gone is still a submission of it.
     expect(realScheduleSubmission(name, [backup(`${name}-20261026100000`, name)])).toMatch(/carries its label/);
+  });
+
+  it("counts the pods and the Jobs of the metrics of the API server by verb, kind and scope, and keeps their reads in a namespace or by name", () => {
+    const metrics = [
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="",resource="pods",scope="namespace",subresource="",verb="LIST",version="v1"} 2',
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="",resource="pods",scope="cluster",subresource="",verb="WATCH",version="v1"} 5',
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="batch",resource="jobs",scope="resource",subresource="",verb="GET",version="v1"} 1',
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="batch",resource="jobs",scope="cluster",subresource="",verb="LIST",version="v1"} 4',
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="velero.io",resource="backups",scope="namespace",subresource="",verb="LIST",version="v1"} 9',
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="apps",resource="jobs",scope="namespace",subresource="",verb="LIST",version="v1"} 3',
+      "# HELP apiserver_request_total Counter of apiserver requests",
+    ].join("\n");
+    const counts = workloadCountsOf(metrics);
+
+    // The pods of the core group and the Jobs of `batch`, and nothing of another group or kind.
+    expect(counts).toEqual({
+      "LIST pods namespace": 2,
+      "WATCH pods cluster": 5,
+      "GET jobs resource": 1,
+      "LIST jobs cluster": 4,
+    });
+    // What a view would ask: the reads in a namespace or by name; the lists and the watches of the whole cluster,
+    // which the control plane and the host keep, are left out.
+    expect(workloadReadsOf(counts)).toEqual({ "LIST pods namespace": 2, "GET jobs resource": 1 });
+  });
+
+  it("counts a request of the window as the API server does, under either version of the group, and the read of a version as none", () => {
+    const at = (path: string) => countedAs({ url: `https://renderer.example:60835/api-kube${path}` });
+
+    expect(at("/apis/velero.io/v1/namespaces/velero/backups")).toBe("LIST backups namespace");
+    expect(at("/apis/velero.io/v2alpha1/namespaces/velero/datauploads")).toBe("LIST datauploads namespace");
+    expect(at("/apis/velero.io/v2alpha1/namespaces/velero/datadownloads")).toBe("LIST datadownloads namespace");
+    expect(at("/apis/velero.io/v1/namespaces/velero/backups/nightly")).toBe("GET backups resource");
+    expect(at("/apis/velero.io/v1/backupstoragelocations")).toBe("LIST backupstoragelocations cluster");
+    expect(at("/apis/velero.io/v2alpha1/namespaces/velero/datauploads?watch=1&resourceVersion=7")).toBe(
+      "WATCH datauploads namespace",
+    );
+    expect([at("/apis/velero.io/v1"), at("/apis/velero.io/v2alpha1"), at("/api/v1/namespaces/velero/pods")]).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 });

@@ -1,13 +1,13 @@
 # SPEC-0013: The Adherence Of A Schedule
 
-- **Status:** Implemented
+- **Status:** Verified
 - **Date:** 2026-10-13
 - **Milestone / tasks:** M4 / T3.1, T3.2, T3.3
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** `c111008912919e6a1a4127b2a0b8a641ee2dad80`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; T3.1 and T3.2 were implemented against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and the evidence of their checks moved to v2 at T0.8, while T3.3 is implemented on v2
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; T3.1 and T3.2 were implemented against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and the evidence of their checks moved to v2 at T0.8, while T3.3 is implemented on v2
 - **Dependencies:** [Schedules](SPEC-0006-schedule-read-only.md), [states and Backups](SPEC-0003-backup-read-only.md), [the Overview](SPEC-0008-overview.md), [target discovery](SPEC-0002-installation-discovery.md)
-- **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted, with the one disagreement of the independent review decided as the spec says: two offsets of one installation are a change of daylight saving time (REQ-162)
+- **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted, with the one disagreement of the independent review decided as the spec says: two offsets of one installation are a change of daylight saving time (REQ-162). REQ-166 as the pull request of T3.2 amended it, and the precisions of REQ-170 and REQ-171 the first and the second pull requests of T3.3 made, confirmed by the lead maintainer on 2026-10-26
 
 Governed by [AGENTS.md](../../AGENTS.md).
 
@@ -133,7 +133,7 @@ judgment of whether a backup that was submitted protects anything.
 | REQ-165 | Each state of uncertainty is its own, with its words and the mark of what is not known, never the mark or the words of a schedule on time: the zone not known, with why; the expression this version cannot read; the schedule Velero submits at every look, of REQ-161, whose expected run is not known; the backups denied, not served, failed or not read yet, which make the hold not known and the zone not derivable, while the states that need only the last submission keep their value with the words that whether a backup holds the submissions is not known; a signal computed from a read that is stale, which says when the read was; a signal computed with a derived offset, which says that it is approximate across a daylight saving change | ADH-06 |
 | REQ-166 | The signal is computed from the clock of this machine, taken once for a read as the views take it, and its words say by which clock the lateness is counted. When a time an object of the installation reports, a creation, a submission, a skip or the start of a backup, is after the clock of this machine at the read that brought it, the view says that the clock of the cluster is ahead of this machine by at least that difference, and that by the clock of the cluster a run may be later still: the controller counts the lateness by its own clock, so a cluster that is ahead makes it longer than the one this machine counts, never shorter, and bounds nothing that is said overdue. Where the reader can see the time of the API server in its answers, as the design says, the difference between the two clocks is measured at each read, and the lateness is counted by the clock of the cluster, the clock of this machine plus that difference, both ways, with its words | ADH-07 |
 | REQ-167 | The last observed run is two facts kept apart: the last submission, `status.lastBackup`, which says that the controller submitted a backup and when; and the newest backup of the schedule among the ones that exist, as SPEC-0006 reads it. When the last submission has no backup created within a minute of it among the ones that exist, the view says that the backup of the last submission is not among the backups that exist, expired, deleted or not readable, and the signal stands, since the submission is written in the schedule. When a backup of the schedule is newer than the last submission, the view says that it is not a submission of the schedule, asked by hand from the schedule or synced from the store, and that it does not move the last submission. A gap between two backups is never named a missed run | ADH-08 |
-| REQ-168 | The native list of the Schedules gains two columns with stable IDs: Next run, which shows the expected instant relative to now, with its absolute time in the tip as the host formats a date, None with why for a schedule that has none, paused, refused or submitted at every look, and Not known where it is not known, ordered by the instant with the ones that have none last; and Adherence, which shows the mark and the word of the state, ordered by the weight of the state, and inside a weight by its measure or by name: overdue by the longest first, held, due, at every look, not known, awaited by the soonest first, no run for a refused expression, no run for a paused schedule. Both are in the search. In a narrow room the installation gives its room under 1,200 pixels, the age under 1,000, the last submission and the newest backup under 760, the expression under 640: the name, paused, next run, adherence and validation stay | ADH-09 |
+| REQ-168 | The native list of the Schedules gains two columns with stable IDs: Next run, which shows the expected instant relative to now, with its absolute time in the tip as the host formats a date, None with why for a schedule that has none, paused, refused or submitted at every look, and Not known where it is not known, ordered by the instant with the ones that have none last; and Adherence, which shows the mark and the word of the state, ordered by the weight of the state, and inside a weight by its measure or by name: overdue by the longest first, held, due, at every look, not known, awaited by the soonest first, no run for a refused expression, no run for a paused schedule. Both are in the search. In a narrow room the installation, the last submission and the newest backup give their room under 1,200 pixels, the age under 1,000, the expression under 640: the name, paused, next run, adherence and validation stay. Restated on 2026-10-26, decided by the lead maintainer: the last submission and the newest backup gave their room under 760 pixels, and with them the list in a window of 1440 by 900 cut its name, expression, newest backup and validation, and from 1,001 to 1,199 pixels the newest backup in every row; under 1,200 the name and the validation are whole at 1,440, where an expression longer than its share keeps its tip | ADH-09 |
 | REQ-169 | The workspace of a schedule has a band Adherence, after the status and before the history: the next run with its state, the zone it is read in and how the zone was established, the last observed run as REQ-167 says it, the anchor of the count, the held backup with its way when there is one, the grace in words, and the words of the clocks. The line of time of the history is unchanged: nothing is drawn where no backup is | ADH-10 |
 | REQ-170 | The section in the details the host shows of a Schedule gains the items Next run and Adherence, in the same words, through the same helpers | ADH-11 |
 | REQ-171 | The Overview gains rule A11: a schedule that is not paused and is Enabled, and that is overdue or held beyond the grace, with its zone established, or that Velero submits at every look, since its expression has no instant, is an item of the group of the schedules, with the reason of its state in words, the expected run as its time, or its last submission when it has no expected run, the held backup as its related object, and the words of the derived offset when there is one. The row A11 joins the table of REQ-096 of SPEC-0008 with the pull request of the slice, and OVER-04 is restated with it. The line of each schedule shows its next run and its adherence beside the facts its list shows, and OVER-10 is restated with the lines. Before the items, the page says of how many schedules the adherence is not known, by reason, among what the rules did not look at: a schedule whose adherence is not known is never an item and never counted as one that needs nothing | ADH-12 |
@@ -141,7 +141,7 @@ judgment of whether a backup that was submitted protects anything.
 | REQ-173 | A read that fails keeps what was read before and says when, for the schedules and for the backups separately; the signal is computed again from the last read at every tick of the clock of the views, and from the new read when one ends; late answers of another installation are not shown; a view that closes leaves no timer | ADH-14 |
 | REQ-174 | Both themes, the keyboard alone, long names and long expressions, a window of 900 by 650 and twice the zoom; the marks of the states carry their meaning without the colour, and every word of a mark is there for who does not see it | ADH-15 |
 | REQ-175 | The signal of one schedule is computed within 2 milliseconds, and the signals of 1,000 schedules of mixed expressions within 250 milliseconds at the 95th percentile of twenty calls after five, in the measure of the unit run; a parsed expression is kept for the text of the expression, and the count of REQ-161 is bounded. In the packaged application a list of 300 schedules with their backups answers a search and an order by the next run within 250 milliseconds at the 95th percentile across twenty warm interactions, and the Overview of that installation keeps the budget of REQ-104 | ADH-16 |
-| REQ-176 | The packaged application proves the states on fixtures placed by the clock, which no controller reads: awaited, overdue with its count, held, at every look, the zone derived from the backup of the last submission of the schedule itself and, for a schedule with no submission, from the one of another schedule of the installation, an installation whose submissions give two offsets, the zone not known for want of any submission with its backup in the installation, the clock of the cluster ahead; the paused, invalid and not read schedules of the fixtures that exist; the two readers; and, in the installation the controllers of Velero are at work in, one schedule the real controller validated, `@every 8760h`, whose next run the extension counts from its creation and which submits nothing while the suites run. Due stays at the unit and component layers | ADH-17 |
+| REQ-176 | The packaged application proves the states on fixtures placed by the clock, which no controller reads: awaited, overdue with its count, held, at every look, the zone derived from the backup of the last submission of the schedule itself and, for a schedule with no submission, from the one of another schedule of the installation, an installation whose submissions give two offsets, the zone not known for want of any submission with its backup in the installation, the clock of the cluster ahead; the paused, invalid and not read schedules of the fixtures that exist; the two readers; and, in the installation the controllers of Velero are at work in, one schedule the real controller validated, `@every 8760h`, whose next run the extension counts from its creation and which submits nothing while the suites run, or, on the CRDs of the release alone, its static counterpart, Enabled as the controller leaves it (amendment of 2026-11-07). Due stays at the unit and component layers | ADH-17 |
 
 ## Design
 
@@ -530,7 +530,7 @@ than its own. These stay at the unit layer, from the lines of the controller.
 | ADH-06 | Unit/component/packaged | REQ-165 | Each state of uncertainty with its mark and its words, the schedule Velero submits at every look among them; a signal of a stale read; a derived offset said approximate; the backups denied with an `@every` schedule, which keeps its state with the words of the hold, and a five-field one, which is not known. Packaged: the second reader on both, and the schedule at every look |
 | ADH-07 | Fake-clock unit/component/packaged | REQ-166 | A submission, a creation, a skip and a start after the clock, each said in the words of the clocks and none keeping a schedule from being said overdue; nothing after it; the lateness counted by the clock of the cluster with the time of the API server, ahead and behind, and by the clock of this machine without it; the words of the clocks with and without the time of the API server, which the unit test gives and withholds. Packaged: the schedule whose last submission is ahead, and the first measure of whether the header reaches the reader, recorded |
 | ADH-08 | Unit/component/packaged | REQ-167 | The backup of the last submission found within a minute, not found, a backup newer than the submission said not a submission; a gap between two backups with no word of a missed run. Packaged: the overdue fixture, whose backup is not among the ones that exist, and the held one, whose backup is newer than the submission |
-| ADH-09 | Component/packaged | REQ-168 | The two columns, their IDs, their words, their tips, their search, the order by adherence with a schedule of every weight, two of one weight by their measure and two by name, and the order by the next run with the past first and none last; the columns that give their room at 1,199, 999, 759 and 639 pixels. Packaged: a search by a word of a state, an order by each of the two columns read from the rows, a column made wider, a schedule opened and closed leaving the list where it was |
+| ADH-09 | Component/packaged | REQ-168 | The two columns, their IDs, their words, their tips, their search, the order by adherence with a schedule of every weight, two of one weight by their measure and two by name, and the order by the next run with the past first and none last; the columns that give their room at 1,199, 999 and 639 pixels. Packaged: a search by a word of a state, an order by each of the two columns read from the rows, a column made wider, a schedule opened and closed leaving the list where it was |
 | ADH-10 | Component/packaged | REQ-169 | Every line of the band present and absent, the way to the held backup and back, the line of time unchanged with no mark where no backup is. Packaged: the band of each fixture, the way to the held backup and back over the list |
 | ADH-11 | Component/packaged | REQ-170 | The two items of the section agree with the list and the band for a schedule of each state |
 | ADH-12 | Table-driven unit/component/packaged | REQ-171 | Rule A11 with a case that gives an item and one that gives none for each of overdue, held within and beyond the grace, at every look, paused, invalid, not read, zone not known; the time and the related object of an item; the count of what is not known by reason, before the items; the lines of the schedules with the two facts, the ones a rule names first; the rules A1 to A10 of SPEC-0008 unchanged beside it. Packaged: the items of the adherence fixtures in the order of the page, the one at every look among them, the count of what is not known, the lines |
@@ -538,7 +538,7 @@ than its own. These stay at the unit layer, from the lines of the controller.
 | ADH-14 | Fake-clock component | REQ-173 | The schedules read and the backups failing, and the reverse; the signal computed again at a tick of the clock from the last read, and from a new read; a late answer of another installation; no timer left when the view closes |
 | ADH-15 | Pre-review | REQ-174 | The list, the band and the Overview in both themes, at 1440 by 900, at 900 by 650 and at twice the zoom, a name of 63 characters and an expression with a zone name and five fields; the band read with the keyboard alone, the held backup reached and left; every mark with its words |
 | ADH-16 | Unit measure/packaged performance | REQ-175 | The measure of the unit run on 1,000 schedules of mixed expressions, twenty calls after five, within 250 milliseconds at the 95th percentile, one schedule within 2 milliseconds, the parse cached and the count bounded, printed as one line before anything is asserted. Packaged: the list of 300 schedules, twenty warm interactions, ten searches and ten orders, within 250 milliseconds at the 95th percentile of what the list takes to answer, with the time from the key beside it; the Overview of the same installation within the budget of OVER-12 |
-| ADH-17 | Local integration/packaged | REQ-176 | The fixtures placed by the clock read back with their annotation, the installation with two offsets among them; the real schedule Enabled with `skipImmediately` written by the controller, its next run a year after its creation in the words of the list, and no Backup created in the installation while the suites run, counted on the API server; the schedule at every look placed where no controller reads, and never in the installation of the controllers, which would create a backup a minute; every state of the fixtures as the cases above say |
+| ADH-17 | Local integration/packaged | REQ-176 | The fixtures placed by the clock read back with their annotation, the installation with two offsets among them; the real schedule, or its static counterpart on the CRDs of the release alone, Enabled with `skipImmediately` written as the controller writes it, its next run a year after its creation in the words of the list, and no Backup created in the installation while the suites run, counted on the API server; the schedule at every look placed where no controller reads, and never in the installation of the controllers, which would create a backup a minute; every state of the fixtures as the cases above say |
 
 ## Success Criteria
 
@@ -661,8 +661,12 @@ and verdict.
   backup; the band says in words that no submission was made, and how many runs
   that is.
 - **The last submission and the newest backup stay two columns**, and give their
-  room under 760 pixels before the expression does: both are in the band, and the
-  adherence column carries what they said of a schedule at a glance.
+  room under 1,200 pixels, with the installation, before the age and the expression
+  do: both are in the band, and the adherence column carries what they said of a
+  schedule at a glance. The border was 760 pixels until 2026-10-26, when the lead
+  maintainer decided 1,200, so that the name and the validation are whole in a
+  window of 1440 by 900, where an expression longer than its share keeps its tip
+  (REQ-168).
 - **The words of REQ-066 of SPEC-0006 change with this slice.** That spec computes
   nothing from the expression; this one does, under REQ-160 to REQ-162, and the
   words that the view does not read the zone of the server stay true: it derives or
@@ -704,6 +708,21 @@ and verdict.
     with no change of the workflow; the times of its first hosted run are read and
     recorded before anything else is decided. A step of its own in the job, with
     its own bound, is a decision for the lead maintainer after those times.
+    Amendment of 2026-11-06: the hosted job of the views runs in four parts side
+    by side, and the suite runs in the part of the other views, named
+    `velero-e2e-adherence`, by the same runner: no step and no bound of its own.
+    Amendment of 2026-11-07: the suite runs in the part without a controller, on
+    the CRDs of the release alone, where the schedule of REQ-176 and ADH-17 that
+    the real controller validated is its static counterpart, Enabled with
+    `skipImmediately` written into its spec as the controller writes it
+    (`pkg/controller/schedule_controller.go:113-131` of the reviewed release), and
+    nothing submitted; the case that counts the writes finds none of a controller,
+    within the same bound, and the real schedule still submits nothing while the
+    suites run. Under the direction the lead maintainer approved on 2026-11-06, the
+    tests without a controller, applied without losing quality (SPEC-0015,
+    amendments of 2026-11-06 and 2026-11-07). Later on 2026-11-07 the part without
+    a controller was divided in two by the times of its suites, and the suite runs
+    in the first, `static-views-1`.
 
 No NEEDS CLARIFICATION marker: every decision above has a default with its reasons,
 and the ones the lead maintainer may overturn at approval are named as such.
@@ -776,8 +795,8 @@ schedule in 0.04 ms of 2; none not known, ten held, ten at every look, 8,775 run
 bound, as for T3.1. The independent review found REQ-166 the wrong way round for a cluster that is ahead, which
 only makes the lateness the controller counts longer; the pull request amends
 REQ-166, scenario 7, REQ-163, the table of the computation, the design of the clocks, ADH-07 and the Success
-Criteria, an amendment of an approved requirement for the lead maintainer to confirm at the review of the
-milestone. Deviations of the slice, to amend in the spec: REQ-165 (L133), the hold not known, a read of before and a
+Criteria, an amendment of an approved requirement, confirmed by the lead maintainer on 2026-10-26. Deviations of the
+slice, to amend in the spec: REQ-165 (L133), the hold not known, a read of before and a
 derived offset are words beside a state that keeps its mark, as REQ-165 says of the backups denied, ADH-06 (L529)
 and the design (L384-L386) have it, and the mark of what is not known is of the states of uncertainty proper;
 REQ-161 and REQ-163 (L129, L131), an expression with no instant is at every look whatever the zone, since it has
@@ -881,7 +900,7 @@ well; the details of a schedule of a namespace that is not the one the installat
 its installation, no backup, no offset and no time of its API server, and never read the cluster; the search holds the
 word of the state, the text of the next run and the notes, and not the sentence; the grace is one sentence under the
 line of the next run, from its constant, said of the states whose run is expected or held. A precision of REQ-170, made
-in this pull request, to be confirmed at the review of the fourth milestone: the host draws its details where no view of
+in this pull request, confirmed by the lead maintainer on 2026-10-26: the host draws its details where no view of
 the extension is, and the views ask the installation again only while one of them is open, so the details compute with
 the last read of the views and, when no view is open or that read of the backups is older than the period of the reads,
 say its age in a sentence of the module, as the stale words do, "Computed with the backups of the installation as they
@@ -940,8 +959,8 @@ since REQ-165 asks it of a state that keeps its value; an item of A11 is of the 
 that it was read before when that read is; a schedule Velero has not read is an item of A6, as SPEC-0008 has it, and its
 adherence is counted as not known, which is two facts; the line of the count says how many schedules there are for each
 reason, in the order the signal names the reasons, that this is not that they need nothing, and leads to the list of the
-schedules, where the tip of each says why. A precision of REQ-171, made in this pull request, to be confirmed at the
-review of the fourth milestone: "never an item" is read as never an item of rule A11, so that a schedule Velero has not
+schedules, where the tip of each says why. A precision of REQ-171, made in this pull request, confirmed by the lead
+maintainer on 2026-10-26: "never an item" is read as never an item of rule A11, so that a schedule Velero has not
 read stays an item of A6, as SPEC-0008 has it, while its adherence is counted as not known, since ADH-12 keeps the rules
 A1 to A10 as they are and the Failure criteria name an item of rule A11 for a schedule whose adherence is not known.
 
@@ -1185,3 +1204,46 @@ three items that wait for the confirmation of the lead maintainer at the review 
 above and hold as they are: the amendment of REQ-166 (L776-L780), and the precisions of REQ-170 (L883-L889) and of
 REQ-171 (L943-L946). The manual review of the Success Criteria (L567-L575) waits for the lead maintainer, with its steps
 in [TRY-IT.md](../development/TRY-IT.md); Verified waits for it and for those three items.
+
+## Amendments
+
+### 2026-11-08: A Backup Asked By Hand In The Minute Of A Submission (T4.2 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says,
+approved with it: Back up now makes a backup by hand one command away, named as the
+command line names it, `<schedule>-<yyyymmddhhmmss>` with the time in UTC, and one
+asked within the minute of a submission can mislead the offset derived from the
+backups of the schedule (REQ-162). The backup of a last submission is found as REQ-162
+says, the nearest to the submission; when another backup of the schedule is named as
+a submission and was created within the same minute of it, the offset carries it, and
+the words of the derived offset name the risk: the other backup, created within the
+same minute, as a backup asked by hand then is, and that the offset may have been
+read in the name of the wrong one. The rest of REQ-162 is unchanged.
+
+[`schedule-signal.test.ts`](../../src/common/schedule-signal.test.ts) proves it: a
+backup asked eleven seconds after the submission is named beside the derived offset,
+one created two minutes after it is not, and an offset kept from a read before the
+backup asked by hand takes the risk at the next read.
+
+The border of the last submission and the newest backup in the list, on 2026-10-26, decided by the lead maintainer
+after the second phase of the first pull request of T3.3, which saw in the window of 1440 by 900 the name, the
+expression, the newest backup and the validation cut with their tips in some rows, and from 1,001 to 1,199 pixels the
+newest backup cut in every row: the two columns give their room under 1,200 pixels, with the installation, and no
+longer under 760, so that the name and the validation are read whole at 1,440. REQ-168, ADH-09, the decision of the two columns
+and DESIGN.md are restated. The stylesheet hides the two columns under 1,200 pixels; the test of the stylesheet holds
+the columns given up at 1,201, 1,200, 1,199, 1,001, 1,000, 999, 761, 760, 759, 641 and 640 pixels, and failed on a
+copy of the tree with the border at 760, 1,199 and 1,000, each first at 1,200, and with it at 1,201, at 1,201. The
+suite of
+the schedules is restated: its edges are 1,200, 1,000 and 640, where the columns it expects at 1,200 and 1,001 are
+without the two times; in the window of 1440 by 900 it expects the list without the installation and the two times,
+the name, paused, the next run, the adherence, the validation and the age whole, nothing clipped, and the room with
+what it measured in the report `schedules-rooms.json`. The hosted run of 2026-11-09 measured there a list of 1,117
+pixels, every column it shows whole but the expression of the zoned schedule of the views,
+`CRON_TZ=Europe/Rome 30 2 * * *`, cut with its tip, which the case now allows; the case of the last submission and
+the newest backup as two values reads them in a window of 1680 by 900, where the list is wider than 1,200 pixels, and
+so does the case of ADH-16 its orders by the last submission, which the hosted run found not visible at 1440 by 900.
+The words of a schedule in every language are read at 1,201 pixels, where every column that holds them is shown, and
+at 1440 by 900 those of the columns shown there. On a second Linux machine, against Freelens 2.0.0, the suite of the
+schedules passed, 17 cases of 17; the hosted run of the views of the pull request passed the part of the adherence,
+with the case of ADH-16, and the pre-review.

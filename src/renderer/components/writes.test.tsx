@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { observer } from "mobx-react";
 import React from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { confirmDialogs } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { CONNECTION_REASON_NAMES } from "../../common/ipc";
@@ -30,7 +31,7 @@ function path(family: Family, namespace: string): string {
 }
 
 const answers: Record<string, Answer> = {
-  [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+  [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
   [LOCATIONS]: list(object("default", "velero-a"), object("default", "velero-b")),
   ...Object.fromEntries(
     ["velero-a", "velero-b"].flatMap((namespace) => [
@@ -136,6 +137,13 @@ describe("the writes in the target bar", () => {
     expect(words.first).toContain("kind-local-demo");
     expect(words.second).toContain("DownloadRequest");
     expect(words.second).toContain("ServerStatusRequest");
+    // The actions name themselves as each one lands (SPEC-0017, REQ-245).
+    expect(words.second).toContain("a Backup from a schedule, asked from the view of the schedule");
+    expect(words.second).toContain("a Backup of the form, asked from the list of the Backups");
+    expect(words.second).toContain("a Schedule of the form, asked from the list of the Schedules");
+    expect(words.second).toContain(
+      "a Restore of a backup, asked from the view of that backup or from the view of the schedule that made it, a patch of a Schedule that pauses or resumes it, asked from the view of the schedule, and a DeleteBackupRequest of one backup, asked from the view of that backup. Each one is confirmed",
+    );
     // Nothing is on before the dialog is answered.
     expect(installation.writes).toEqual({ on: false });
     await act(async () => {

@@ -16,19 +16,26 @@ const SCHEDULE_PATCH = "PATCH schedules resource";
  * ones counted over a window of `minutes`: every request of every kind of
  * `velero.io` that is not a read. One is left out, which the installation
  * under test makes by itself: its controller writes into the status of its
- * storage location every time it validates it. So is the PATCH of a schedule
+ * storage location every time it validates it, and on the CRDs of the release
+ * alone the runner of the views writes it once a minute in its place, standing
+ * in for the server at that location. So is the PATCH of a schedule
  * by name, when `patchedAtEveryLook` says that its controller sends one at
  * every look, once a minute, but no more of them than the whole minutes of the
  * window and two: the ones above that bound, and a PATCH of a schedule of
  * another scope, are writes. The counters carry no namespace, and a PATCH of
  * a synthetic schedule within the bound is left out with the ones of the
  * controller, which the version of that schedule in the snapshot still
- * catches.
+ * catches. When `repositoryWrittenAtEachPass` names the verb of the request
+ * the server sends to the real repository at its pass, that verb of the
+ * repositories is left out as the PATCH of the locations is, and the status of
+ * the real repository and the versions of the synthetic ones in the snapshot
+ * catch a write of a suite.
  */
 export function writesOf(
   counts: Record<string, number>,
   patchedAtEveryLook: boolean,
   minutes: number,
+  repositoryWrittenAtEachPass?: string,
 ): Record<string, number> {
   if (!Number.isFinite(minutes) || minutes < 0) {
     throw new Error(`The writes are counted over a window of minutes, and ${minutes} is not one`);
@@ -40,10 +47,95 @@ export function writesOf(
       .filter(([key]) => {
         const [verb, kind] = key.split(" ");
 
-        return !["GET", "LIST", "WATCH"].includes(verb) && !(verb === "PATCH" && kind === "backupstoragelocations");
+        return (
+          !["GET", "LIST", "WATCH"].includes(verb) &&
+          !(verb === "PATCH" && kind === "backupstoragelocations") &&
+          !(verb === repositoryWrittenAtEachPass && kind === "backuprepositories")
+        );
       })
       .map(([key, count]) => [key, key === SCHEDULE_PATCH ? Math.max(0, count - looks) : count] as const)
       .filter(([key, count]) => key !== SCHEDULE_PATCH || count > 0),
+  );
+}
+
+/**
+ * The codes of the requests of one kind that change something, from what was
+ * counted between two readings by verb and code (`POST 201`): the reads left
+ * out, and for the schedules the PATCH its controller sends at every look,
+ * within the bound of the whole minutes of the window and two, as `writesOf`
+ * leaves it out.
+ */
+export function codeWritesOf(
+  resource: string,
+  counts: Record<string, number>,
+  patchedAtEveryLook: boolean,
+  minutes: number,
+): Record<string, number> {
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    throw new Error(`The writes are counted over a window of minutes, and ${minutes} is not one`);
+  }
+  const looks = resource === "schedules" && patchedAtEveryLook ? Math.floor(minutes) + 2 : 0;
+
+  return Object.fromEntries(
+    Object.entries(counts)
+      .filter(([key]) => !key.startsWith("GET "))
+      .map(([key, count]) => [key, key === "PATCH 200" ? Math.max(0, count - looks) : count] as const)
+      .filter(([, count]) => count > 0),
+  );
+}
+
+/**
+ * What the snapshot of a suite holds of an object of the namespace of the
+ * installation beside its identity, which a write of the suite would change:
+ * the version and the status of a schedule, the one the controller validated,
+ * whose submission writes into its status; the version and the status of a
+ * repository, or its status alone when the server writes the repository at
+ * each of its passes (`repositoryWrittenAtEachPass`). Nothing of the other
+ * kinds, which the server and the node agent write only while a backup or a
+ * restore is at work, and no suite runs beside one.
+ */
+export function installedVersion(
+  kind: string,
+  item: { metadata: { resourceVersion: string }; status?: unknown },
+  repositoryWrittenAtEachPass?: string,
+): string | undefined {
+  const status = JSON.stringify(item.status ?? {});
+
+  if (kind === "schedules") return `${item.metadata.resourceVersion} ${status}`;
+  if (kind === "backuprepositories")
+    return repositoryWrittenAtEachPass ? status : `${item.metadata.resourceVersion} ${status}`;
+  return undefined;
+}
+
+/** The kinds of the operations of a volume, which a view lists in a namespace only while it shows them. */
+export const OPERATION_KINDS = ["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"];
+
+/**
+ * The lists of the kinds of the operations of a volume in a namespace, among
+ * the ones counted over a window with a view open (`during`), by kind: every
+ * one, when no controller of the installation lists them; when one does
+ * (`listedByAController`), the ones above what a window of the same length
+ * with no view open counted (`without`), which is then required. A kind that
+ * was listed no more is not named.
+ */
+export function operationListsOf(
+  during: Record<string, number>,
+  listedByAController: boolean,
+  without?: Record<string, number>,
+): Record<string, number> {
+  if (listedByAController && without === undefined) {
+    throw new Error(
+      "A controller of the installation lists the operations: the lists of a view are counted against a window of the same length with no view open",
+    );
+  }
+  const lists = (counts: Record<string, number>) =>
+    OPERATION_KINDS.map((kind) => [kind, counts[`LIST ${kind} namespace`] ?? 0] as const);
+  const base = new Map(listedByAController ? lists(without ?? {}) : []);
+
+  return Object.fromEntries(
+    lists(during)
+      .map(([kind, count]) => [kind, Math.max(0, count - (base.get(kind) ?? 0))] as const)
+      .filter(([, count]) => count > 0),
   );
 }
 
@@ -77,4 +169,57 @@ export function realScheduleSubmission(name: string, items: InstalledObject[]): 
     ? `The schedule ${name} submitted a backup since its placement found it with none: ${submitted.join(", ")}. ` +
         "No suite expects one. Create the environment again with `pnpm demo:down` and `pnpm demo:up`."
     : undefined;
+}
+
+/** The counters of the pods, of group `""`, and of the Jobs, of group `batch`, in the metrics of the API server. */
+export function workloadCountsOf(metrics: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+
+  for (const line of metrics.split("\n")) {
+    if (!line.startsWith("apiserver_request_total{")) continue;
+    const label = (name: string) => new RegExp(`[{,]${name}="([^"]*)"`).exec(line)?.[1] ?? "";
+    const group = label("group");
+    const resource = label("resource");
+
+    if (!((group === "" && resource === "pods") || (group === "batch" && resource === "jobs"))) continue;
+    const key = `${label("verb")} ${resource} ${label("scope")}`;
+
+    counts[key] = (counts[key] ?? 0) + Number(line.slice(line.lastIndexOf(" ") + 1));
+  }
+
+  return counts;
+}
+
+/**
+ * The reads of one object or of a namespace, among the counters of the pods and of the Jobs counted between two
+ * readings: what a view would ask of them. The lists and the watches of the whole cluster are left out: the control
+ * plane of the cluster and the host itself keep their own.
+ */
+export function workloadReadsOf(counts: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(counts).filter(([key]) => {
+      const [verb, , scope] = key.split(" ");
+
+      return (verb === "LIST" || verb === "GET" || verb === "WATCH") && scope !== "cluster";
+    }),
+  );
+}
+
+/**
+ * What the API server counts of a request the window sent to the API of Velero, in its words: the verb, the
+ * kind and the scope, as `apiRequests()` gives them, under either version of the group, as the API server counts
+ * a kind of the group whatever its version. The read of a version itself, which says what it serves, is of no kind,
+ * and is counted as none of them.
+ */
+export function countedAs(request: { url: string }): string | undefined {
+  const address = new URL(request.url);
+  const path = /\/apis\/velero\.io\/(?:v1|v2alpha1)\/(.+)$/.exec(address.pathname)?.[1];
+
+  if (!path) return undefined;
+  const parts = path.split("/");
+  const namespaced = parts[0] === "namespaces";
+  const [kind, name] = namespaced ? parts.slice(2) : parts;
+  const verb = address.searchParams.get("watch") ? "WATCH" : name ? "GET" : "LIST";
+
+  return `${verb} ${kind} ${name ? "resource" : namespaced ? "namespace" : "cluster"}`;
 }

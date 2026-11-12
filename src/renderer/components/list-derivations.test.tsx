@@ -11,12 +11,15 @@ import { join } from "node:path";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { autorun, runInAction } from "mobx";
 import { afterEach, describe, expect, it } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { BackupsPage } from "../pages/backups-page";
 import { Installation } from "../state/installation";
 
 import type { Renderer } from "@freelensapp/extensions";
+
+import type React from "react";
 
 import type { Answer, Family } from "../../common/discovery";
 
@@ -44,7 +47,7 @@ function backup(name: string, phase: string, resourceVersion = "1") {
 
 function mount() {
   const table: Record<string, Answer> = {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }),
     [path("backups", A)]: list(backup("nightly-1", "Completed"), backup("nightly-2", "InProgress")),
     [path("restores", A)]: list(),
@@ -97,11 +100,19 @@ describe("what the list gives the host", () => {
     // is read there, or mobx-react would throw in the render of the host.
     const stop = autorun(() => {
       seen.push(getItems().map((item) => `${item.getName()} ${item.metadata.resourceVersion}`));
-      headers.push(customizeHeader({ info: "2 items" }).info);
+      headers.push(customizeHeader({ info: "2 items" }));
     });
 
     expect(seen).toEqual([["nightly-1 1", "nightly-2 1"]]);
-    expect(headers).toEqual(["2 items"]);
+    // The count of the host in its panel alone, and after it, in the place of the filters of the host, the one command
+    // of the list.
+    const [header] = headers as { info: unknown; filters: React.ReactElement<{ children: React.ReactElement }> }[];
+
+    expect(headers).toHaveLength(1);
+    expect(header.info).toBe("2 items");
+    expect((header.filters.props.children.props as Record<string, unknown>)["data-testid"]).toBe(
+      "velero-backups-create",
+    );
     table[path("backups", A)] = list(backup("nightly-1", "Completed"), backup("nightly-2", "Completed", "2"));
     await act(async () => {
       await installation.refresh();

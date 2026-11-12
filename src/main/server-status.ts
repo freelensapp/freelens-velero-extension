@@ -60,6 +60,15 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
 
   switch (code) {
     case "forbidden":
+      // A credential the cluster does not take says nothing of what the identity may do: it is not said as a
+      // verb the identity lacks, and nothing was created when it came at the creation.
+      if (error instanceof DiagnosticError && error.verdict === "credential")
+        return failure(
+          "forbidden",
+          stage,
+          true,
+          `The cluster did not take the credential of the context: it may have expired. Sign in again, then ask again. ${requestName ? "The request stays until the server processes it." : "Nothing was created."}`,
+        );
       return failure(
         "forbidden",
         stage,

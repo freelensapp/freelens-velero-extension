@@ -9,7 +9,7 @@
 // Both run in this repository, under its own Vitest (`vitest.integration.config.ts`,
 // `pnpm test:integration`), and start the application themselves with `_electron`
 // of Playwright: the Freelens that `FREELENS_APP` names, built from source at the
-// validation target in CI, and the nightly of that commit on a machine of a
+// validation target in CI, and the package of that commit on a machine of a
 // developer. They reach its main process as well as its windows: the menu of the
 // application, which is the way an operator goes to the catalog and to the
 // Extensions page, the size and the zoom of its window, the dialog of a save, the

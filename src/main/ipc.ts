@@ -1,7 +1,9 @@
 // The procedures the renderer calls of the main process, and what binds them: every request is validated,
 // every sender is the frame of one cluster, the cluster a request names is the one of its frame and one the
 // catalog of the host gives as connected, and every answer is a result. Nothing is raised to the renderer,
-// nothing is broadcast of a write, and the catalog of the host is where a cluster is resolved.
+// nothing is broadcast of a write, and the catalog of the host is where a cluster is resolved. The end of a backup
+// asked from a schedule whose request was sent is kept for its cluster, and given to the frames of that cluster that
+// ask for it.
 
 import { Main } from "@freelensapp/extensions";
 import { ALLOWANCES_BOUND, type Allowances, isAllowed, withAllowance, withoutAllowance } from "../common/allowances";
@@ -18,6 +20,7 @@ import {
   CHANNELS,
   type Failure,
   failure,
+  type KeptEnd,
   REQUEST_LABELS,
   readAllowanceRequest,
   readArtifactPageRequest,
@@ -28,7 +31,9 @@ import {
   readGateStateRequest,
   readWriteCancelRequest,
   readWriteConfirmRequest,
+  readWriteEndsRequest,
   readWriteRunRequest,
+  readWriteShownRequest,
   readWriteStatusRequest,
   type ServerStatusValue,
   savedFileName,
@@ -36,16 +41,25 @@ import {
   type WriteTarget,
 } from "../common/ipc";
 import { ArtifactHolder } from "./artifact-holder";
+import { confirmBackupCreate, runBackupCreate } from "./backup-create";
+import { confirmBackupDelete, runBackupDelete } from "./backup-delete";
+import { confirmBackupNow, runBackupNow } from "./backup-now";
 import { type CatalogEntry, refusalOf } from "./catalog";
 import { DiagnosticKubernetes, type HostClient } from "./diagnostic-kubernetes";
 import { resolveRoute } from "./diagnostic-route";
 import { type DiagnosticOptions, runDownload } from "./diagnostic-service";
 import { DiagnosticError } from "./diagnostic-transport";
 import { KubectlTunnels, type Spawn, type TunnelHost } from "./diagnostic-tunnel";
+import { KeptEnds } from "./kept-ends";
+import { confirmRestoreCreate, runRestoreCreate } from "./restore-create";
+import { confirmScheduleCreate, runScheduleCreate } from "./schedule-create";
+import { confirmSchedulePatch, runSchedulePatch } from "./schedule-patch";
 import { readServerStatus, serverStatusFailure } from "./server-status";
 import { signatureOf, WriteGate } from "./write-gate";
 
 import type { IpcMainInvokeEvent } from "electron";
+
+import type { Done } from "./creation";
 
 // What a handler reads of the event the host gives it, with the types Electron gives them: the frame that
 // sent the request, by its address, and the identifiers of its process and of the frame, which tell the
@@ -125,6 +139,8 @@ export interface HandlersDependencies {
   // nothing of a text that is not to be saved any more.
   save?(suggested: { name: string; title: string }, content: Buffer, still: () => boolean): Promise<boolean>;
   now?(): number;
+  // What waits between the reads of an action, when a test gives its own.
+  sleep?(milliseconds: number, signal: AbortSignal): Promise<void>;
 }
 
 // The words of how a download ended, from what was raised: the code and the step of a failure of the way,
@@ -237,15 +253,132 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     return answer;
   });
   procedure(CHANNELS.gateDisable, readGateDisableRequest, (_sender, request) => gate.disable(request.cluster));
-  procedure(CHANNELS.writeConfirm, readWriteConfirmRequest, (sender, request) =>
-    gate.confirm(sender.key, request.cluster, request.namespace, request.kind, request.target, request.artifact),
-  );
+  // The ends of the writes whose request was sent, for their cluster (SPEC-0017, REQ-250).
+  const kept = new KeptEnds();
+  // What a kept end says: what to look for, in which namespace of which context, and how it ended.
+  const keptEnd = (request: WriteRunRequest, end: Answer<Done>, context: string): KeptEnd => ({
+    request: request.request,
+    kind:
+      request.kind === "schedule" ||
+      request.kind === "backup" ||
+      request.kind === "restore" ||
+      request.kind === "schedule-pause" ||
+      request.kind === "schedule-resume" ||
+      request.kind === "delete-backup"
+        ? request.kind
+        : "backup-from-schedule",
+    namespace: request.namespace,
+    // The context of the entry the request was sent to, which the adapter was made for: not the one the catalog may
+    // have now.
+    context: context || request.cluster,
+    name: String(
+      request.kind === "schedule"
+        ? request.schedule
+        : request.kind === "restore"
+          ? request.restore
+          : request.kind === "schedule-pause" || request.kind === "schedule-resume" || request.kind === "delete-backup"
+            ? request.target?.name
+            : request.backup,
+    ),
+    // A backup asked from a schedule names it, and a restore its backup; a backup or a schedule of the form names none.
+    ...(request.kind === "backup-from-schedule" ? { schedule: request.target?.name ?? "" } : {}),
+    ...(request.kind === "restore" ? { backup: request.target?.name ?? "" } : {}),
+    // A patch applied says nothing more than whether it was read so after an answer that was lost: the kind says what
+    // it did. A deletion says what the reads after its request showed.
+    outcome: !end.ok
+      ? { created: false, code: end.code, text: end.text }
+      : request.kind === "schedule-pause" || request.kind === "schedule-resume"
+        ? { created: true, ...("found" in end.value && end.value.found ? { found: true } : {}) }
+        : "end" in end.value
+          ? {
+              created: true,
+              deletion: end.value.end,
+              ...(end.value.found ? { found: true } : {}),
+              ...(end.value.requestsUnread ? { requestsUnread: true } : {}),
+            }
+          : {
+              created: true,
+              ...("phase" in end.value && end.value.phase ? { phase: end.value.phase } : {}),
+              ...("found" in end.value && end.value.found ? { found: true } : {}),
+              ...("paused" in end.value && end.value.paused ? { paused: true } : {}),
+            },
+    at: dependencies.now?.() ?? Date.now(),
+  });
+  // The writes of the actions of SPEC-0017 read the cluster before they confirm, and wait between their reads.
+  const actions = {
+    gate,
+    now: () => dependencies.now?.() ?? Date.now(),
+    keep: (request: WriteRunRequest, end: Answer<Done>, context: string) =>
+      kept.keep(request.cluster, keptEnd(request, end, context)),
+    sleep:
+      dependencies.sleep ??
+      ((milliseconds: number, signal: AbortSignal) =>
+        new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, milliseconds);
+
+          signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              reject(new DiagnosticError("cancelled"));
+            },
+            { once: true },
+          );
+        })),
+  };
+
+  procedure(CHANNELS.writeConfirm, readWriteConfirmRequest, async (sender, request, still) => {
+    if (request.kind === "schedule-pause" || request.kind === "schedule-resume")
+      return confirmSchedulePatch(actions, sender.key, request, new AbortController().signal);
+    if (
+      request.kind !== "backup-from-schedule" &&
+      request.kind !== "backup" &&
+      request.kind !== "schedule" &&
+      request.kind !== "restore" &&
+      request.kind !== "delete-backup"
+    )
+      return gate.confirm(
+        sender.key,
+        request.cluster,
+        request.namespace,
+        request.kind,
+        request.target,
+        request.artifact,
+      );
+    // What the object depends on is read for the review while the frame that asks it is there: the schedule a backup
+    // is asked from, the locations the template names, or the backup a restore or a deletion is of.
+    const controller = new AbortController();
+    const watching = watchFrame(still, controller);
+
+    try {
+      if (request.kind === "schedule")
+        return await confirmScheduleCreate(actions, sender.key, request, controller.signal);
+      if (request.kind === "restore")
+        return await confirmRestoreCreate(actions, sender.key, request, controller.signal);
+      if (request.kind === "delete-backup")
+        return await confirmBackupDelete(actions, sender.key, request, controller.signal);
+      return request.kind === "backup"
+        ? await confirmBackupCreate(actions, sender.key, request, controller.signal)
+        : await confirmBackupNow(actions, sender.key, request, controller.signal);
+    } finally {
+      clearInterval(watching);
+    }
+  });
   procedure(CHANNELS.writeStatus, readWriteStatusRequest, (sender, request) =>
     gate.status(sender.key, request.cluster, request.request),
   );
   procedure(CHANNELS.writeCancel, readWriteCancelRequest, (sender, request) =>
     gate.cancel(sender.key, request.cluster, request.request),
   );
+  // The ends kept for the cluster of the frame, which any frame of that cluster may show, and the one it showed.
+  procedure(CHANNELS.writeEnds, readWriteEndsRequest, (_sender, request) => ({
+    ok: true,
+    value: kept.list(request.cluster),
+  }));
+  procedure(CHANNELS.writeShown, readWriteShownRequest, (_sender, request) => {
+    kept.shown(request.cluster, request.request);
+    return { ok: true, value: null };
+  });
   // While a write runs its frame is watched: a frame that goes aborts it, so that nothing is submitted
   // for it after a wait, as the one for a kubectl the host prepares.
   const watchFrame = (still: () => boolean, controller: AbortController) =>
@@ -415,11 +548,81 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     }
   };
 
-  procedure<WriteRunRequest, ServerStatusValue | ArtifactValue>(
+  // The writes of the actions that run, the creations of a backup asked from a schedule or with the form, of a schedule
+  // of the form and of a restore, the pause and the resume of a schedule, and the deletion of a backup, by their
+  // cluster and the identifier of their request: the same request of the same frame, sent again while it runs, joins
+  // it and writes nothing more (SPEC-0017, REQ-249; SPEC-0016, REQ-239).
+  const backupsNow = new Map<string, { fingerprint: string; promise: Promise<Answer<Done>> }>();
+
+  procedure<WriteRunRequest, ServerStatusValue | ArtifactValue | Done>(
     CHANNELS.writeRun,
     readWriteRunRequest,
     (sender, request, still) => {
       if (request.kind === "ServerStatusRequest") return serverStatus(sender, request, still);
+      if (
+        request.kind === "backup-from-schedule" ||
+        request.kind === "backup" ||
+        request.kind === "schedule" ||
+        request.kind === "restore" ||
+        request.kind === "schedule-pause" ||
+        request.kind === "schedule-resume" ||
+        request.kind === "delete-backup"
+      ) {
+        const key = `${request.cluster}/${request.request}`;
+        const patch = request.kind === "schedule-pause" || request.kind === "schedule-resume";
+        const fingerprint = JSON.stringify([
+          sender.key,
+          signatureOf(
+            request.namespace,
+            request.kind,
+            request.target,
+            undefined,
+            request.backup ?? request.schedule ?? request.restore,
+          ),
+          request.token,
+          // The name typed of a restore or of a deletion is a part of what is run.
+          request.typed ?? null,
+        ]);
+        const running = backupsNow.get(key);
+
+        if (running)
+          return running.fingerprint === fingerprint
+            ? running.promise
+            : failure("forbidden", "request", false, "No write of this frame has this identifier.");
+        const run:
+          | typeof runBackupNow
+          | typeof runScheduleCreate
+          | typeof runRestoreCreate
+          | typeof runSchedulePatch
+          | typeof runBackupDelete = patch
+          ? runSchedulePatch
+          : request.kind === "delete-backup"
+            ? runBackupDelete
+            : request.kind === "schedule"
+              ? runScheduleCreate
+              : request.kind === "restore"
+                ? runRestoreCreate
+                : request.kind === "backup"
+                  ? runBackupCreate
+                  : runBackupNow;
+        const promise: Promise<Answer<Done>> = run(
+          actions,
+          sender.key,
+          request,
+          (write) => {
+            const watching = watchFrame(still, write.controller);
+
+            return () => clearInterval(watching);
+          },
+          still,
+        ).finally(() => backupsNow.delete(key));
+
+        backupsNow.set(key, { fingerprint, promise });
+        return promise;
+      }
+      // A kind of write is run by its own branch: one with none is not run, and no token of it is taken.
+      if (request.kind !== "DownloadRequest")
+        return failure("validation", "request", false, "The request is not one the main process understands.");
       const key = `${request.cluster}/${request.request}`;
       const fingerprint = JSON.stringify([
         sender.key,
@@ -569,6 +772,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     stopLetGo();
     holder.dispose();
     gate.dispose();
+    kept.clear();
     tunnels?.closeAll();
   };
 }

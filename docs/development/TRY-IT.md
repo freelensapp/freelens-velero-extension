@@ -18,9 +18,9 @@ the views, and nothing else.
   `corepack pnpm`. kind and kubectl are installed by the first command, under
   the private state of the environment.
 - Freelens v2 at the validation target of
-  [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
-  v2.0.0-0-nightly-2026-10-25, built from freelensapp/freelens `7801fb10`, its
-  download checked against the checksum the release publishes beside it.
+  [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the release Freelens
+  2.0.0, built from freelensapp/freelens `b9b53e16`, its tag v2.0.0, its download
+  checked against the checksum the release publishes beside it.
   Freelens 1 lists the extension as Incompatible.
 
 ## 1. Bring the demo up
@@ -55,10 +55,10 @@ wrote. Take the environment down first, with `pnpm demo:down`.
 | --- | --- |
 | `velero-demo` | The installation: Velero, its storage location, the real backup and its restore; and for the tabs, two backups the server synced from its store, which began four hundred days before the environment, and three operations it refused: a backup and a restore that name both kinds of selector, and a restore asked from a schedule that has no backup; and a schedule its controller validated, `fixture-yearly-<run>`, whose next run is a year after its creation |
 | `velero-static-<run>` | A backup and a restore for every phase, three schedules, storage locations that are available and not |
-| `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there; a schedule with the history of a week, the schedules Velero has not read, and two that submitted two days back with no backup of it; storage locations that are late, unavailable, silent, and one that names its Secrets |
+| `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there; a schedule with the history of a week, the schedules Velero has not read, and two that submitted two days back with no backup of it; storage locations that are late, unavailable, silent, and one that names its Secrets; 23 pod volume operations and 21 data uploads and data downloads of its backups and restores, and 9 backup repositories |
 | `velero-defaults-<run>` | Two storage locations marked default, and nothing else |
 | `velero-overview-<run>` | An installation for the Overview: operations of the last hours and of the last weeks, some in flight, twelve schedules, three storage locations |
-| `velero-scale-<run>` | A thousand backups, a thousand restores and no storage location |
+| `velero-scale-<run>` | A thousand backups, a thousand restores, 2,000 pod volume backups and 200 data uploads of their backups and no storage location |
 | `velero-adherence-<run>` | Eight schedules in the states of the adherence an environment can hold for twelve hours, awaited, overdue, held and at every look among them, placed by the clock, a backup in progress and the backup of a submission, and no storage location |
 | `velero-adherence-split-<run>` | Two schedules whose submissions say two offsets of the server, and no storage location |
 | `velero-adherence-scale-<run>` | Three hundred schedules of mixed expressions with the backups of their submissions, and no storage location |
@@ -116,7 +116,7 @@ Then the Backups, under Velero in the sidebar:
 | Open `views-daily-20260901030000` | Its schedule, its storage location, its snapshot location and its three restores |
 | Open `backup-missing-location` and `backup-missing-schedule` | References to what is not there: a name with its reason, and no link |
 | Other namespace, `velero-scale-<run>` | A namespace nothing suggests, read because it was named. A thousand backups: search, sort, drag the edge of a column, scroll, open one and come back |
-| Custom Resources | While the extension is enabled, the group `velero.io` of the tree lists the kinds of Velero that have no page under Velero, and none of the eight that have one |
+| Custom Resources | While the extension is enabled, the group `velero.io` of the tree lists the kinds of Velero that have no page under Velero, and none of the ten that have one |
 | Custom Resources, Definitions, then `Backup` of the group `velero.io` | The page of the host. In the details of a backup the section of Velero reads it as the views do, says that its log, its results, its resources and its volumes are in the workspace and loads none of them, and leads to the workspace when the backup is of the installation selected |
 | Close Freelens and open it again | The namespace that was selected is the one shown |
 
@@ -249,15 +249,26 @@ Then the locations, from Backup Storage Locations in the sidebar:
 | Volume Snapshot Locations, `velero-views-<run>` | The phase as it is written, with the mark of what is not known: the list says that the release neither writes nor checks it |
 | From a backup, a restore or a schedule | The locations they name lead to the view of the location, over the list the first view was opened from |
 
-Then the volumes, from Backup Repositories, Pod Volume Backups and Pod Volume
-Restores, after Volume Snapshot Locations in the sidebar. The environment holds no
-object of the three kinds yet: no backup of the file system ran in it, and their
-fixtures come with a later pull request of T5.1.
+Then the volumes, from Backup Repositories, Pod Volume Backups, Pod Volume
+Restores, Data Uploads and Data Downloads, after Volume Snapshot Locations in the
+sidebar.
 
 | Step | What to look at |
 | --- | --- |
-| Backup Repositories, `velero-demo` | No repository: the list says of what it is the list, and the host that it is empty |
-| Pod Volume Backups and Pod Volume Restores, `velero-views-<run>` | None of either, each list saying of what it is the list, with the note over it that the operations go with their backups or their restores |
+| Backup Repositories, `velero-views-<run>` | Nine repositories, each with its readiness, its last maintenance and its frequency: one Ready whose newest maintenance failed, with the mark beside the time of the last that succeeded; one of restic, Ready and never maintained; one Not ready, the lines of its message in its tip; one not initialized yet; one due by the clock; two of the same three labels; two of long names |
+| A repository, from its row | Its readiness, its last maintenance and the next one, due or due in how long by the clock of this machine, with the note of the look of the server every five minutes; its recent maintenances, newest first; what used it |
+| Pod Volume Backups and Pod Volume Restores, `velero-views-<run>` | The operations of the views in their phases, each a way to its view, its pod and its node the links of the host |
+| The backup `backup-inprogress`, its band | Its pod volume backups counted by phase, ten rows, and the command that shows ten more, then its twelve data uploads the same way, by their claims |
+| Data Uploads and Data Downloads, `velero-views-<run>` | The data movement of the views in its phases: the data mover of each, Built-in or marked as not known, its claim, the node of its data path; the data upload that failed with a message of three lines, the one of an empty volume |
+| The restore `restore-mapped`, its band, then its data download that completed | Its eight data downloads in the second half of its band; the one that completed leads to the data upload of its snapshot and back, and the one whose snapshot no data upload names says nothing of one |
+| Backup Repositories, `velero-defaults-<run>` | No repository: the list says of what it is the list, and the host that it is empty |
+
+The manual review of SPEC-0014, its first two steps, which T5.1 makes possible: in
+`velero-demo`, open the backup `fixture-volume-backup-<run>`, read in its band how
+its volume went and follow it to its pod volume backup, to its repository and back;
+then open the repository and tell when it was initialized and when its maintenance
+is due. The answers are on the pages, nothing reads as a verdict on the backups,
+and the pod and the node are names that open the details of the host.
 
 With the keyboard alone: Tab reaches the choices, the search and the names of the
 rows, Enter opens, Tab reaches the ways to the other views and the marks of a line
@@ -283,6 +294,14 @@ read, and the history of one is said not known, which is not said empty. With
 either reader, and writes on, the band of the server says that the cluster refused
 the creation of the request: neither may create.
 
+The volume of the demo: in `velero-demo`, the backup `fixture-volume-backup-<run>`
+and the restore `fixture-volume-restore-<run>` are of the pod
+`fixture-volume-<run>` of `velero-source-<run>`, whose volume `data` the node
+agent backed up and restored into `velero-restored-<run>`. Backup Repositories
+lists one, `velero-source-<run>-default-kopia`, Ready and maintained every 168
+hours, its last maintenance the time of its initialization; Pod Volume Backups and
+Pod Volume Restores list one each, Completed (seen on 2026-11-02).
+
 ## 4. The pass that precedes a review
 
 ```sh
@@ -290,7 +309,7 @@ pnpm e2e:views
 pnpm pre-review
 ```
 
-They start the Freelens that `FREELENS_APP` names, the nightly of the
+They start the Freelens that `FREELENS_APP` names, the package of the
 validation target on a machine of a developer: see
 [TESTING.md](TESTING.md#suites-of-the-views). The first runs the suites of the
 views, the second every view, the tabs of an operation among them, in both themes,

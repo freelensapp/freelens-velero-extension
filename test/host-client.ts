@@ -1,6 +1,6 @@
 // A stand-in of the client of the host for the API server of a cluster, `Main.K8sApi.KubeJsonApi.forCluster`,
 // written from the source of the host at the validation target,
-// packages/utility-features/json-api/src/json-api.ts at 7801fb10a5f20af308093b39e5f79cd6e8c3461d:
+// packages/utility-features/json-api/src/json-api.ts at b9b53e16056578c5407312eba5823a089972f6d5:
 // - `getResponse` (lines 154-171) gives the answer whatever its status: a structural answer with its status
 //   and its body, which arrives as a stream and stops when the signal of the request is aborted; it sends the
 //   method it is given as it is given, and `GET` when it is given none (line 162), and the methods it takes are
@@ -22,6 +22,8 @@ export interface HostRequest {
   query?: Record<string, unknown>;
   headers: Record<string, string>;
   body?: unknown;
+  // The body as it was sent, before it is read: what a write of a text sends byte for byte.
+  text?: string;
   signal?: AbortSignal | null;
 }
 
@@ -189,7 +191,7 @@ export function fakeHostClient(reply: (request: HostRequest) => HostReply | Prom
       ...(params?.query ? { query: { ...params.query } } : {}),
       headers: { ...init?.headers },
       ...(init?.body !== undefined
-        ? { body: JSON.parse(init.body) }
+        ? { body: JSON.parse(init.body), text: init.body }
         : params?.data !== undefined
           ? { body: params.data }
           : {}),

@@ -1,6 +1,12 @@
+import { BackupCreateWorkspace } from "./backup-create-workspace";
+import { BackupDeleteWorkspace } from "./backup-delete-workspace";
+import { BackupNowWorkspace } from "./backup-now-workspace";
 import { BackupWorkspace } from "./backup-workspace";
 import { RepositoryWorkspace } from "./repository-workspace";
+import { RestoreCreateWorkspace } from "./restore-create-workspace";
 import { RestoreWorkspace } from "./restore-workspace";
+import { ScheduleCreateWorkspace } from "./schedule-create-workspace";
+import { SchedulePatchWorkspace } from "./schedule-patch-workspace";
 import { ScheduleWorkspace } from "./schedule-workspace";
 import { SnapshotLocationWorkspace } from "./snapshot-location-workspace";
 import { StorageLocationWorkspace } from "./storage-location-workspace";
@@ -26,6 +32,25 @@ export function OpenView({ target, ...props }: OpenViewProps) {
       return <VolumeOperationWorkspace volume="PodVolumeBackup" name={target.name} {...props} />;
     case "pod-volume-restore":
       return <VolumeOperationWorkspace volume="PodVolumeRestore" name={target.name} {...props} />;
+    case "data-upload":
+      return <VolumeOperationWorkspace volume="DataUpload" name={target.name} {...props} />;
+    case "data-download":
+      return <VolumeOperationWorkspace volume="DataDownload" name={target.name} {...props} />;
+    case "backup-now":
+      return <BackupNowWorkspace name={target.name} {...props} />;
+    case "backup-create":
+      return <BackupCreateWorkspace {...props} />;
+    case "schedule-create":
+      return <ScheduleCreateWorkspace {...props} />;
+    case "restore-backup":
+      return <RestoreCreateWorkspace from={{ kind: "backup", name: target.name }} {...props} />;
+    case "restore-schedule":
+      return <RestoreCreateWorkspace from={{ kind: "schedule", name: target.name }} {...props} />;
+    case "schedule-pause":
+    case "schedule-resume":
+      return <SchedulePatchWorkspace action={target.kind} name={target.name} {...props} />;
+    case "backup-delete":
+      return <BackupDeleteWorkspace name={target.name} {...props} />;
     default:
       return <BackupWorkspace name={target.name} {...props} />;
   }

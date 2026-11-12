@@ -1,6 +1,6 @@
 # Dependencies
 
-Updated: 2026-10-25
+Updated: 2026-11-07
 
 What the extension ships, what it only builds with, and how both are kept
 current, on Freelens v2 since T0.7
@@ -44,11 +44,11 @@ The packed build is about 0.5 MB.
 
 ## Development Graph
 
-- The host SDK, `@freelensapp/extensions`, is pinned exactly to the nightly of the
-  validation target, 2.0.0-0-nightly-2026-10-25, until Freelens 2.0.0 is released,
-  then to a range of versions. Its declarations are in the package itself.
+- The host SDK, `@freelensapp/extensions`, is taken by the range `^2.0.0` that D10
+  of SPEC-0015 gives it, resolved to the version of the validation target, 2.0.0,
+  the release Freelens 2.0.0. Its declarations are in the package itself.
 - `react`, `react-dom` 19.3.1, `mobx` 7.0.6, `mobx-react` 10.0.2, their
-  declarations and `electron` 43.8.3, for its types, are devDependencies at the
+  declarations and `electron` 44.10.0, for its types, are devDependencies at the
   versions of the catalog of the host: the build reads the names they export and
   the tests of the views run against them. pnpm 12 runs with
   `strictPeerDependencies`, so a library shared with the host outside the peer
@@ -65,7 +65,10 @@ The packed build is about 0.5 MB.
   the scripts of its root package for the tools run through `pnpm dlx`, and its
   `mise.toml` for Node and the tools of mise. A version arrives once Freelens
   took it, at that version, in one pull request, the group `Freelens
-  dependencies`, with the nightly of the SDK. React, MobX, react-window and
+  dependencies`, with a release of the SDK, whose range stays `^2.0.0` while the
+  lockfile moves; versions of the main branch of Freelens wait there for the
+  release that brings them, since the build test holds the libraries to the
+  catalog of the validation target. React, MobX, react-window and
   every other library follow the catalog. The pins of the test environment keep
   rules of their own: Velero and its plugin move together, kind, its node image
   and kubectl together, the checksums beside them by hand, and the image of the

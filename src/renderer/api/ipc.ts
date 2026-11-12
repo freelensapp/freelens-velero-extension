@@ -9,17 +9,29 @@ import {
   type ArtifactSaved,
   type ArtifactTarget,
   type ArtifactValue,
+  type BackupCreated,
+  type BackupDeleted,
   CHANNELS,
   failure,
   type GateState,
+  type KeptEnd,
+  type RestoreCreated,
   readAnswer,
   readArtifactPage,
   readArtifactSaved,
   readArtifactValue,
+  readBackupCreated,
+  readBackupDeleted,
   readGateState,
+  readKeptEnds,
+  readRestoreCreated,
+  readScheduleChanged,
+  readScheduleCreated,
   readServerStatusValue,
   readWriteConfirmAnswer,
   readWriteStatus,
+  type ScheduleChanged,
+  type ScheduleCreated,
   type ServerStatusValue,
   type WriteConfirmAnswer,
   type WriteKind,
@@ -28,6 +40,10 @@ import {
 } from "../../common/ipc";
 
 import type { AllowanceFor } from "../../common/allowances";
+import type { BackupTemplate } from "../../common/backup-template";
+import type { RestoreForm } from "../../common/restore-form";
+import type { ScheduleWrapper } from "../../common/schedule-form";
+import type { ResumeParameters, SchedulePatch } from "../../common/schedule-patch";
 
 // What the views ask of the gate, in the words of the contract.
 export interface GateClient {
@@ -76,6 +92,128 @@ export interface ArtifactClient {
   save(cluster: string, request: string): Promise<Answer<ArtifactSaved>>;
 }
 
+// What the views ask of the ends kept for their cluster: the list, and the one a view showed (SPEC-0017, REQ-250).
+export interface KeptEndsClient {
+  ends(cluster: string): Promise<Answer<KeptEnd[]>>;
+  shown(cluster: string, request: string): Promise<Answer<null>>;
+}
+
+// What the views ask of the main process for a backup asked from a schedule by hand (SPEC-0017, T4.2): the
+// confirmation, which answers the text of the backup with its token, and the run, which sends that text.
+export interface BackupNowClient {
+  confirmBackupNow(
+    cluster: string,
+    namespace: string,
+    schedule: { name: string; uid: string },
+    backup: string,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runBackupNow(
+    cluster: string,
+    namespace: string,
+    schedule: { name: string; uid: string },
+    backup: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupCreated>>;
+}
+
+// What the views ask of the main process for a backup of the form (SPEC-0017, T4.3): the confirmation, which carries
+// the name and the fields of the template and answers the text of the backup with its token, and the run, which
+// carries the name alone and sends that text.
+export interface BackupCreateClient {
+  confirmBackupCreate(
+    cluster: string,
+    namespace: string,
+    backup: string,
+    template: BackupTemplate,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runBackupCreate(
+    cluster: string,
+    namespace: string,
+    backup: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupCreated>>;
+}
+
+// What the views ask of the main process for a schedule of the form (SPEC-0016, T4.7): the confirmation, which carries
+// the name, the wrapper and the fields of the template and answers the text of the Schedule with its token, and the
+// run, which carries the name alone and sends that text.
+export interface ScheduleCreateClient {
+  confirmScheduleCreate(
+    cluster: string,
+    namespace: string,
+    schedule: string,
+    wrapper: ScheduleWrapper,
+    template: BackupTemplate,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runScheduleCreate(
+    cluster: string,
+    namespace: string,
+    schedule: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<ScheduleCreated>>;
+}
+
+// What the views ask of the main process for a restore of a backup (SPEC-0017, REQ-265 to REQ-273): the review of the
+// restore of the form, and its run with the name of the backup as the operator typed it.
+export interface RestoreCreateClient {
+  confirmRestoreCreate(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    restore: string,
+    form: RestoreForm,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runRestoreCreate(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    restore: string,
+    typed: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<RestoreCreated>>;
+}
+
+// What the views ask of the main process for the pause and the resume of a schedule (SPEC-0017, T4.5): the confirmation,
+// which carries the schedule by its name and its UID and, for a resume, the expression its review read and the choice
+// of skipping a run, and answers the text of the patch with its token; and the run, which carries the schedule alone
+// and sends that text.
+export interface SchedulePatchClient {
+  confirmSchedulePatch(
+    cluster: string,
+    namespace: string,
+    action: SchedulePatch["action"],
+    schedule: { name: string; uid: string },
+    resume?: ResumeParameters,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runSchedulePatch(
+    cluster: string,
+    namespace: string,
+    action: SchedulePatch["action"],
+    schedule: { name: string; uid: string },
+    token: string,
+    request: string,
+  ): Promise<Answer<ScheduleChanged>>;
+}
+
+// What the views ask of the main process for the deletion of one backup (SPEC-0017, REQ-278 to REQ-284): the
+// confirmation, by the backup alone, whose answer carries the text of the request and how many other requests the
+// backup has; and the run, with the name of the backup as it was typed.
+export interface BackupDeleteClient {
+  confirmBackupDelete(cluster: string, namespace: string, backup: WriteTarget): Promise<Answer<WriteConfirmAnswer>>;
+  runBackupDelete(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    typed: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupDeleted>>;
+}
+
 // What the views ask of what the operator allows the downloads to do: to keep it, and to take it back.
 export interface AllowanceClient {
   allow(cluster: string, allowed: AllowanceFor): Promise<Answer<null>>;
@@ -86,7 +224,18 @@ const NO_ANSWER = failure("request-failed", "way", true, "The main process did n
 
 export class VeleroIpcRenderer
   extends Renderer.Ipc
-  implements GateClient, WriteClient, ArtifactClient, AllowanceClient
+  implements
+    GateClient,
+    WriteClient,
+    ArtifactClient,
+    AllowanceClient,
+    BackupNowClient,
+    BackupCreateClient,
+    ScheduleCreateClient,
+    RestoreCreateClient,
+    SchedulePatchClient,
+    BackupDeleteClient,
+    KeptEndsClient
 {
   // `bounded` says that the reader of the value bounds it itself: it is so for the page of a text, which
   // is larger than every other answer.
@@ -190,6 +339,206 @@ export class VeleroIpcRenderer
 
   takeBack(cluster: string, allowed: AllowanceFor): Promise<Answer<null>> {
     return this.ask(CHANNELS.allowanceRevoke, { cluster, ...allowed }, (value) => (value === null ? null : undefined));
+  }
+
+  ends(cluster: string): Promise<Answer<KeptEnd[]>> {
+    return this.ask(CHANNELS.writeEnds, { cluster }, readKeptEnds);
+  }
+
+  shown(cluster: string, request: string): Promise<Answer<null>> {
+    return this.ask(CHANNELS.writeShown, { cluster, request }, (value) => (value === null ? null : undefined));
+  }
+
+  confirmBackupNow(
+    cluster: string,
+    namespace: string,
+    schedule: { name: string; uid: string },
+    backup: string,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      {
+        cluster,
+        namespace,
+        kind: "backup-from-schedule",
+        target: { kind: "Schedule", name: schedule.name, uid: schedule.uid },
+        backup,
+      },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runBackupNow(
+    cluster: string,
+    namespace: string,
+    schedule: { name: string; uid: string },
+    backup: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupCreated>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      {
+        cluster,
+        namespace,
+        kind: "backup-from-schedule",
+        target: { kind: "Schedule", name: schedule.name, uid: schedule.uid },
+        backup,
+        token,
+        request,
+      },
+      readBackupCreated,
+    );
+  }
+
+  confirmBackupCreate(
+    cluster: string,
+    namespace: string,
+    backup: string,
+    template: BackupTemplate,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      { cluster, namespace, kind: "backup", backup, template },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runBackupCreate(
+    cluster: string,
+    namespace: string,
+    backup: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupCreated>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      { cluster, namespace, kind: "backup", backup, token, request },
+      readBackupCreated,
+    );
+  }
+
+  confirmScheduleCreate(
+    cluster: string,
+    namespace: string,
+    schedule: string,
+    wrapper: ScheduleWrapper,
+    template: BackupTemplate,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      { cluster, namespace, kind: "schedule", schedule, wrapper, template },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runScheduleCreate(
+    cluster: string,
+    namespace: string,
+    schedule: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<ScheduleCreated>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      { cluster, namespace, kind: "schedule", schedule, token, request },
+      readScheduleCreated,
+    );
+  }
+
+  confirmRestoreCreate(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    restore: string,
+    form: RestoreForm,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      { cluster, namespace, kind: "restore", target: backup, restore, restoreForm: form },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runRestoreCreate(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    restore: string,
+    typed: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<RestoreCreated>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      { cluster, namespace, kind: "restore", target: backup, restore, typed, token, request },
+      readRestoreCreated,
+    );
+  }
+
+  confirmSchedulePatch(
+    cluster: string,
+    namespace: string,
+    action: SchedulePatch["action"],
+    schedule: { name: string; uid: string },
+    resume?: ResumeParameters,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      {
+        cluster,
+        namespace,
+        kind: action,
+        target: { kind: "Schedule", name: schedule.name, uid: schedule.uid },
+        ...(resume ? { resume } : {}),
+      },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runSchedulePatch(
+    cluster: string,
+    namespace: string,
+    action: SchedulePatch["action"],
+    schedule: { name: string; uid: string },
+    token: string,
+    request: string,
+  ): Promise<Answer<ScheduleChanged>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      {
+        cluster,
+        namespace,
+        kind: action,
+        target: { kind: "Schedule", name: schedule.name, uid: schedule.uid },
+        token,
+        request,
+      },
+      readScheduleChanged,
+    );
+  }
+
+  confirmBackupDelete(cluster: string, namespace: string, backup: WriteTarget): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      { cluster, namespace, kind: "delete-backup", target: backup },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runBackupDelete(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    typed: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupDeleted>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      { cluster, namespace, kind: "delete-backup", target: backup, typed, token, request },
+      readBackupDeleted,
+    );
   }
 
   status(cluster: string, request: string): Promise<Answer<WriteStatus>> {

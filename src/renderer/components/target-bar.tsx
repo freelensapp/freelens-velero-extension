@@ -4,12 +4,15 @@ import React from "react";
 import { locationWords } from "../../common/allowances";
 import { TITLES } from "../../common/discovery";
 import { CONNECTION_REASONS } from "../../common/ipc";
+import { keptEndWords } from "../../common/kept-end-words";
 import { isStale } from "../../common/read-state";
 import { ConfigureNamespace } from "./entry-state";
 import styles from "./views.module.css";
+import { ViewLink } from "./workspace";
 
 import type { Allowance } from "../../common/allowances";
 import type { Family } from "../../common/discovery";
+import type { KeptEnd } from "../../common/ipc";
 import type { ReadStatus } from "../../common/read-state";
 import type { Installation } from "../state/installation";
 
@@ -44,7 +47,7 @@ export function writesDialogWords(
   return {
     first: `Turn writes on for the installation ${namespace} of the cluster ${cluster} (context ${context})?`,
     second:
-      "Until they are turned off, or another installation is selected, the extension may create in that namespace the requests the views ask for on purpose: a DownloadRequest for the log, the results, the resources or the volumes of an operation, and a ServerStatusRequest for the version of the server. Each one is confirmed where it is asked for. Nothing else is written.",
+      "Until they are turned off, or another installation is selected, the extension may create in that namespace the requests the views ask for on purpose: a DownloadRequest for the log, the results, the resources or the volumes of an operation, a ServerStatusRequest for the version of the server, a Backup from a schedule, asked from the view of the schedule, a Backup of the form, asked from the list of the Backups, a Schedule of the form, asked from the list of the Schedules, a Restore of a backup, asked from the view of that backup or from the view of the schedule that made it, a patch of a Schedule that pauses or resumes it, asked from the view of the schedule, and a DeleteBackupRequest of one backup, asked from the view of that backup. Each one is confirmed where it is asked for. Nothing else is written.",
   };
 }
 
@@ -311,7 +314,67 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
           ) : null}
         </section>
       ) : null}
+      <KeptEnds installation={installation} />
     </>
+  );
+});
+
+// What an end kept for the cluster is of: a schedule, created, paused or resumed, a restore or a backup, created or
+// deleted, which its view shows.
+function objectOf(end: KeptEnd): "schedule" | "restore" | "backup" {
+  if (end.kind === "schedule-pause" || end.kind === "schedule-resume") return "schedule";
+  return end.kind === "schedule" || end.kind === "restore" ? end.kind : "backup";
+}
+
+// Whether the object of an end has a view to lead to: one created or changed in the installation that is shown, and not
+// a backup whose deletion the reads showed completed, which is gone.
+function viewed(end: KeptEnd, namespace: string | undefined): boolean {
+  if (!end.outcome.created || namespace !== end.namespace) return false;
+  return !(end.kind === "delete-backup" && end.outcome.deletion === "completed");
+}
+
+// The ends of the writes of this cluster whose request was sent and that no view showed, wherever the operator is in
+// the cluster, until each is dismissed (SPEC-0017, REQ-250; SPEC-0016, REQ-243): what to look for, where, and how it
+// ended, with the way to the backup or the schedule when it was created in the installation that is shown.
+const KeptEnds = observer(({ installation }: { installation: Installation }) => {
+  const ends = installation.ends;
+
+  if (!ends.length) return null;
+  return (
+    // Said to who does not see as it appears, after a read.
+    <section
+      className={styles.namespaces}
+      role="status"
+      aria-label="Writes that ended while no view of them was open"
+      data-testid="velero-kept-ends"
+    >
+      <ul className={styles.named}>
+        {ends.map((end) => (
+          <li
+            key={end.request}
+            data-testid="velero-kept-end"
+            data-request={end.request}
+            data-created={end.outcome.created}
+          >
+            <span>{keptEndWords(end)}</span>
+            <span className={styles.muted}>at {new Date(end.at).toLocaleTimeString()}</span>
+            {viewed(end, installation.namespace) ? (
+              <ViewLink target={{ kind: objectOf(end), name: end.name }}>
+                Open the {objectOf(end)} {end.name}
+              </ViewLink>
+            ) : null}
+            <Button
+              plain
+              aria-label={`Dismiss what is said of the ${objectOf(end)} ${end.name}`}
+              data-testid="velero-kept-end-dismiss"
+              onClick={() => installation.showEnd(end.request)}
+            >
+              Dismiss
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 });
 

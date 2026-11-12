@@ -814,6 +814,24 @@ describe("ADH-08: the backup of the last submission", () => {
     expect(submissionBackup(submitted, [backup("nightly-20261013025941", "2026-10-13T02:59:41Z")]).kind).toBe("found");
   });
 
+  it("carries the nearest other backup named as a submission within the minute, as one asked by hand then", () => {
+    const byHand = backup("nightly-20261013030051", "2026-10-13T03:00:51Z");
+    const later = backup("nightly-20261013030131", "2026-10-13T03:01:31Z");
+
+    // The nearest of three is the backup of the submission, and the next nearest is carried beside it.
+    expect(submissionBackup(submitted, [later, own, byHand])).toEqual({
+      kind: "found",
+      backup: byHand,
+      distance: 10_000,
+      shared: own,
+    });
+    // Two as near: the first by name is the one, the other is carried.
+    const twin = backup("nightly-20261013030031", "2026-10-13T03:00:31Z");
+
+    expect(submissionBackup(submitted, [byHand, twin])).toMatchObject({ backup: twin, shared: byHand });
+    expect(submissionBackup(submitted, [twin, byHand])).toMatchObject({ backup: twin, shared: byHand });
+  });
+
   it("finds none when the backup of the submission is not among the backups that exist", () => {
     const submission = Date.parse("2026-10-13T03:00:41Z");
 

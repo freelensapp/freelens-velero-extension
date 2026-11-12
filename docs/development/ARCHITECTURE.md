@@ -1,6 +1,6 @@
 # Architecture
 
-Date: 2026-10-25
+Date: 2026-10-29
 
 Status: the foundation is complete and the first views are in place: the discovery of
 the installation, the Backups, the Restores, the Schedules and the storage and
@@ -17,7 +17,7 @@ their specs start from.
 Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
 [versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.4 and the
 AWS plugin v1.14.4; the Freelens validation target is the one of SPEC-0015, the
-nightly v2.0.0-0-nightly-2026-10-25, built from freelensapp/freelens `7801fb10`. A
+release Freelens 2.0.0, built from freelensapp/freelens `b9b53e16`, its tag v2.0.0. A
 reviewed version is not a compatibility claim for untested releases. Product
 behavior below requires spec approval.
 
@@ -60,8 +60,9 @@ The manifest, the toolchain and the build are the ones of the template of the
 organization since T0.7 (D6 of SPEC-0015): `engines.freelens` is `^2.0.0`, which
 Freelens 1 lists as Incompatible before any code runs; the package is an ES
 module, `"type": "module"`, with its entries `dist/main.js` and
-`dist/renderer.js` and `files` `dist/**/*`; `@freelensapp/extensions` is pinned
-exactly to the nightly of the validation target until Freelens 2.0.0 is released.
+`dist/renderer.js` and `files` `dist/**/*`; `@freelensapp/extensions` is taken
+by the range `^2.0.0` that D10 of SPEC-0015 gives it, resolved to the version of
+the validation target, 2.0.0, the release Freelens 2.0.0.
 Biome, Knip and Trunk run through `pnpm dlx` at the exact versions the scripts
 name, as in the other extensions.
 Activation asks nothing of a cluster, in either process. Both open the store of the
@@ -69,14 +70,18 @@ preferences; the main process registers its procedures on an instance of
 `Main.Ipc` made for the activation, and the renderer registers the pages of the
 Overview, of the Backups, of the Restores, of the Schedules, of the Backup Storage
 Locations, of the Volume Snapshot Locations, of the Backup Repositories, of the Pod
-Volume Backups and of the Pod Volume Restores, their entries of the sidebar, the
-sections it adds to the details the host shows of each of the eight kinds, made with
-`detailsFor`, and the eight kinds as `customResources`, which the Custom Resources
-tree of the cluster leaves out while the extension is enabled. Every page and
+Volume Backups, of the Pod Volume Restores, of the Data Uploads and of the Data
+Downloads, their entries of the sidebar, the sections it adds to the details the host
+shows of each of the ten kinds, made with `detailsFor`, and the ten kinds as
+`customResources`, which the Custom Resources tree of the cluster leaves out while the
+extension is enabled. Eight kinds are of `velero.io/v1`, and the two of the data
+movement of `velero.io/v2alpha1`, the version that serves them. Every page and
 section is drawn inside an
 [error boundary](../../src/renderer/components/error-boundary.tsx) of the template,
 since the host has none around its drawer of the details. The main entry also
-exports its diagnostic modules, for the build test and the transport proof.
+exports its diagnostic modules, for the build test, the transport proof and FND-10,
+which downloads with them, resolves the route to a store and makes the words of its
+refusal inside the main process of the host.
 
 `pnpm build` is two runs of Vite 8, in library mode, as ESM: the renderer for the
 browser, with nothing external, where an import of a module of Node or of Electron
@@ -118,22 +123,27 @@ strict peer dependencies, so that a library shared with the host outside the pee
 range of the SDK fails the install.
 
 The hosted checks are the ones of the other extensions of the organization, on
-every pull request and on main: the build, the type check, lint and Knip; Trunk;
-the unit tests; the integration tests, FND-10 and a session for each of the five
+every pull request and on main, the end-to-end tests and the tests of the views
+also every night and, on a pull request, only for the changes that reach them: the
+build, the type check, lint and Knip; Trunk;
+the unit tests; the integration tests, FND-10 and a session for each of the ten
 kinds of the template's integration test, which install the packed build in a
 Freelens built from source at the commit of the validation target, on a disposable
 kind cluster of the scripts of this repository; the end-to-end tests, which bring
 the test environment up on the runner, run the fixtures and the transport proof
-and take it down; the tests of the views, which run every suite, the pre-review
+and take it down; the tests of the views, which run the suites, the pre-review
 and FND-10 in a Freelens built from source at the same commit against the fixtures
-of that environment, the build cached by the commit and not by a version, as the
-integration tests cache it; OSV-Scanner; and, on a pull request that changes
+of that environment, the build cached by the commit and not by a version; the
+integration tests and the tests of the views build it through one composite
+action, `.github/actions/build-freelens`, which each gives the commit it names
+once, and share its caches; OSV-Scanner; and, on a pull request that changes
 `.nvmrc`, `mise.toml` or `mise.lock`, the check of `mise.lock`. They run on
 synthetic data only. Renovate and the daily maintenance workflows of the
 organization (npm audit, npm dedupe, Biome migrate, Trunk upgrade) open their pull
 requests on branches named `automated/*`. A release is three workflows: the version
 workflow opens the pull request that sets the version, the tag workflow tags main
-when that pull request is merged, a version `X.Y.Z` or a prerelease `X.Y.Z-N`, and
+when that pull request is merged, a version `X.Y.Z` or a prerelease `X.Y.Z-`
+followed by letters, digits, dots and hyphens, and
 the release workflow builds the bundle from the tag, publishes it to npm, on `next`
 for a version with a hyphen and on `latest` otherwise, and attaches the tarball,
 its checksums and its software bill of materials to the GitHub release, marked as
@@ -239,17 +249,17 @@ is not a date written as HTTP writes one. The answer is of the origin of the fra
 so the header can be read, and it is the one of the API server: the proxy of the main
 process of the host takes the read to the freelens-k8s-proxy of the cluster on the
 fetch path of http-proxy-3, over HTTP/2
-([the route](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/freelens-proxy/freelens-proxy.ts#L463-L522),
-[the target](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/cluster/freelens-k8s-proxy-target.ts#L154-L168)),
+([the route](https://github.com/freelensapp/freelens/blob/b9b53e16056578c5407312eba5823a089972f6d5/packages/core/src/main/freelens-proxy/freelens-proxy.ts#L475-L534),
+[the target](https://github.com/freelensapp/freelens/blob/b9b53e16056578c5407312eba5823a089972f6d5/packages/core/src/main/cluster/freelens-k8s-proxy-target.ts#L152-L166)),
 and each of the two proxies keeps the header of the answer it passes on, as AGENTS.md
 says with the lines of their source.
 
 | Read | When | Path |
 | --- | --- | --- |
-| What the API serves | A view opens, or the operator reads again | `/apis/velero.io/v1` |
+| What the API serves | A view opens, or the operator reads again | `/apis/velero.io/v1`, and `/apis/velero.io/v2alpha1` for the two kinds of the data movement alone |
 | Where the installations may be | The same | The backup storage locations of the cluster |
 | The six families read at every read: the five of the first milestones and the backup repositories | A namespace is selected, every 15 seconds while a view is open, or the operator reads again | The lists of the selected namespace |
-| The pod volume backups, the pod volume restores | At once when a view that shows them first needs them, then with every read while one holds them | The lists of the selected namespace |
+| The pod volume backups, the pod volume restores, the data uploads, the data downloads | At once when a view that shows them first needs them, then with every read while one holds them; never a family of a version the API does not serve | The lists of the selected namespace, under the version of each kind |
 
 Facts of the host the design rests on, found by asking the packaged application on
 Freelens 1 and proven again on v2, by the packaged suites or in the source of the
@@ -257,7 +267,7 @@ host at the validation target:
 
 - An object of the API has no `selfLink` any more, and the host asks for one to
   build an object of a list
-  ([the check](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/kube-object/src/kube-object.ts#L115-L120)).
+  ([the check](https://github.com/freelensapp/freelens/blob/b9b53e16056578c5407312eba5823a089972f6d5/packages/kube-object/src/kube-object.ts#L115-L120)).
   The [store of the list](../../src/renderer/state/list-store.ts) adds it to the copy
   it gives to the host, and the lists of the suites mount their rows with it.
 - The host writes the store of an extension from its main process, and passes the
@@ -267,11 +277,11 @@ host at the validation target:
   it, and the host saves the file once for one change.
 - The host writes the file of a store key by key, from what the store gives it, and
   removes no key: one the store stops giving keeps in the file what it held
-  ([the save](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/features/persistent-storage/main/persist-state-to-config.injectable.ts#L16-L22)).
+  ([the save](https://github.com/freelensapp/freelens/blob/b9b53e16056578c5407312eba5823a089972f6d5/packages/core/src/features/persistent-storage/main/persist-state-to-config.injectable.ts#L16-L22)).
   A key that may become empty is always given, empty.
 - The search of the lists of the host waits 250 ms after the last key before it
   gives the list what was typed
-  ([the wait](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/input/search-input-url.tsx#L41)).
+  ([the wait](https://github.com/freelensapp/freelens/blob/b9b53e16056578c5407312eba5823a089972f6d5/packages/core/src/renderer/components/input/search-input-url.tsx#L41)).
 
 The reader builds no `KubeApi` of its own: one that an extension creates registers
 itself with the host, and on v2 the reader has the client of the host instead.
@@ -302,31 +312,69 @@ families are asked again every 15 seconds: the details of the host, which the ho
 draws where no view of the extension is, compute with the last read of the views,
 and say its age when no view is open or when it is older than that period.
 
-The watch of the host is not used for these views. A list every 15 seconds while a
-view is open costs six requests, and one more for each family read on demand that a
-view holds, shows a failed read as such, with what was read before and when, and
-stops when the last view closes. The watch comes with the spec that needs what it
-gives.
+The operations of the volumes are found the same way, in an
+[index](../../src/common/volume-index.ts) made once for a read
+([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md), REQ-194), in one
+pass over each of the four families of the operations: the operations of each backup
+and of each restore by its namespace and the label of its UID, each kind apart, the
+operations that name each repository by the namespace and the three labels the
+release names a repository with, the namespace of the volume and the location cut as
+the release cuts a long name, and the type kopia for the data movement, and the data
+uploads by the snapshot their result names, which a data download restores, each list
+from the newest. The
+[memo](../../src/renderer/state/volumes.ts) is one entry for each installation,
+keyed by the reads of those four families as they are stored and by the availability
+of the API, never by what the installation gives of a family, which is a new object
+at each call: a tick of the clock makes no new index, a read makes one, since it
+makes a new array of items, and a family let go is dropped to a new empty read at the
+read after, so a new index then, once. The index is made of the four families alone:
+the owners and the repositories an operation names are found with the maps of the
+reads of their families, made once for each array of items
+([the references](../../src/common/volume-references.ts)), so a read of the backups,
+the restores or the repositories makes no new index. The band of a backup or of a
+restore, what used a repository and the ways of the Volumes tab each find their
+operations in one look of a map ([the band](../../src/common/volume-band.ts)): the
+band of a backup of 200 operations counts them by phase and draws ten of them, and
+the unit measure of the index times the index and that band against the budget of an
+interaction.
 
-The families of an installation are one union of eight
-([the families](../../src/common/discovery.ts)): six read at every read, and the
-pod volume backups and the pod volume restores, read only while a view that shows
-them is open ([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md),
-REQ-178): an installation may hold thousands of them, and a view that does not show
-them does not pay for them. What a view needs of those is said by a holder, in one
-call that replaces what it needed before, and the call answers the function that
-lets it go. The frame of a page is a holder: it needs what its page and the view
+The watch of the host is not used for these views. A list every 15 seconds while a
+view is open costs six requests, and one more for each family read on demand that
+the views that are open hold, shows a failed read as such, with what was read before
+and when, and stops when the last view closes. The watch comes with the spec that
+needs what it gives.
+
+The families of an installation are one union of ten ([the
+families](../../src/common/discovery.ts)): six read at every read, and the pod
+volume backups, the pod volume restores, the data uploads and the data downloads,
+read only while a view that shows them is open
+([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md), REQ-178): an
+installation may hold thousands of them, and a view that does not show them does not
+pay for them. What a view needs of those is said by a holder, in one call that
+replaces what it needed before, and the call answers the function that lets it go.
+The frame of a page is a holder: it needs what its page and every view of the way
 that is open over it read of the families on demand, since the list stays under the
-view, and calls again when the view changes, so that a view that changes from one
-kind to another never lets go of a family both need. A family needed and never read
-is asked at once, alone, in the generation, through the same guarded read; then at
-every read while it is held. A family no holder needs is not asked at the read after
-it was let go, and what was read of it goes then: a view opened again within a read
-finds it still read, and no timer is added. A new generation keeps the holders and
-empties the reads, and an answer of a family no holder needs any more is not taken.
-The Overview, the lists of the other kinds and the views of a backup, a restore, a
-schedule and a repository hold none; the sections of the details of the host hold
-none and ask nothing.
+views and the way back leads to each of them, and calls again when the way changes,
+so that a way that changes never lets go of a family a view still on it needs. A
+backup, a pod volume backup opened from its band and the storage location of that
+operation keep the pod volume backups between them, and the way back draws the
+operation and the band from what was read, with no view that waits for its family
+again; the address names every view of the way as open, so a family is read while a
+view that needs it is open, at one list of it at each read while the way is, as
+decided while implementing, on 2026-10-29. A family needed and never read is asked
+at once, alone, in the generation, through the same guarded read; then at every read
+while it is held. A family no holder needs is not asked at the read after it was let
+go, and what was read of it goes then: a view opened again within a read finds it
+still read, and no timer is added. A new generation keeps the holders and empties
+the reads, and an answer of a family no holder needs any more is not taken. The
+views of a backup and of a restore hold their families of the operations, the pod
+volume backups and the data uploads of a backup and the pod volume restores and the
+data downloads of a restore, which the two halves of the band of their summary show,
+and the view of a repository holds the four, for what used it, since the second pull
+request of T5.1 and the first of T5.2; the view of a data download holds the data
+uploads, for the one whose snapshot it restores; the Overview, the lists of the
+other kinds and the views of a schedule and of a location hold none; the sections of
+the details of the host hold none and ask nothing.
 
 What is [known of a family](../../src/common/read-state.ts) is what the last read
 that ended said of it. A family that is asked again keeps that, and is marked as
@@ -402,26 +450,33 @@ host opens the page of the kind with the view in its address. The views that are
 open are of the installation they were opened in: they close when another one is
 selected.
 
-A reference to an object is a way to its view only when the object was found and
-its kind has a view: a reference to a kind that has none yet is a name with what
-is known of its target. The kinds that have a view are the ones of the
-[list](../../src/common/views.ts) the address is checked against. What each of
-them needs of the renderer is beside what uses it: its
+A reference to an object is a way to its view only when the object was found and its
+kind has a view: a reference to a kind that has none yet is a name with what is
+known of its target. The kinds that have a view are the ones of the
+[list](../../src/common/views.ts) the address is checked against. What each of them
+needs of the renderer is beside what uses it: its
 [page](../../src/renderer/navigation.ts), its
 [component](../../src/renderer/pages/open-view.tsx) and the
 [references](../../src/renderer/components/workspace.tsx) that lead to it. Since
 T5.1 they are eight: the five of the first milestones, `backup-repository`,
-`pod-volume-backup` and `pod-volume-restore`, and a reference to a backup
-repository, a pod volume backup or a pod volume restore that is found leads to its
+`pod-volume-backup` and `pod-volume-restore`, and since T5.2 ten, with `data-upload`
+and `data-download`; a reference to a kind of the volumes that is found leads to its
 view as the others do. Each view reads the families it shows, and the notices over
-it are of those alone, as decided while implementing, on 2026-10-26: a backup, a
-restore and a schedule the backups, the restores, the schedules and the two
-locations; a repository the repositories and the storage locations, the operations
-that use it coming with the band that shows them; an operation its own family,
-which the frame holds, the family of its owner, the storage locations and the
-repositories. The pod and the node of an operation are the links of the host to their
-details (`LinkToPod`, `LinkToNode`), which read nothing and leave the host to read
-the object when its drawer opens.
+it are of those alone, as decided while implementing, on 2026-10-26: a schedule the
+backups, the restores, the schedules and the two locations; a backup and a restore
+those, and since the second pull request of T5.1 their own family of the operations,
+the pod volume backups of a backup and the pod volume restores of a restore, and
+since the first of T5.2 the data uploads of a backup and the data downloads of a
+restore, which the frame holds for the band of their summary; a repository the
+repositories and the storage locations, and since the second pull request of T5.1
+the two families of the pod volume operations and the backups and the restores,
+which what used it counts and leads to, as decided while implementing, on
+2026-10-29, and the two families of the data movement since the first pull request
+of T5.2; an operation its own family, which the frame holds, the family of its
+owner, the storage locations and the repositories, and a data download the data
+uploads as well. The pod and the node of an operation are the links of the host to
+their details (`LinkToPod`, `LinkToNode`), which read nothing and leave the host to
+read the object when its drawer opens.
 
 ### The Time Of An Operation And The History Of A Schedule
 
@@ -517,16 +572,23 @@ restores, and what is denied of them is not said over it.
 ### The Overview
 
 The [Overview](../../src/renderer/pages/overview-page.tsx) asks the cluster
-nothing of its own. It is computed from five of the six families read at every
-read of the installation, the backup repositories apart, by
+nothing of its own. It is computed from the six families read at every read of
+the installation, the backup repositories the sixth, by
 [pure functions](../../src/common/overview.ts) that are given the reads, the
 clock and the window: what was read, what needs attention, what is in flight, the
 newest backup that completed, the operations of the window, a line for each
 schedule and for each storage location. What was read of a family is what every
-view reads of it, with what the cluster says that it serves.
+view reads of it, with what the cluster says that it serves. The page holds no
+family of its own: none of the four families of the operations of the volumes is
+asked while it is shown with no view open over it.
 
-What needs attention is the items of eleven rules, each a function of what was
-read. Rule A11, the adherence of a schedule, reads the
+What needs attention is the items of thirteen rules, each a function of what was
+read. Rules A12 and A13, of the backup repositories, read each repository through
+the [view of a repository](../../src/common/repository-view.ts), the one its list
+and its workspace show: A12 a repository Velero reports NotReady, which leads to
+the storage location its spec names when that location was read in its namespace,
+and A13 one whose newest maintenance, by its start, failed. Rule A11, the
+adherence of a schedule, reads the
 [signal of a schedule](../../src/common/schedule-signal.ts) computed with what the
 views share of the adherence of the installation for a read and a tick of their
 clock, which is made of the same reads, and gives no item while the backups of the
@@ -539,7 +601,9 @@ adherence is not known, by reason, and leads to their list: such a schedule is
 never an item of A11, and the summary says the count as well, so that a page with
 no item does not read as one where every schedule is on time. The order is fixed:
 what is in flight, the storage, the schedules, what ended; each group from the
-newest, and by name where there is no time. No function computes a value for the
+newest, and by name where there is no time, but the storage, whose items, of the
+storage locations and of the backup repositories, are by name, and of one object
+in the order of the rules. No function computes a value for the
 installation as a whole, and the page has none.
 
 The [window](../../src/common/window.ts) of the recent operations is a
@@ -619,7 +683,8 @@ copy it holds: the panel says until when it holds it. What the panel and the
 viewers say in numbers and in names they write as attributes as well, which the
 suites read beside the words.
 
-A viewer is given the text of its tab and nothing else of the load. The parsers of
+A viewer is given the text of its tab and nothing else of the load, and the viewer
+of the volumes the ways of its rows as well. The parsers of
 the [log](../../src/common/artifact-log.ts), of the
 [results](../../src/common/artifact-results.ts), of the
 [resources](../../src/common/artifact-resources.ts) and of the
@@ -644,6 +709,33 @@ list of lines, or the rows of the resources, take what the panel leaves, between
 a least and a most of their own, so that a list is whole in the room it is read
 in. Nothing is counted on the window: where the target bar leaves the view less
 than the room of a list, the page is scrolled.
+
+A row of the volumes whose method is PodVolumeBackup or PodVolumeRestore carries the
+namespace of its pod, its pod and its volume, as `pvbInfo` and `pvrInfo` write them,
+each a text, and none of the three when one is not. Its details lead to the pod
+volume operation of the installation that matches it
+([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md), REQ-188): one of
+the operations of the owner of the tab, found in the index by the label of its UID,
+that names that namespace, that pod and that volume, the newest when more than one
+names the same, opened over the backup or the restore by a command of the
+extension. When none matches, nothing is offered and nothing is said absent: the rows
+are what the store holds, and the operations may be gone; a family never read, or
+denied, has no operation to offer, even when a read before found one, as the table
+of the states of SPEC-0014 says, while a read that failed, or of a kind no longer
+served, keeps the ways of the read before, as the band keeps its rows, the notice
+over the view saying when the family was read.
+The [ways](../../src/common/volume-band.ts) of the rows,
+from that namespace, that pod and that volume to the view they open, are given by the
+panel to the viewer of the volumes and to no other. The viewers are memoized, and the
+panel is drawn again at every tick of the clock of the views and at every read: the
+ways are the same object for as long as they lead to the same operations, in
+whatever order
+([their memo](../../src/renderer/state/volumes.ts)), made again from the index when a
+read makes a new one and kept when the new ones are the same, so that the viewer is
+drawn again only when a read changes where its rows lead. A memo of the panel keyed by
+the index would give a new object at each read, since each read makes a new index,
+and the viewer would be drawn again at each read, as decided while implementing, on
+2026-10-29.
 
 The tabs rest on facts of the host, which the
 [directives](../../AGENTS.md#host-facts-that-cost-a-run-to-find) record. Its input
@@ -719,6 +811,26 @@ refuses one that is not there, not connected, or whose kubeconfig path or contex
 name changed since writes were turned on, before anything is sent; it reads the
 entry again once the cluster answered, and drops the answer of a cluster that
 changed meanwhile. It validates exact namespace/name plus UID presence on reads.
+Since the first pull request of T4.2 of
+[SPEC-0017](../specs/SPEC-0017-write-actions.md) it reads a Schedule and creates a
+Backup asked from it, from the text the review showed, sent byte for byte, which it
+refuses before anything leaves when the text is not a Backup of the namespace with
+a name the form of the backup takes; a 422 of the API server is a refusal of the
+content, said as validation, for every write, and told from what the adapter
+refuses to send by itself. A creation the cluster answered while its entry changed
+is said apart, since it may have been made. Since the first pull request of T4.5 it
+patches a Schedule, to pause it or to resume it, with the text the review showed,
+sent byte for byte with the method in capitals and the media type of a JSON patch,
+never the strategic merge patch of the host: the text is exactly the patch of a pause,
+a test of the UID and an add of `spec.paused`, or of a resume, the tests of the UID,
+of `spec.paused` and of the expression, a replace of `spec.paused` and an add of
+`spec.skipImmediately`, or nothing leaves. A patch whose answer is lost is not known,
+as a creation is. Since the first pull request of T4.6 it creates the
+DeleteBackupRequest of one backup with the text the review showed, byte for byte, the
+text exactly the one `velero backup delete` makes, its name generated from the prefix of
+the backup, or nothing leaves, and lists the requests of a backup by the labels of its
+name and of its UID; it creates a request with a generated name otherwise only for the
+ServerStatusRequest of the view of the server, and deletes nothing.
 
 A creation that got no answer, from a fetch that failed, the deadline, an answer
 that cannot be read or is too large, or a 5xx, is an unknown submission, never an
@@ -796,7 +908,14 @@ is the answer of the call that ran it; its progress is read by the frame that as
 by the identifier of the request; nothing of a write is broadcast. The main process
 broadcasts only that the gate of a cluster changed for a reason of its own, the entry
 of the catalog, the connection or the frame that turned writes on, and looks at the
-catalog and at that frame every five seconds while writes are on somewhere.
+catalog and at that frame every five seconds while writes are on somewhere. The end
+of a backup, asked from a schedule or with the form, whose request was sent is kept
+for its cluster until a frame of that cluster has shown it, or the extension is
+deactivated: the
+views ask for the ends of their cluster at every read, and the target bar of the
+pages of the extension says each one that no view showed (REQ-250 of
+[SPEC-0017](../specs/SPEC-0017-write-actions.md)); each action adds its kind with its
+slice.
 
 A cluster is resolved from the catalog of the host, by the identifier of its frame,
 and must be an entry of the catalog of the main process, connected; no default
@@ -810,8 +929,30 @@ read before every request of the adapter, and its state is watched by a reaction
 on the catalog of the host. The proxy of Freelens authenticates as the connection
 of the host does, credential plugins included: the extension runs no plugin and
 refuses no kind of authentication, and what the identity may not do is what the
-cluster refuses. A ServerStatusRequest and a DownloadRequest are the two writes the
-gate lets through.
+cluster refuses. The writes the gate lets through are a ServerStatusRequest, a
+DownloadRequest and, since the first pull request of T4.2 of
+[SPEC-0017](../specs/SPEC-0017-write-actions.md), a Backup asked from a schedule,
+and since the first pull request of T4.3 a Backup of the form, whose confirmation
+reads the storage location and each snapshot location its template names; since the
+first pull request of T4.7 of [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) a
+Schedule of the form, its name and namespace its only metadata, whose confirmation
+reads the locations of its template the same way; since the first pull request of
+T4.4 a Restore of a backup, its name and namespace its only metadata, whose
+confirmation and run read the backup by its name, and run only when the name of the
+backup the operator typed is the one of the review; since the first pull request of
+T4.5 the pause and the resume of a Schedule, a JSON patch whose tests are the check of
+what the review read, the schedule read once after it and checked against what the
+patch wrote, after a 422 to say whether it changed since the review, and after an
+answer that was lost to say what it holds of the patch; since the first pull request
+of T4.6 the DeleteBackupRequest of one backup, whose confirmation and run read the
+backup by its name and its UID, and run only when the name the operator typed is the
+one of the review, followed by the reads of the request and of the backup together,
+and after an answer that was lost by the requests of the backup, by its labels; each
+action of SPEC-0017 adds its kind with its slice. The creations share one course in
+the main process,
+[`creation.ts`](../../src/main/creation.ts): the POST of the text kept, the reads
+after it until Velero writes a phase, and, when the answer is not known, the look for
+the object by its name, with the rule and the words of each kind.
 
 The trust model of Freelens v2 (D5 of SPEC-0015), which the binding lives in: the
 boundary of v2 is between the extensions and the application, not between
@@ -996,9 +1137,9 @@ environment reaches the cluster through the proxy of Freelens, with the identity
 the connection of the host and the proxy setting of the cluster. It carries as well
 the token the proxy of Freelens asks of every request, which the credential of its
 kubeconfig, the subcommand `credential` of freelens-k8s-proxy, reads there
-([the kubeconfig](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/kubeconfig-manager/kubeconfig-manager.ts#L177-L191),
-[the token](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/kube-tools/kube-tools.ts#L119-L122),
-[the check](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/freelens-proxy/freelens-proxy.ts#L447-L461)): a
+([the kubeconfig](https://github.com/freelensapp/freelens/blob/b9b53e16056578c5407312eba5823a089972f6d5/packages/core/src/main/kubeconfig-manager/kubeconfig-manager.ts#L177-L191),
+[the token](https://github.com/freelensapp/freelens/blob/b9b53e16056578c5407312eba5823a089972f6d5/packages/core/src/main/kube-tools/kube-tools.ts#L124-L127),
+[the check](https://github.com/freelensapp/freelens/blob/b9b53e16056578c5407312eba5823a089972f6d5/packages/core/src/main/freelens-proxy/freelens-proxy.ts#L455-L473)): a
 kubectl given less than that environment is refused by the proxy. kubectl chooses
 the local port, and the tunnel is ready when kubectl writes `Forwarding from
 127.0.0.1:<port>`, within fifteen seconds counted once kubectl is prepared; the
@@ -1105,7 +1246,10 @@ the route above says: the listener of one connection, the WebSocket of the clien
 and the relay between them went with the client of the extension in T0.7, and the
 rest of the decision stands. The main bundle, an ES module since T0.7, is
 exercised under Node with the stand-ins of the host of SPEC-0015, not inside
-Electron; FND-10 downloads an artifact with it inside the main process of the host.
+Electron; FND-10 downloads an artifact with it inside the main process of the host,
+over HTTP and over HTTPS, and resolves there the direct route to a store at a
+private address, refused without its allowance (REQ-289 and REQ-290 of
+[SPEC-0018](../specs/SPEC-0018-release-readiness.md)).
 Failure/expiry/404 and byte/deadline cases have contract-server
 coverage; not every negative is induced against the live controller/store.
 See [the evidence matrix](TESTING.md#t06-main-transport-proof). No feature gate or

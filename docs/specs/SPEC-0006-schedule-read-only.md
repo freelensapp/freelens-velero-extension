@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M2 / T1.5
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-28, as drafted
 
@@ -324,3 +324,80 @@ pre-review in the views run. Green on v2: SCHED-01 to SCHED-12 and SCHED-14 at t
 unit and component layers; SCHED-01 to SCHED-11 and SCHED-14 in the packaged
 application, SCHED-14 with the second reader, and SCHED-13 in the pre-review. The
 deviation recorded above holds on v2 as it is; v2 brings no other.
+
+## Amendments
+
+### 2026-11-08: The Commands Of A Schedule (T4.2 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says,
+approved with it, the second pull request of T4.2 restates two requirements and
+their checks, and the rest of this spec is read with them:
+
+| Requirement and check | Restated |
+| --- | --- |
+| REQ-065, SCHED-02 | The workspace of a schedule, which reads and offers the commands of REQ-074 as restated here, opened from a row; the details of the host read through the same helpers |
+| REQ-074, SCHED-11 | No surface offers to edit, delete or select a schedule; the workspace of a schedule offers Back up now (T4.2), Pause or Resume (T4.5) and Restore (T4.4), each opening the workspace of its action of SPEC-0017 and writing nothing by itself; the list offers Create schedule of SPEC-0016 and nothing else that writes |
+
+With T4.2 the workspace of a schedule has Back up now, under its name, and no other
+command yet: the command opens the workspace of the backup asked from the schedule
+over the view, named in the address, and writes nothing by itself. SCHED-11 is
+proven at the component layer by the view of a schedule whose controls are the way
+back, Back up now, the ways to the other views and the marks of the line, and by the
+workspace of the action, with writes off and on, in
+[`backup-now-workspace.test.tsx`](../../src/renderer/pages/backup-now-workspace.test.tsx);
+the packaged suites of the action came with the fourth pull request of T4.2: the
+suite of the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.
+
+### 2026-11-08: Create Schedule In The List (T4.7 Of SPEC-0016)
+
+With T4.7 the list offers Create schedule, the one command of its header, after the
+count of the host, as the restatement of REQ-074 and SCHED-11 above says and as
+[SPEC-0016](SPEC-0016-create-a-schedule.md#the-amendment-of-spec-0006) completes it:
+the command opens the workspace of the schedule of the form over the list, named in
+the address, and writes nothing by itself. It is proven at the component layer, with
+writes off and on, in
+[`schedule-create-workspace.test.tsx`](../../src/renderer/pages/schedule-create-workspace.test.tsx);
+the packaged suites of the action came with the third pull request of T4.7: the
+suite of the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.
+
+### 2026-11-08: Restore In The Workspace Of A Schedule (T4.4 Of SPEC-0017)
+
+With T4.4 the workspace of a schedule has Restore beside Back up now, as the
+restatement of REQ-074 and SCHED-11 above says, and its commands are on the line of
+its name, as the ones of a backup are: the command opens the workspace of the restore
+over the view, named in the address, with the backups of the schedule Completed or
+PartiallyFailed and the newest Completed by its start chosen first, and writes nothing
+by itself; for a schedule with none among the backups the installation read, it is
+disabled, with the words that the schedule has no backup to restore. SCHED-11 is
+proven at the component layer by the view of a schedule whose controls are the way
+back, Back up now and Restore, the ways to the other views and the marks of the line,
+in [`schedules-page.test.tsx`](../../src/renderer/pages/schedules-page.test.tsx), and
+by the workspace of the restore, with writes off and on, in
+[`restore-create-workspace.test.tsx`](../../src/renderer/pages/restore-create-workspace.test.tsx);
+the packaged suites of the action came with the third pull request of T4.4: the suite of
+the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.
+
+### 2026-11-08: Pause And Resume In The Workspace Of A Schedule (T4.5 Of SPEC-0017)
+
+With T4.5 the workspace of a schedule has Pause for a schedule that is not paused, and
+Resume for one that is, never both, between Back up now and Restore on the line of its
+name, as the restatement of REQ-074 and SCHED-11 above says: the command opens the
+workspace of its action over the view, named in the address as
+`schedule-pause/<schedule>` or `schedule-resume/<schedule>`, and writes nothing by
+itself. SCHED-11 is proven at the component layer by the view of a schedule whose
+controls are the way back, Back up now, Pause or Resume and Restore, the ways to the
+other views and the marks of the line, in
+[`schedules-page.test.tsx`](../../src/renderer/pages/schedules-page.test.tsx), and by
+the workspace of the action, with writes off and on, in
+[`schedule-patch-workspace.test.tsx`](../../src/renderer/pages/schedule-patch-workspace.test.tsx);
+the packaged suites of the action came with the third pull request of T4.5: the suite of
+the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.

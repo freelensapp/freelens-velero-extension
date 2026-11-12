@@ -3,9 +3,12 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, st
 import { request } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { DEMO_CLUSTER, DOCKER_HOST, localEnvironment, requireCondition } from "./local-kind.mts";
-import { DIRECT_PROOF_IMAGE, IMAGES, KIND_HOSTS, storageManifests } from "./local-manifests.mts";
+import { DIRECT_PROOF_IMAGE, IMAGES, INSTALLER_FLAGS, KIND_HOSTS, storageManifests } from "./local-manifests.mts";
 import {
+  ASKED_AGAIN_AFTER,
+  askAgain,
   assertIndexPlatforms,
   type DockerInfo,
   dockerSocket,
@@ -53,6 +56,17 @@ function docker(args: string[]): string {
     timeout: 1_200_000,
     maxBuffer: 8 * 1024 ** 2,
   });
+}
+
+// A command that asks the registry, asked again after a wait when it fails: a blob of the registry that did not
+// come is the failure a wait changes. The identity of what came is checked after, never asked again.
+function dockerAgain(args: string[]): Promise<string> {
+  return askAgain(
+    async () => docker(args),
+    () => false,
+    ASKED_AGAIN_AFTER,
+    (milliseconds) => delay(milliseconds),
+  );
 }
 
 // What the engine knows of an image, asked on its socket: the registry is not called.
@@ -111,13 +125,13 @@ async function pull(): Promise<void> {
     if (!verified.includes(pinned)) {
       const held = here ? engineIndex(pinned, await engineImage(image)) : undefined;
 
-      assertIndexPlatforms(name, held ?? (JSON.parse(docker(["manifest", "inspect", image])) as ImageIndex));
+      assertIndexPlatforms(name, held ?? (JSON.parse(await dockerAgain(["manifest", "inspect", image])) as ImageIndex));
       verified.push(pinned);
       mkdirSync(STATE, { recursive: true, mode: 0o700 });
       writeFileSync(PINS, JSON.stringify(verified), { mode: 0o600 });
     }
     if (!here) {
-      docker(["pull", "--platform", platform, image]);
+      await dockerAgain(["pull", "--platform", platform, image]);
       requireCondition(present(image, platform), `Image identity mismatch: ${name}`);
     }
     console.log(`PASS: ${name} image matches its pinned digest on ${platform}.`);
@@ -155,18 +169,7 @@ function probe(): void {
     requireCondition(output.includes(argument.split("=")[0]), `Unsupported storage flag: ${argument.split("=")[0]}`);
   const velero = docker([...sandbox, "--entrypoint=/velero", IMAGES.velero, "install", "--help"]);
 
-  for (const flag of [
-    "--dry-run",
-    "--output",
-    "--namespace",
-    "--use-node-agent",
-    "--image",
-    "--plugins",
-    "--use-volume-snapshots",
-    "--backup-location-config",
-    "--secret-file",
-  ])
-    requireCondition(velero.includes(flag), `Missing installer flag: ${flag}`);
+  for (const flag of INSTALLER_FLAGS) requireCondition(velero.includes(flag), `Missing installer flag: ${flag}`);
   const hosts = join(privateDirectory, "hosts");
 
   writeFileSync(hosts, KIND_HOSTS, { mode: 0o644 });

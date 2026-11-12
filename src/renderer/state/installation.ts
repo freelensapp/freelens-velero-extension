@@ -18,6 +18,12 @@ import { emptyRead, failed, failedStatus, loading, succeeded } from "../../commo
 import { keepOffset } from "../../common/schedule-signal";
 import { readWindow } from "../../common/window";
 import { ArtifactLoads } from "./artifact-loads";
+import { BackupCreate } from "./backup-create";
+import { BackupDelete } from "./backup-delete";
+import { BackupNow } from "./backup-now";
+import { RestoreCreate } from "./restore-create";
+import { ScheduleCreate } from "./schedule-create";
+import { PauseResume } from "./schedule-patch";
 import { ServerStatus } from "./server-status";
 
 import type { Allowance, AllowanceFor } from "../../common/allowances";
@@ -33,13 +39,15 @@ import type {
   Selection,
   Suggestions,
 } from "../../common/discovery";
-import type { GateState } from "../../common/ipc";
+import type { GateState, KeptEnd } from "../../common/ipc";
 import type { FamilyRead } from "../../common/read-state";
 import type { ApiServerTime, ServerOffset } from "../../common/schedule-signal";
 import type {
   BackupRepositoryResource,
   BackupResource,
   BackupStorageLocationResource,
+  DataDownloadResource,
+  DataUploadResource,
   PodVolumeBackupResource,
   PodVolumeRestoreResource,
   RestoreResource,
@@ -48,7 +56,19 @@ import type {
   VolumeSnapshotLocationResource,
 } from "../../common/types";
 import type { Window } from "../../common/window";
-import type { AllowanceClient, ArtifactClient, GateClient, WriteClient } from "../api/ipc";
+import type {
+  AllowanceClient,
+  ArtifactClient,
+  BackupCreateClient,
+  BackupDeleteClient,
+  BackupNowClient,
+  GateClient,
+  KeptEndsClient,
+  RestoreCreateClient,
+  ScheduleCreateClient,
+  SchedulePatchClient,
+  WriteClient,
+} from "../api/ipc";
 
 // What asks the cluster: one verb, and the status of the answer beside its body.
 export type Reader = (path: string, signal?: AbortSignal) => Promise<Answer>;
@@ -66,6 +86,8 @@ export interface FamilyItems {
   backupRepositories: BackupRepositoryResource;
   podVolumeBackups: PodVolumeBackupResource;
   podVolumeRestores: PodVolumeRestoreResource;
+  dataUploads: DataUploadResource;
+  dataDownloads: DataDownloadResource;
 }
 
 export interface ClusterIdentity {
@@ -84,6 +106,15 @@ export interface InstallationDependencies {
   // The writes of the main process, through the same way as the gate, and what it gives of the text of
   // an artifact it downloaded.
   writer?: WriteClient & ArtifactClient;
+  // The writes of the actions of Velero, through the same way.
+  actions?: BackupNowClient &
+    BackupCreateClient &
+    ScheduleCreateClient &
+    RestoreCreateClient &
+    SchedulePatchClient &
+    BackupDeleteClient;
+  // The ends of the writes the main process keeps for the cluster, through the same way.
+  keptEnds?: KeptEndsClient;
   // What keeps, in the main process, what the operator allowed the downloads to do.
   allowances?: AllowanceClient;
   // The identifier of a new request of a write. A random UUID when none is given.
@@ -137,6 +168,20 @@ export class Installation {
   // What Velero wrote into its storage of the backup or the restore whose view is open, when the operator
   // asked for it: the loads of its tabs.
   readonly artifacts: ArtifactLoads;
+  // A backup asked from a schedule by hand, from the workspace of the schedule.
+  readonly backupNow: BackupNow;
+  // A backup of the form, from the list of the Backups.
+  readonly backupCreate: BackupCreate;
+  // A schedule of the form, from the list of the Schedules.
+  readonly scheduleCreate: ScheduleCreate;
+  readonly restoreCreate: RestoreCreate;
+  // A pause or a resume of a schedule, from the workspace of the schedule.
+  readonly pauseResume: PauseResume;
+  // The deletion of a backup, from the workspace of the backup.
+  readonly backupDelete: BackupDelete;
+  // The ends of the writes of this cluster whose request was sent and that no view showed, as the main process keeps
+  // them (SPEC-0017, REQ-250): the target bar says them wherever the operator is in the cluster.
+  ends: KeptEnd[] = [];
   // Whether a view of the extension is open, so that the families are asked again every so often: what is
   // drawn where no view is, as the details of the host, says how old what it computed with is once none is.
   watched = false;
@@ -146,6 +191,8 @@ export class Installation {
   // What each holder needs of the families read on demand, with the call that recorded it: a release lets go of
   // what its own call recorded, and of nothing a later call of the same holder recorded.
   private readonly holders = new Map<object, { families: Family[]; call: symbol }>();
+  // The ends a view of this frame showed: the main process was told, and they are not said again.
+  private readonly shownEnds = new Set<string>();
 
   constructor(dependencies: InstallationDependencies) {
     this.dependencies = dependencies;
@@ -175,6 +222,66 @@ export class Installation {
       requestId,
       refused: () => void this.openGate(),
     });
+    this.backupNow = new BackupNow({
+      client: dependencies.actions,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId,
+      refused: () => void this.openGate(),
+      shown: (request) => this.told(request),
+    });
+    this.backupCreate = new BackupCreate({
+      client: dependencies.actions,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId,
+      refused: () => void this.openGate(),
+      shown: (request) => this.told(request),
+    });
+    this.scheduleCreate = new ScheduleCreate({
+      client: dependencies.actions,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId,
+      refused: () => void this.openGate(),
+      shown: (request) => this.told(request),
+    });
+    this.restoreCreate = new RestoreCreate({
+      client: dependencies.actions,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId,
+      refused: () => void this.openGate(),
+      shown: (request) => this.told(request),
+    });
+    this.pauseResume = new PauseResume({
+      client: dependencies.actions,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId,
+      refused: () => void this.openGate(),
+      shown: (request) => this.told(request),
+    });
+    this.backupDelete = new BackupDelete({
+      client: dependencies.actions,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId,
+      refused: () => void this.openGate(),
+      shown: (request) => this.told(request),
+    });
     makeObservable(this, {
       api: observableRef,
       found: observableRef,
@@ -189,6 +296,8 @@ export class Installation {
       gate: observableRef,
       gateFailure: observable,
       allowanceFailure: observable,
+      ends: observableRef,
+      showEnd: action,
       choices: computed,
       selection: computed,
       entry: computed,
@@ -283,6 +392,12 @@ export class Installation {
       if (!this.writes.on) {
         this.server.leave();
         this.artifacts.leave();
+        this.backupNow.leave();
+        this.backupCreate.leave();
+        this.scheduleCreate.leave();
+        this.restoreCreate.leave();
+        this.pauseResume.leave();
+        this.backupDelete.leave();
       }
     });
   }
@@ -347,13 +462,14 @@ export class Installation {
         if (this.api.state === "unknown") this.api = { state: "asking" };
         if (this.found.state === "unknown") this.found = { state: "asking" };
       });
-      const [discovery, locations] = await Promise.all([
+      const [discovery, dataMovement, locations] = await Promise.all([
         this.dependencies.read(PATHS.discovery),
+        this.dependencies.read(PATHS.dataMovementDiscovery),
         this.dependencies.read(PATHS.locations),
       ]);
 
       runInAction(() => {
-        this.api = apiAvailability(discovery);
+        this.api = apiAvailability(discovery, dataMovement);
         this.found = suggestions(locations);
         this.target();
       });
@@ -529,6 +645,12 @@ export class Installation {
     });
     this.server.drop();
     this.artifacts.drop();
+    this.backupNow.drop();
+    this.backupCreate.drop();
+    this.scheduleCreate.drop();
+    this.restoreCreate.drop();
+    this.pauseResume.drop();
+    this.backupDelete.drop();
   }
 
   // What is kept is changed from what the store holds now, and not from what this installation read of
@@ -562,14 +684,49 @@ export class Installation {
     this.serverTime = undefined;
     this.server.drop();
     this.artifacts.drop();
+    this.backupNow.drop();
+    this.backupCreate.drop();
+    this.scheduleCreate.drop();
+    this.restoreCreate.drop();
+    this.pauseResume.drop();
+    this.backupDelete.drop();
     this.dropWrites(left);
   }
 
+  // The ends the main process keeps for the cluster, asked at every read: a read that fails keeps what was known.
+  async readEnds(): Promise<void> {
+    const client = this.dependencies.keptEnds;
+
+    if (!client) return;
+    const answer = await client.ends(this.cluster.id);
+
+    if (!answer.ok) return;
+    runInAction(() => {
+      this.ends = answer.value.filter((end) => !this.shownEnds.has(end.request));
+    });
+  }
+
+  // The operator let an end go in the target bar: it is said no more, here or above a form.
+  showEnd(request: string): void {
+    this.backupNow.letGoOf(request);
+    this.told(request);
+  }
+
+  // A view showed an end: the main process keeps it no more, and the target bar does not say it.
+  private told(request: string): void {
+    runInAction(() => {
+      this.shownEnds.add(request);
+      this.ends = this.ends.filter((end) => end.request !== request);
+    });
+    void this.dependencies.keptEnds?.shown(this.cluster.id, request);
+  }
+
   // A read of the installation: the families read at every read, and the ones a holder needs. What was read of a
-  // family no holder needs any more goes, and it is not asked.
+  // family no holder needs any more goes, and it is not asked. The ends kept for the cluster are asked with them.
   private async readFamilies(): Promise<void> {
     const held = this.held();
 
+    void this.readEnds();
     runInAction(() => {
       this.kept();
       this.target();

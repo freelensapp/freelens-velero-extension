@@ -15,7 +15,7 @@ contacted, no environment data were collected, and no upstream code was executed
 | Velero release | `v1.18.4`, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; the types were written from `v1.18.2`, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8` | [Release](https://github.com/velero-io/velero/releases/tag/v1.18.4), [source](https://github.com/velero-io/velero/tree/4ee1e79a7aed367fd9b767b8219ec65bd0c96892) |
 | Velero main comparison | `60163e0827e72658bb6546165a727300170e628b` | [Immutable comparison source](https://github.com/velero-io/velero/tree/60163e0827e72658bb6546165a727300170e628b) |
 | AWS object-store plugin | `v1.14.4`, `7373ae03525ce743a4f95f13a8fa9f56c7b8f551`, since the drift watch of 2026-10-13; reviewed first as `v1.14.2`, `5463822fd77bc1c2a1151ee76c830ad979ff2781` | [Release](https://github.com/velero-io/velero-plugin-for-aws/releases/tag/v1.14.4), [compatibility](https://github.com/velero-io/velero-plugin-for-aws/blob/5463822fd77bc1c2a1151ee76c830ad979ff2781/README.md) |
-| Freelens host | Freelens v2, `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, with `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-25: the validation target of [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) since 2026-10-16, moved by the [host drift watch](PROCESS.md#host-drift-watch) until Freelens 2.0.0 is released; reviewed first as `v1.10.3`, `3da74415bff57a77c6e08cb5f538191ce87bac17`, by local Git tag inspection | [Source of the target](https://github.com/freelensapp/freelens/tree/7801fb10a5f20af308093b39e5f79cd6e8c3461d), [source of the first review](https://github.com/freelensapp/freelens/tree/3da74415bff57a77c6e08cb5f538191ce87bac17) |
+| Freelens host | Freelens v2, `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, with `@freelensapp/extensions` 2.0.0: the validation target of [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) since 2026-10-16, moved by the [host drift watch](PROCESS.md#host-drift-watch) to this release; reviewed first as `v1.10.3`, `3da74415bff57a77c6e08cb5f538191ce87bac17`, by local Git tag inspection | [Source of the target](https://github.com/freelensapp/freelens/tree/b9b53e16056578c5407312eba5823a089972f6d5), [source of the first review](https://github.com/freelensapp/freelens/tree/3da74415bff57a77c6e08cb5f538191ce87bac17) |
 
 The release endpoints reported Velero v1.18.2 and the AWS plugin v1.14.2 as the
 latest stable releases at inspection time; both were published on 2026-06-26. On
@@ -592,6 +592,94 @@ is in the last column.
 | The controller looks at a schedule when it is created and once a minute, and writes the setting of its server into a schedule that names no `skipImmediately`, false unless the server is told otherwise | [The period](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L44), [the default](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L113-L115) | On 2026-10-26, `fixture-yearly-<run>`, applied with no `skipImmediately`: its managed fields give `spec.skipImmediately` and `status.phase` to the manager `velero-server`, written in the second of its creation, `false` and Enabled, and three placements within the hour read both unchanged, at one version |
 | An expression it parses gives the phase Enabled with no validation error; the phase, `skipImmediately` and `lastSkipped` are patched when one of them changed, which the release decides by comparing pointers | [The parse](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L121-L132), [the patch](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L134-L154) | A PATCH at every look, with nothing changed: on 2026-10-26, over three minutes with nothing else reading or writing, the counters of the API server gave `PATCH schedules` of the scope `resource`, code 200, 19 to 22, one a minute, while the `resourceVersion` of the schedule (4314) and its status (`{"phase":"Enabled"}`) did not change; `POST backups` 1348 to 1348, `POST schedules` 338 to 338 |
 | The next run of `@every 8760h` is counted from the creation of the schedule, which has no last submission: nothing is submitted for a year | [The anchor](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L275-L289), [due](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L241-L251) | On 2026-10-26, within the hour of its creation and again before the cleanup after the suites: no `lastBackup` and no `lastSkipped` on the schedule, and no backup in `velero-demo` with its label `velero.io/schedule-name` |
+
+### With The Volume Of The Environment, 2026-11-02
+
+What the node agent and the server wrote into the real pod volume backup, pod
+volume restore and repository of the volume of a run, as seen in the environment
+created again with the fourth pull request of T5.1, on 2026-11-02, on a second
+Linux machine (Ubuntu 26.04 under WSL 2), with the pod of the run on the node of the
+cluster `freelens-velero-dev-control-plane`:
+
+| Fact | Seen |
+| --- | --- |
+| The pod volume backup: phase, bytes, snapshot ID, node, labels, `metadata.finalizers` | Completed, accepted, started and completed within four seconds; `progress` 1,048,641 bytes done of 1,048,641 and `incrementalBytes` the same, the megabyte and the file of its checksum; a snapshot ID of 32 hexadecimal digits; `spec.node` the node of the cluster, and no node in its status; `status.path` a slash and the UID of the pod volume backup, as the synthetic ones of the views and of the long lists now report it, each with a UID of its own; the labels `velero.io/backup-name` and `velero.io/backup-uid` of its backup and no other; one owner reference, its backup, with `controller: true`; no `metadata.finalizers` |
+| The repository `velero-source-<run>-default-kopia`: phase, `maintenanceFrequency`, `lastMaintenanceTime`, labels | Ready; `maintenanceFrequency` `168h0m0s`; `lastMaintenanceTime` the second it was made ready, before the pod volume backup started, and no `recentMaintenance`; the three labels `velero.io/volume-namespace`, `velero.io/storage-location` and `velero.io/repository-type`, and no owner reference |
+| The pod volume restore: phase, `status.node`, the snapshot size, its owner | Completed within three seconds; `status.node` the node of the cluster; `spec.snapshotSize` 1,048,641 and `progress` the same; the labels `velero.io/restore-name`, `velero.io/restore-uid` and `velero.io/pod-uid`; one owner reference, its restore, with `controller: true`; no `metadata.finalizers` |
+| The init container of the restored pod and its image | `restore-wait`, of the image of the server, `velero/velero:v1.18.4`; it waits for the file the node agent writes when the restore of the volume is done, `.velero/<UID of the restore>` in the volume, and says in its log that it could not remove it (`permission denied`), which leaves the file in the volume and the restore Completed |
+| The checksum of the restored bytes against the one written | The same: the log of the restored pod prints the checksum written by the source pod, the checksum of what its volume holds, equal, and 1,048,576 bytes |
+| What the server sends to the repository at its pass, and what the controllers list of the operations, over fifteen minutes | From 18:26:23 to 18:41:23 UTC, with no view open and nothing else reading or writing, the counters of the API server for the group `velero.io` grew by 30 `PATCH backupstoragelocations` of the scope `resource`, the validation of the location, and by watches alone otherwise: none of the repositories but their watches, and no `LIST` of the pod volume backups or restores, in a namespace or in the cluster. `REPOSITORY_WRITTEN_AT_EACH_PASS` stays undefined and `OPERATIONS_LISTED_BY_A_CONTROLLER` false |
+| The volume information of the backup and of the restore of the volume | Read on 2026-11-04 from the filer of the store in its own pod, at `127.0.0.1`, with no credentials and nothing written: the `<backup>-volumeinfo.json.gz` of the backup holds one entry, `backupMethod` `PodVolumeBackup`, `snapshotDataMoved`, `preserveLocalSnapshot` and `skipped` false, `result` `succeeded`, started and completed within two seconds, and a `pvbInfo` with the snapshot ID of the pod volume backup as its `snapshotHandle`, `size` and `incrementalSize` 1,048,641, `uploaderType` `kopia`, `volumeName` `data`, the pod, its namespace, the node and `Phase` `Completed`, and no claim or volume, which an `emptyDir` does not have; the `<restore>-volumeinfo.json.gz` of the restore is an empty list, since the release leaves out of it the pod volume restore of a volume bound to no claim (`internal/volume/volumes_information.go:771-800`) |
+| The layout of the kopia keys under the prefix of the location | The location has no prefix. At the root of the bucket, on 2026-11-04, the folders `backups`, `restores`, `kopia` and `.uploads`, where the store keeps its multipart uploads, and no key. Under `kopia/<volume namespace>/`, twelve keys and 1,069,433 bytes: `kopia.repository` (1,135 bytes), `kopia.blobcfg` (30) and `udmrepo.Repository` (59); two log blobs, whose keys start with `_log_`; one data pack, with `p`, of 1,052,908 bytes, the megabyte of the volume; three metadata packs, with `q`, and three index blobs, with `xn0_` |
+
+### Before The First Release, 2026-11-09
+
+The watch the [process](PROCESS.md#upstream-drift-watch) asks before every release
+of the extension, read for the first publication, which was then the prerelease
+1.0.0-0 of REQ-310 of [SPEC-0018](../specs/SPEC-0018-release-readiness.md); the
+lead maintainer decided the same day that 1.0.0 is the first publication, before
+which the watch is read again (REQ-313). Read from the releases of each repository
+on GitHub and the commit of each tag. Public upstream sources only; nothing was
+run.
+
+| Component | Latest release | Newer, a release candidate | Compared with |
+| --- | --- | --- | --- |
+| Velero | `v1.18.4`, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, released 2026-09-28 | `v1.19.0-rc.1`, `9338d275bbeac8226023e6fc269b9608ec160928`, published 2026-11-06 | `v1.18.4`, the reviewed one |
+| AWS object-store plugin | `v1.14.4`, `7373ae03525ce743a4f95f13a8fa9f56c7b8f551`, released 2026-09-28 | `v1.15.0-rc.1`, `bbb9bcdf6709aec46c78bb8d56b948a218690bae`, published 2026-11-07 | `v1.14.4`, the reviewed one |
+| Freelens | `v2.0.0`, `b9b53e16056578c5407312eba5823a089972f6d5`, released 2026-10-28 | None | `v2.0.0`, the validation target of [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) |
+
+The latest stable releases of Velero and of its AWS plugin are the reviewed pair:
+there is nothing to compare, and the pair stays `v1.18.4` and `v1.14.4`, as D17 of
+SPEC-0018 decided for a Velero 1.19 released during the sixth milestone. The two
+release candidates are not a baseline. The notes of `v1.19.0-rc.1` announce a
+block data mover, the restore of the data of a volume in place, fine-grained
+filters and the selection of namespaces by label through ResourcePolicy
+ConfigMaps, global volume policies, a custom action of a volume policy and a
+default restore resource modifier; of its breaking changes, the ones that touch
+the kinds the extension reads are the removal of the Restic path, after which a
+restore of a backup made with it is FailedValidation, the sync leaves such a
+backup out of the cluster and the deletion of one already there fails; the
+`spec.config.credentialsFile` of a BackupStorageLocation and of a
+VolumeSnapshotLocation ignored; a default prepare queue of five for the data
+movers; and another hashing algorithm for new Kopia repositories. The watch
+before 1.0.0 reads them again if 1.19.0 is released by then; the README says in
+its Compatibility that Velero 1.19 is untested (REQ-299).
+
+The host drift watch, as [the process](PROCESS.md#host-drift-watch) reads it since
+Freelens 2.0.0: no release of Freelens after `v2.0.0`, and the registry of npm
+names `@freelensapp/extensions` 2.0.0 under `latest`, beside two older versions
+under `nightly` and `next`. The pull request of Renovate of the group `Freelens
+dependencies` open on this date brings Electron 44.10.1 and Biome 2.6.4 of the
+main branch of the host, which no release has, beside Node 24.22.1, which `v2.0.0`
+already names; it waits for the release that brings the first two. The validation
+target stays the commit of the tag `v2.0.0`, as SPEC-0015 says.
+
+### Before 1.0.0, 2026-11-10
+
+The watch read again before 1.0.0, the first publication, as REQ-313 of
+[SPEC-0018](../specs/SPEC-0018-release-readiness.md) asks. Read from the releases of
+each repository on GitHub and the commit of each tag. Public upstream sources only;
+nothing was run.
+
+| Component | Latest release | Newer, a release candidate | Compared with |
+| --- | --- | --- | --- |
+| Velero | `v1.18.4`, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, released 2026-09-28 | `v1.19.0-rc.1`, `9338d275bbeac8226023e6fc269b9608ec160928`, published 2026-11-06 | `v1.18.4`, the reviewed one |
+| AWS object-store plugin | `v1.14.4`, `7373ae03525ce743a4f95f13a8fa9f56c7b8f551`, released 2026-09-28 | `v1.15.0-rc.1`, `bbb9bcdf6709aec46c78bb8d56b948a218690bae`, published 2026-11-07 | `v1.14.4`, the reviewed one |
+| Freelens | `v2.0.0`, `b9b53e16056578c5407312eba5823a089972f6d5`, released 2026-10-28 | None | `v2.0.0`, the validation target of [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) |
+
+Nothing moved since [the watch before the first release](#before-the-first-release-2026-11-09):
+the same latest stable releases and the same two release candidates, and no
+release of Velero 1.19.0. The reviewed pair stays `v1.18.4` and `v1.14.4`, as D17
+of SPEC-0018 decided, and what the notes of `v1.19.0-rc.1` announce is as that
+entry reads it; the README still says in its Compatibility that Velero 1.19 is
+untested (REQ-299).
+
+The host drift watch: no release of Freelens after `v2.0.0`; the registry of npm
+names `@freelensapp/extensions` 2.0.0 under `latest`, with the same two older
+versions under `nightly` and `next`; and the pull request of Renovate of the group
+`Freelens dependencies` brings the same Electron 44.10.1, Biome 2.6.4 and Node
+24.22.1 as on 2026-11-09. The validation target stays the commit of the tag
+`v2.0.0`.
 
 ## Verification And Remaining Work
 

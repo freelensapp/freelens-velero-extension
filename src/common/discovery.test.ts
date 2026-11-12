@@ -11,22 +11,40 @@ import {
   ON_DEMAND,
   RESOURCES,
   readPreferences,
+  SECOND_VERSION,
   selection,
   suggestions,
   TITLES,
   validNamespace,
+  versionOf,
 } from "./discovery";
 
-import type { ApiAvailability, Suggestions } from "./discovery";
+import type { ApiAvailability, Family, Suggestions } from "./discovery";
+
+// The families of the first version of the group, and their kinds.
+const FIRST = FAMILIES.filter((family) => versionOf(family) === "v1");
 
 const served = {
   status: 200,
   body: {
     kind: "APIResourceList",
     resources: [
-      ...Object.values(RESOURCES).map((name) => ({ name, namespaced: true })),
+      ...FIRST.map((family) => ({ name: RESOURCES[family], namespaced: true })),
       { name: "downloadrequests" },
       { name: "backups/status" },
+    ],
+  },
+};
+
+// The discovery of the second version, as the reviewed release serves it.
+const second = {
+  status: 200,
+  body: {
+    kind: "APIResourceList",
+    groupVersion: "velero.io/v2alpha1",
+    resources: [
+      { name: "datadownloads", namespaced: true },
+      { name: "datauploads", namespaced: true },
     ],
   },
 };
@@ -39,7 +57,7 @@ function locations(...namespaces: string[]) {
 }
 
 describe("the families of an installation", () => {
-  it("are one union of eight: six read at every read, and the two of the pod volume operations on demand", () => {
+  it("are one union of ten: six read at every read, and the four of the operations of the volumes on demand", () => {
     expect(FAMILIES).toEqual([
       "backups",
       "restores",
@@ -49,28 +67,40 @@ describe("the families of an installation", () => {
       "backupRepositories",
       "podVolumeBackups",
       "podVolumeRestores",
+      "dataUploads",
+      "dataDownloads",
     ]);
     expect([...ALWAYS, ...ON_DEMAND].sort()).toEqual([...FAMILIES].sort());
     expect(ALWAYS.filter((family) => (ON_DEMAND as readonly string[]).includes(family))).toEqual([]);
-    expect(ON_DEMAND).toEqual(["podVolumeBackups", "podVolumeRestores"]);
-    expect([RESOURCES.backupRepositories, RESOURCES.podVolumeBackups, RESOURCES.podVolumeRestores]).toEqual([
-      "backuprepositories",
-      "podvolumebackups",
-      "podvolumerestores",
-    ]);
-    expect([TITLES.backupRepositories, TITLES.podVolumeBackups, TITLES.podVolumeRestores]).toEqual([
-      "Backup Repositories",
-      "Pod Volume Backups",
-      "Pod Volume Restores",
-    ]);
+    expect(ON_DEMAND).toEqual(["podVolumeBackups", "podVolumeRestores", "dataUploads", "dataDownloads"]);
+    expect(
+      [RESOURCES.backupRepositories, RESOURCES.podVolumeBackups, RESOURCES.podVolumeRestores].concat(
+        RESOURCES.dataUploads,
+        RESOURCES.dataDownloads,
+      ),
+    ).toEqual(["backuprepositories", "podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"]);
+    expect([
+      TITLES.backupRepositories,
+      TITLES.podVolumeBackups,
+      TITLES.podVolumeRestores,
+      TITLES.dataUploads,
+      TITLES.dataDownloads,
+    ]).toEqual(["Backup Repositories", "Pod Volume Backups", "Pod Volume Restores", "Data Uploads", "Data Downloads"]);
+  });
+
+  it("are each served under one version: the data movement under the second, every other kind under the first", () => {
+    expect(SECOND_VERSION).toEqual(["dataUploads", "dataDownloads"]);
+    expect(FAMILIES.map((family) => [family, versionOf(family)])).toEqual(
+      FAMILIES.map((family) => [family, family === "dataUploads" || family === "dataDownloads" ? "v2alpha1" : "v1"]),
+    );
   });
 });
 
 describe("availability of the API", () => {
   it("names the kinds the API serves, and the families that are not among them", () => {
-    expect(apiAvailability(served)).toEqual({
+    expect(apiAvailability(served, second)).toEqual({
       state: "served",
-      resources: [...Object.values(RESOURCES), "downloadrequests"],
+      resources: [...FIRST.map((family) => RESOURCES[family]), "downloadrequests"],
       missing: [],
     });
     expect(apiAvailability({ status: 200, body: { resources: [{ name: "backups" }, { name: "schedules" }] } })).toEqual(
@@ -90,8 +120,40 @@ describe("availability of the API", () => {
     expect(apiAvailability({ status: 200, body: { resources: [] } })).toEqual({
       state: "served",
       resources: [],
-      missing: [...FAMILIES],
+      missing: FIRST,
     });
+  });
+
+  it("takes from the second version only whether the kinds of the data movement are served (SPEC-0014, REQ-177)", () => {
+    const missing = (answer?: { status?: number; body?: unknown }) => {
+      const api = apiAvailability(served, answer);
+
+      return api.state === "served" ? api.missing : api.state;
+    };
+
+    // Served: nothing is missing, and the kinds of the second version are not among the ones of the first.
+    expect(missing(second)).toEqual([]);
+    // One kind of the two served: the other is not served, and nothing else is.
+    expect(missing({ status: 200, body: { resources: [{ name: "datauploads" }] } })).toEqual(["dataDownloads"]);
+    // The version not served: both kinds are not served, and the families of the first version are untouched.
+    expect(missing({ status: 404, body: "404 page not found\n" })).toEqual(["dataUploads", "dataDownloads"]);
+    // Denied, failed, not a list, or not asked: nothing is known of the version, and its families are read, each read
+    // saying what it is.
+    for (const answer of [{ status: 403 }, { status: 500 }, { status: 200, body: "not a list" }, {}, undefined]) {
+      expect(missing(answer), JSON.stringify(answer)).toEqual([]);
+    }
+    // The second version never says anything of the first: Velero is not installed, or is denied, whatever it answers.
+    expect(apiAvailability({ status: 404 }, second)).toEqual({ state: "not-installed" });
+    expect(apiAvailability({ status: 403 }, { status: 404 })).toEqual({ state: "restricted" });
+    // A family of the second version not served is said not served, and its read is not taken for anything else.
+    const api = apiAvailability(served, { status: 404 });
+
+    for (const family of FAMILIES) {
+      expect([family, familyStatus(api, family, "ready")]).toEqual([
+        family,
+        (SECOND_VERSION as readonly Family[]).includes(family) ? "not-served" : "ready",
+      ]);
+    }
   });
 
   it("calls Velero not installed only when the API says that it does not know the group", () => {

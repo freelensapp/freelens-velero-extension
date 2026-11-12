@@ -9,7 +9,13 @@ import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS, s
 import { type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 
 import type { AllowanceFor, Allowances } from "../../src/common/allowances.ts";
-import type { Answer, ArtifactPage, ArtifactValue, WriteConfirmAnswer } from "../../src/common/ipc.ts";
+import type {
+  Answer,
+  ArtifactPage,
+  ArtifactValue,
+  ServerStatusValue,
+  WriteConfirmAnswer,
+} from "../../src/common/ipc.ts";
 import type { CatalogEntry } from "../../src/main/catalog.ts";
 import type { DiagnosticKind } from "../../src/main/diagnostic-kubernetes.ts";
 import type { HandlersDependencies } from "../../src/main/ipc.ts";
@@ -135,13 +141,13 @@ export function tlsProofResources(
 
 // The entry of the cluster of a proof in a catalog of the proof, connected: the kubeconfig and the context
 // of the environment, which the main process does not read.
-function proofEntry(id: string, kubeconfig: string): CatalogEntry {
+export function proofEntry(id: string, kubeconfig: string): CatalogEntry {
   return { id, name: "proof", kubeConfigPath: kubeconfig, contextName: DEMO_CONTEXT, status: "connected" };
 }
 
 // The adapter of the main process for the cluster of a proof, through the client of the host the proof
 // stands in for. The target of the environment is checked before every request, as the catalog is.
-function proofAdapter(main: Main, entry: CatalogEntry, host: ProofHost, assertCurrent: () => void, labels = {}) {
+export function proofAdapter(main: Main, entry: CatalogEntry, host: ProofHost, assertCurrent: () => void, labels = {}) {
   return new main.DiagnosticKubernetes(
     entry,
     {
@@ -160,7 +166,7 @@ function proofAdapter(main: Main, entry: CatalogEntry, host: ProofHost, assertCu
 // entry of a catalog of the proof, over the kubeconfig it is given, and the requests carry the labels of
 // the environment beside the ones of the extension, so that the environment knows them as its own. The
 // route to the store is the one the main process finds by itself.
-function proofProcedures(
+export function proofProcedures(
   main: Main,
   context: Pick<DownloadProofContext, "owner" | "run" | "assertCurrent">,
   kubeconfig: string,
@@ -257,6 +263,7 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   missingArtifacts: number;
   refusedBeforeCreation: boolean;
   allowanceAsked: boolean;
+  versionAsked: boolean;
 }> {
   const main = await compiledDiagnostics();
   const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
@@ -581,6 +588,27 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
       status = await api.read("ServerStatusRequest", DEMO_NAMESPACE, generated.metadata.name, controller.signal);
     }
     requireCondition(typeof status.status?.serverVersion === "string", "Local server-status response missing version");
+    // The version of the server asked as a frame asks it, through the procedures of the main process and its gate,
+    // with the identity of the session of the proof: the request is made by the main process and processed by the
+    // server, and its answer names a version and the plugins of the server.
+    const { token: statusToken } = await call<WriteConfirmAnswer>("write.confirm", {
+      cluster,
+      namespace: DEMO_NAMESPACE,
+      kind: "ServerStatusRequest",
+    });
+    const version = await call<ServerStatusValue>("write.run", {
+      cluster,
+      namespace: DEMO_NAMESPACE,
+      kind: "ServerStatusRequest",
+      token: statusToken,
+      request: randomUUID(),
+    });
+
+    context.record("ServerStatusRequest", version.request);
+    requireCondition(
+      version.version.length > 0 && version.plugins.length > 0 && Boolean(version.request.uid),
+      "The version of the server asked through the procedures answered no version or no plugin",
+    );
     return {
       downloads,
       generatedNames: true,
@@ -591,6 +619,7 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
       missingArtifacts,
       refusedBeforeCreation,
       allowanceAsked,
+      versionAsked: true,
     };
   } finally {
     controller.abort();

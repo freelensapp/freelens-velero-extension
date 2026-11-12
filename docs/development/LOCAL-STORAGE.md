@@ -79,7 +79,11 @@ deployment deliberately instead of inheriting the image's quick-start defaults:
   kubectl Freelens runs for the cluster, through the proxy of Freelens.
 - Disable unused SFTP, WebDAV, messaging and IAM control-plane services; disable
   Iceberg/Lance catalog ports explicitly. No administration UI is needed. Fix volume
-  size/count, memory/CPU and storage limits instead of unbounded auto-sizing.
+  size/count, memory/CPU and storage limits instead of unbounded auto-sizing. The count
+  is 24 volumes of 128 MB: the store grows a collection seven volumes at a time, its
+  filer's own and the bucket of the locations each take seven in whichever order their
+  first writes come, and the bucket needs room to grow while the deleted bytes of a run
+  wait for compaction.
 - Require a generated test identity from a private mounted configuration at startup.
   The documented S3 default without identities permits anonymous access and is not
   acceptable, even for the signature test lab. Use only the demo bucket permissions
@@ -121,6 +125,12 @@ keys of the two backups the sync of the server creates from the store; it delete
 nothing, and the server removes those keys with their backups. Do not silently
 disable checksums, authentication or signature validation merely to obtain a
 successful backup.
+
+The volume of each run of the fixtures is backed up by the node agent into a kopia
+repository under the prefix of the location in the bucket. The cleanup of the run
+removes the BackupRepository object by its UID, and the data of the repository
+stays in the bucket: nothing in the scripts removes a key of the store, and
+`pnpm demo:down` takes the bucket down with the environment.
 
 For the unreachable-store case, preserve a cluster-internal hostname in generated
 URLs. Do not rewrite BSL publicUrl to localhost, configure `s3.externalUrl` to mask
