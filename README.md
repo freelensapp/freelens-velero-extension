@@ -93,7 +93,7 @@ the [roadmap](docs/development/ROADMAP.md).
 | --- | --- |
 | Freelens | 2.0.x, tested at 2.0.0, the release built from freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5` |
 | Velero | 1.18.x with its AWS plugin 1.14.x, tested at Velero v1.18.4 and the AWS plugin v1.14.4 |
-| Kubernetes | Tested at 1.34.11, the node of the test clusters |
+| Kubernetes | Tested at 1.37.0, the node of the test clusters |
 | Platforms | Tested on Linux ARM64, where the hosted checks run, and on macOS; any other platform, Windows among them, is untested |
 | Proven on synthetic objects only | The data movement, and the phases of a failure other than FailedValidation |
 
