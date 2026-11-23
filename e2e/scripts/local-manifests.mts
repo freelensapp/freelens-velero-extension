@@ -3,9 +3,9 @@ import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS } 
 
 export const IMAGES = {
   node: "docker.io/kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5",
-  velero: "docker.io/velero/velero:v1.18.4@sha256:c89fb5b6d1fd6afd368e0f483e6f5555fd62851a1eada8ac5c72482e674ca17b",
+  velero: "docker.io/velero/velero:v1.19.0@sha256:da94e0de154f837db0ada37ea0c168428943dab2c872efc10481189925de395f",
   plugin:
-    "docker.io/velero/velero-plugin-for-aws:v1.14.4@sha256:c85a7fa803569e3128c33e4f5766f84ab156c8d171c9f1dd2715581d45ce98fa",
+    "docker.io/velero/velero-plugin-for-aws:v1.15.0@sha256:cb8fdbefc54e2d99b124f6611bc8cad31a1e546689dfb2a32c9307339c492750",
   storage: "docker.io/chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0",
 } as const;
 // The runtime of the helpers that run beside the cluster: the direct transport proof and the egress check.
