@@ -113,12 +113,12 @@ export const BINARIES = {
     },
   },
   kubectl: {
-    version: "1.37.2",
+    version: "1.37.3",
     checksums: {
-      "linux-amd64": "c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4",
-      "linux-arm64": "fcc16f63186659d9722014b7e02d5fdd2d4e669cb8c0ab66365d7d3b8ba03509",
-      "darwin-amd64": "88379aff5c8111de6be0a394adffba2819e44cde269f3ab23cef76de1a48eaa8",
-      "darwin-arm64": "55701af0d51815ee335f240e48acf0959c3c23017ed3fa816e880c4a92bae581",
+      "linux-amd64": "9a1b55af2795b25dd288dbef62387db9b5530087ab918d28c6ad067f2e3cb07c",
+      "linux-arm64": "da160b41491cc5c5e575d78bb665810fb900f70fad666d834094b24ec56d304f",
+      "darwin-amd64": "82db1bc2b466e9f46ed36d609d8c10523a425664e6e648a666df252b9502fe9e",
+      "darwin-arm64": "7ac1234e7731e902e5ab2153e2ed29bbe7abddd7b0be5ffd94afb7df47da8f27",
     },
   },
 } as const satisfies Record<string, { version: string; checksums: Record<BinaryTarget, string> }>;
